@@ -60,6 +60,8 @@ function flattenError(ctx: ErrorContext): Err[] {
   return issues;
 }
 
+type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
+
 class Vx<T> {
   constructor(private readonly _genFunc: () => (v: unknown) => Result<T>) {}
 
@@ -246,19 +248,17 @@ function null_() {
   const e = err("expected null");
   return new Vx<null>(() => (v) => (v === null ? true : e));
 }
-function object<T extends Record<string, unknown>>(
-  obj: { [K in keyof T]: Vx<T[K]> }
-) {
+function object<T extends Record<string, Vx<unknown>>>(obj: T) {
   type Optionals = {
-    [K in keyof T]: undefined extends T[K] ? K : never;
+    [K in keyof T]: undefined extends Infer<T[K]> ? K : never;
   }[keyof T];
 
   return new VxObj<
     {
-      [K in Optionals]?: T[K];
+      [K in Optionals]?: Infer<T[K]>;
     } &
       {
-        [K in Exclude<keyof T, Optionals>]: T[K];
+        [K in Exclude<keyof T, Optionals>]: Infer<T[K]>;
       },
     "strict",
     undefined
@@ -274,5 +274,4 @@ export {
   object,
 };
 
-type infer_<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
-export type { infer_ as infer };
+export type { Infer as infer };
