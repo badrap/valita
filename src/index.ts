@@ -273,3 +273,6 @@ export {
   undefined_ as undefined,
   object,
 };
+
+type infer_<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
+export type { infer_ as infer };
