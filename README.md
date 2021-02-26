@@ -1,5 +1,15 @@
 # @badrap/valita [![tests](https://github.com/badrap/valita/workflows/tests/badge.svg)](https://github.com/badrap/valita/actions?query=workflow%3Atests) [![npm](https://img.shields.io/npm/v/@badrap/valita.svg)](https://www.npmjs.com/package/@badrap/valita)
 
+A TypeScript library for validating & parsing structured objects. The API is _heavily_ influenced by [Zod's](https://github.com/colinhacks/zod/tree/v3) excellent API.
+
+## Installation
+
+```
+npm i @badrap/valita
+```
+
+## Docs aren't my forte
+
 A motivating example in lack of any better documentation:
 
 ```ts
