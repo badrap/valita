@@ -30,7 +30,7 @@ const Thing = v.object({
 Now `Thing.parse(value)` returns `value` if it matches the Thing schema - or throws an error otherwise.
 
 ```ts
-const gragnor = Thing.parse({ name: "Gragnor", age: 101, exists: false });
+const gragnor = Thing.parse({ name: "Gragnor", age: 101, exists: true });
 ```
 
 The real magic here comes from TypeScript's type inference. The inferred type for `gragnor` is:
