@@ -23,7 +23,7 @@ Now `Thing.parse(value)` returns `value` if it matches the Thing schema - or thr
 const gragnor = Thing.parse({ name: "Gragnor", age: 101, exists: false });
 ```
 
-The real magic here comes from TypeScript's type inference. The inferred type of `gragnor` is:
+The real magic here comes from TypeScript's type inference. The inferred type for `gragnor` is:
 
 ```ts
 const gragnor: {
