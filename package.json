@@ -1,0 +1,17 @@
+{
+  "name": "@badrap/valita",
+  "version": "0.0.1",
+  "description": "A validation & parsing library for TypeScript",
+  "main": "./dist/index.js",
+  "sideEffects": false,
+  "repository": "badrap/valita",
+  "author": "Joachim Viide <jviide@iki.fi>",
+  "license": "MIT",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^4.2.2"
+  }
+}
