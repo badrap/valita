@@ -14,5 +14,9 @@
   },
   "devDependencies": {
     "typescript": "^4.2.2"
-  }
+  },
+  "files": [
+    "src",
+    "dist"
+  ]
 }
