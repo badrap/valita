@@ -8,7 +8,7 @@ A TypeScript library for validating & parsing structured objects. The API is _he
 npm i @badrap/valita
 ```
 
-## Docs aren't my forte
+## Docs aren't my forté
 
 A motivating example in lack of any better documentation:
 
