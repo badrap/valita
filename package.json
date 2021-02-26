@@ -8,6 +8,7 @@
   "author": "Joachim Viide <jviide@iki.fi>",
   "license": "MIT",
   "scripts": {
+    "test": "exit 0",
     "build": "rm -rf dist && tsc",
     "prepack": "npm run build"
   },
