@@ -17,14 +17,13 @@ const Thing = v.object({
 });
 ```
 
-Now `Thing.parse(value)` returns `value` if it matches the Thing
-schema - or throws an error otherwise.
+Now `Thing.parse(value)` returns `value` if it matches the Thing schema - or throws an error otherwise.
 
 ```ts
 const gragnor = Thing.parse({ name: "Gragnor", age: 101, exists: false });
 ```
 
-Now, the real magic here comes from TypeScript's type inference. The inferred type of `gragnor` is:
+The real magic here comes from TypeScript's type inference. The inferred type of `gragnor` is:
 
 ```ts
 const gragnor: {
