@@ -1,4 +1,5 @@
 module.exports = {
+  root: true,
   extends: ["plugin:prettier/recommended"],
   parserOptions: {
     ecmaVersion: 2018,
@@ -14,7 +15,7 @@ module.exports = {
       files: ["*.ts", "*.tsx"],
       parser: "@typescript-eslint/parser",
       parserOptions: {
-        project: "./tsconfig.json",
+        project: "./tsconfig.eslint.json",
       },
       extends: ["plugin:@typescript-eslint/recommended"],
       rules: {

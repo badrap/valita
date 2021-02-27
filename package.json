@@ -10,17 +10,22 @@
   "scripts": {
     "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
     "typecheck": "tsc --skipLibCheck --noEmit",
-    "test": "exit 0",
+    "test": "mocha --require ts-node/register tests/**/*.test.ts",
     "build": "rm -rf dist && tsc",
     "prepack": "npm run build"
   },
   "devDependencies": {
+    "@types/chai": "^4.2.15",
+    "@types/mocha": "^8.2.1",
     "@typescript-eslint/eslint-plugin": "^4.15.2",
     "@typescript-eslint/parser": "^4.15.2",
+    "chai": "^4.3.0",
     "eslint": "^7.20.0",
     "eslint-config-prettier": "^8.1.0",
     "eslint-plugin-prettier": "^3.3.1",
+    "mocha": "^8.3.0",
     "prettier": "^2.2.1",
+    "ts-node": "^9.1.1",
     "typescript": "^4.2.2"
   },
   "files": [
