@@ -8,6 +8,7 @@ module.exports = {
   rules: {
     "prettier/prettier": "warn",
     "linebreak-style": ["error", "unix"],
+    "no-console": "error",
     eqeqeq: ["error", "smart"],
   },
   overrides: [
