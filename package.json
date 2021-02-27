@@ -9,10 +9,17 @@
   "license": "MIT",
   "scripts": {
     "test": "exit 0",
+    "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
     "build": "rm -rf dist && tsc",
     "prepack": "npm run build"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^4.15.2",
+    "@typescript-eslint/parser": "^4.15.2",
+    "eslint": "^7.20.0",
+    "eslint-config-prettier": "^8.1.0",
+    "eslint-plugin-prettier": "^3.3.1",
+    "prettier": "^2.2.1",
     "typescript": "^4.2.2"
   },
   "files": [

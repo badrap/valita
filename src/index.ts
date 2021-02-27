@@ -26,10 +26,6 @@ type Ok<T> =
     }>;
 type Result<T> = Ok<T> | ErrorContext;
 
-function ok<T>(v: T): { ok: true; value: T } {
-  return { ok: true, value: v };
-}
-
 function err(error: string): ErrorContext {
   return { ok: false, type: "error", error };
 }
@@ -103,25 +99,26 @@ class Vx<T> {
   }
 }
 
+type Optionals<T extends Record<string, Vx<unknown>>> = {
+  [K in keyof T]: undefined extends Infer<T[K]> ? K : never;
+}[keyof T];
+
 class VxObj<
-  T extends Record<string, unknown>,
+  T extends Record<string, Vx<unknown>>,
   Mode extends "passthrough" | "strict" | "strip" | "catchall",
   Catchall extends Mode extends "catchall" ? unknown : undefined,
   O = PrettifyObjectType<
-    T &
+    { [K in Optionals<T>]?: Infer<T[K]> } &
+      { [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]> } &
       (Mode extends "passthrough" ? { [K: string]: unknown } : unknown) &
       (Mode extends "catchall" ? { [K: string]: Catchall } : unknown)
   >
 > extends Vx<O> {
-  private readonly _shape: { [K in keyof T]: Vx<T[K]> };
+  private readonly _shape: T;
   private readonly _mode: Mode;
   private readonly _catchall?: Vx<Catchall>;
 
-  constructor(
-    shape: { [K in keyof T]: Vx<T[K]> },
-    mode: Mode,
-    catchall?: Vx<Catchall>
-  ) {
+  constructor(shape: T, mode: Mode, catchall?: Vx<Catchall>) {
     super(() => {
       const obj = this._shape;
 
@@ -129,11 +126,11 @@ class VxObj<
       const vals: ((v: unknown) => Result<unknown>)[] = [];
       for (const k in obj) {
         keys.push(k);
-        vals.push((obj as any)[k].func);
+        vals.push(obj[k].func);
       }
       const l = keys.length;
       const q = Object.create(null);
-      keys.forEach((k, i) => {
+      keys.forEach((k) => {
         q[k] = true;
       });
 
@@ -153,7 +150,7 @@ class VxObj<
         }
         let ctx: ErrorContext | undefined = undefined;
         let output = v as Record<string, unknown>;
-        let tpl = strict || strip ? template : v;
+        const tpl = strict || strip ? template : v;
         if (!passthrough) {
           for (const k in v) {
             if (!q[k]) {
@@ -228,41 +225,30 @@ class VxObj<
   }
 }
 
-function number() {
+function number(): Vx<number> {
   const e = err("expected a number");
   return new Vx<number>(() => (v) => (typeof v === "number" ? true : e));
 }
-function string() {
+function string(): Vx<string> {
   const e = err("expected a string");
   return new Vx<string>(() => (v) => (typeof v === "string" ? true : e));
 }
-function boolean() {
+function boolean(): Vx<boolean> {
   const e = err("expected a boolean");
-  return new Vx<string>(() => (v) => (typeof v === "boolean" ? true : e));
+  return new Vx<boolean>(() => (v) => (typeof v === "boolean" ? true : e));
 }
-function undefined_() {
+function undefined_(): Vx<undefined> {
   const e = err("expected undefined");
   return new Vx<undefined>(() => (v) => (v === undefined ? true : e));
 }
-function null_() {
+function null_(): Vx<null> {
   const e = err("expected null");
   return new Vx<null>(() => (v) => (v === null ? true : e));
 }
-function object<T extends Record<string, Vx<unknown>>>(obj: T) {
-  type Optionals = {
-    [K in keyof T]: undefined extends Infer<T[K]> ? K : never;
-  }[keyof T];
-
-  return new VxObj<
-    {
-      [K in Optionals]?: Infer<T[K]>;
-    } &
-      {
-        [K in Exclude<keyof T, Optionals>]: Infer<T[K]>;
-      },
-    "strict",
-    undefined
-  >(obj, "strict", undefined);
+function object<T extends Record<string, Vx<unknown>>>(
+  obj: T
+): VxObj<T, "strict", undefined> {
+  return new VxObj(obj, "strict", undefined);
 }
 
 export {
