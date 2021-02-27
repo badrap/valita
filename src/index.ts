@@ -1,3 +1,50 @@
+type IssuePath = (string | number)[];
+
+type Issue = { path: IssuePath; message: string };
+
+function _collectIssues(
+  ctx: ErrorContext,
+  path: IssuePath,
+  issues: Issue[]
+): void {
+  if (ctx.type === "error") {
+    issues.push({
+      path: path.slice(),
+      message: ctx.error,
+    });
+  } else {
+    if (ctx.next) {
+      _collectIssues(ctx.next, path, issues);
+    }
+    path.push(ctx.value);
+    _collectIssues(ctx.current, path, issues);
+    path.pop();
+  }
+}
+
+function collectIssues(ctx: ErrorContext): Issue[] {
+  const issues: Issue[] = [];
+  const path: IssuePath = [];
+  _collectIssues(ctx, path, issues);
+  return issues;
+}
+
+export class ValitaError extends Error {
+  constructor(private readonly ctx: ErrorContext) {
+    super();
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+
+  get issues(): Issue[] {
+    const issues = collectIssues(this.ctx);
+    Object.defineProperty(this, "func", {
+      value: issues,
+      writable: false,
+    });
+    return issues;
+  }
+}
+
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -28,32 +75,6 @@ type Result<T> = Ok<T> | ErrorContext;
 
 function err(error: string): ErrorContext {
   return { ok: false, type: "error", error };
-}
-
-type Path = (string | number)[];
-
-type Err = { path: Path; message: string };
-
-function flattenError(ctx: ErrorContext): Err[] {
-  const issues: Err[] = [];
-  const path: Path = [];
-  function traverse(ctx: ErrorContext): void {
-    if (ctx.type === "error") {
-      issues.push({
-        path: path.slice(),
-        message: ctx.error,
-      });
-    } else {
-      if (ctx.next) {
-        traverse(ctx.next);
-      }
-      path.push(ctx.value);
-      traverse(ctx.current);
-      path.pop();
-    }
-  }
-  traverse(ctx);
-  return issues;
 }
 
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
@@ -87,8 +108,7 @@ class Vx<T> {
     } else if (r.ok) {
       return r.value;
     } else {
-      console.log(flattenError(r));
-      throw new Error();
+      throw new ValitaError(r);
     }
   }
   optional(): Vx<T | undefined> {

@@ -6,4 +6,8 @@ describe("string()", () => {
     const t = v.string();
     expect(t.parse("test")).to.equal("test");
   });
+  it("rejects non-strings", () => {
+    const t = v.string();
+    expect(() => t.parse({})).to.throw(v.ValitaError);
+  });
 });
