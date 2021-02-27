@@ -8,8 +8,9 @@
   "author": "Joachim Viide <jviide@iki.fi>",
   "license": "MIT",
   "scripts": {
-    "test": "exit 0",
     "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
+    "typecheck": "tsc --skipLibCheck --noEmit",
+    "test": "exit 0",
     "build": "rm -rf dist && tsc",
     "prepack": "npm run build"
   },

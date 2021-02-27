@@ -21,6 +21,7 @@ jobs:
             ${{ runner.os }}-node-
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       - run: npm publish --access=public
         env:
