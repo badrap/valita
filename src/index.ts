@@ -10,7 +10,7 @@ function _collectIssues(
   if (ctx.type === "error") {
     issues.push({
       path: path.slice(),
-      message: ctx.error,
+      message: ctx.message,
     });
   } else {
     if (ctx.next) {
@@ -33,11 +33,12 @@ export class ValitaError extends Error {
   constructor(private readonly ctx: ErrorContext) {
     super();
     Object.setPrototypeOf(this, new.target.prototype);
+    this.name = new.target.name;
   }
 
-  get issues(): Issue[] {
+  get issues(): readonly Issue[] {
     const issues = collectIssues(this.ctx);
-    Object.defineProperty(this, "func", {
+    Object.defineProperty(this, "issues", {
       value: issues,
       writable: false,
     });
@@ -62,7 +63,7 @@ type ErrorContext = Readonly<
   | {
       ok: false;
       type: "error";
-      error: string;
+      message: string;
     }
 >;
 type Ok<T> =
@@ -73,8 +74,8 @@ type Ok<T> =
     }>;
 type Result<T> = Ok<T> | ErrorContext;
 
-function err(error: string): ErrorContext {
-  return { ok: false, type: "error", error };
+function err(message: string): ErrorContext {
+  return { ok: false, type: "error", message };
 }
 
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
