@@ -1,4 +1,8 @@
-type IssueCode = "invalid_type" | "missing_key" | "unrecognized_key";
+type IssueCode =
+  | "invalid_type"
+  | "invalid_literal_value"
+  | "missing_key"
+  | "unrecognized_key";
 
 type IssuePath = (string | number)[];
 
@@ -323,14 +327,6 @@ function boolean(): Vx<boolean> {
   const e = err("invalid_type", "expected a boolean");
   return new Vx(() => (v) => (typeof v === "boolean" ? true : e), false);
 }
-function undefined_(): Vx<undefined> {
-  const e = err("invalid_type", "expected undefined");
-  return new Vx(() => (v) => (v === undefined ? true : e), true);
-}
-function null_(): Vx<null> {
-  const e = err("invalid_type", "expected null");
-  return new Vx(() => (v) => (v === null ? true : e), false);
-}
 function object<T extends Record<string, Vx<unknown>>>(
   obj: T
 ): VxObj<T, "strict"> {
@@ -339,15 +335,31 @@ function object<T extends Record<string, Vx<unknown>>>(
 function array<T extends Vx<unknown>>(item: T): VxArr<T> {
   return new VxArr(item);
 }
+function literal<T extends string | number | boolean | bigint>(
+  value: T
+): Vx<T> {
+  const exp = typeof value === "bigint" ? `${value}n` : JSON.stringify(value);
+  const e = err("invalid_literal_value", `expected ${exp}`);
+  return new Vx(() => (v) => (v === value ? true : e), false);
+}
+function undefined_(): Vx<undefined> {
+  const e = err("invalid_type", "expected undefined");
+  return new Vx(() => (v) => (v === undefined ? true : e), true);
+}
+function null_(): Vx<null> {
+  const e = err("invalid_type", "expected null");
+  return new Vx(() => (v) => (v === null ? true : e), false);
+}
 
 export {
   number,
   string,
   boolean,
-  null_ as null,
-  undefined_ as undefined,
   object,
   array,
+  literal,
+  null_ as null,
+  undefined_ as undefined,
 };
 
 export type { Infer as infer };
