@@ -124,24 +124,25 @@ type Optionals<T extends Record<string, Vx<unknown>>> = {
   [K in keyof T]: undefined extends Infer<T[K]> ? K : never;
 }[keyof T];
 
+type UnknownKeys = "passthrough" | "strict" | "strip" | Vx<unknown>;
+
+type VxObjOutput<
+  T extends Record<string, Vx<unknown>>,
+  U extends UnknownKeys
+> = PrettifyObjectType<
+  { [K in Optionals<T>]?: Infer<T[K]> } &
+    { [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]> } &
+    (U extends "passthrough" ? { [K: string]: unknown } : unknown) &
+    (U extends Vx<infer C> ? { [K: string]: C } : unknown)
+>;
+
 class VxObj<
   T extends Record<string, Vx<unknown>>,
-  Mode extends "passthrough" | "strict" | "strip" | "catchall",
-  Catchall extends Mode extends "catchall" ? unknown : undefined,
-  O = PrettifyObjectType<
-    { [K in Optionals<T>]?: Infer<T[K]> } &
-      { [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]> } &
-      (Mode extends "passthrough" ? { [K: string]: unknown } : unknown) &
-      (Mode extends "catchall" ? { [K: string]: Catchall } : unknown)
-  >
-> extends Vx<O> {
-  private readonly _shape: T;
-  private readonly _mode: Mode;
-  private readonly _catchall?: Vx<Catchall>;
-
-  constructor(shape: T, mode: Mode, catchall?: Vx<Catchall>) {
+  U extends UnknownKeys
+> extends Vx<VxObjOutput<T, U>> {
+  constructor(private readonly shape: T, private readonly unknownKeys: U) {
     super(() => {
-      const obj = this._shape;
+      const obj = this.shape;
 
       const keys: string[] = [];
       const vals: ((v: unknown) => Result<unknown>)[] = [];
@@ -155,10 +156,13 @@ class VxObj<
         q[k] = true;
       });
 
-      const catchall = this._catchall?.func;
-      const strict = this._mode === "strict";
-      const strip = this._mode === "strip";
-      const passthrough = this._mode === "passthrough";
+      const strip = this.unknownKeys === "strip";
+      const strict = this.unknownKeys === "strict";
+      const passthrough = this.unknownKeys === "passthrough";
+      const catchall =
+        this.unknownKeys instanceof Vx
+          ? (this.unknownKeys.func as (v: unknown) => Result<unknown>)
+          : undefined;
 
       const template = {} as Record<string, unknown>;
       keys.forEach((key) => {
@@ -224,25 +228,23 @@ class VxObj<
         if (ctx) {
           return ctx;
         }
-        return v === output ? true : { ok: true, value: output as O };
+        return v === output
+          ? true
+          : { ok: true, value: output as VxObjOutput<T, U> };
       };
     });
-
-    this._shape = shape;
-    this._mode = mode;
-    this._catchall = catchall;
   }
-  passthrough(): VxObj<T, "passthrough", undefined> {
-    return new VxObj(this._shape, "passthrough", undefined);
+  passthrough(): VxObj<T, "passthrough"> {
+    return new VxObj(this.shape, "passthrough");
   }
-  strict(): VxObj<T, "strict", undefined> {
-    return new VxObj(this._shape, "strict", undefined);
+  strict(): VxObj<T, "strict"> {
+    return new VxObj(this.shape, "strict");
   }
-  strip(): VxObj<T, "strip", undefined> {
-    return new VxObj(this._shape, "strip", undefined);
+  strip(): VxObj<T, "strip"> {
+    return new VxObj(this.shape, "strip");
   }
-  catchall<X>(vx: Vx<X>): VxObj<T, "catchall", X> {
-    return new VxObj(this._shape, "catchall", vx);
+  catchall<C extends Vx<unknown>>(catchall: C): VxObj<T, C> {
+    return new VxObj(this.shape, catchall);
   }
 }
 
@@ -268,8 +270,8 @@ function null_(): Vx<null> {
 }
 function object<T extends Record<string, Vx<unknown>>>(
   obj: T
-): VxObj<T, "strict", undefined> {
-  return new VxObj(obj, "strict", undefined);
+): VxObj<T, "strict"> {
+  return new VxObj(obj, "strict");
 }
 
 export {
