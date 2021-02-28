@@ -6,9 +6,50 @@ describe("string()", () => {
     const t = v.string();
     expect(t.parse("test")).to.equal("test");
   });
-  it("rejects non-strings", () => {
+  it("rejects other types", () => {
     const t = v.string();
-    expect(() => t.parse({})).to.throw(v.ValitaError);
+    for (const val of [1, 1n, true, null, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+});
+
+describe("number()", () => {
+  it("accepts numbers", () => {
+    const t = v.number();
+    expect(t.parse(1)).to.equal(1);
+  });
+  it("rejects other types", () => {
+    const t = v.number();
+    for (const val of ["1", 1n, true, null, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+});
+
+describe("bigint()", () => {
+  it("accepts bigints", () => {
+    const t = v.bigint();
+    expect(t.parse(1n)).to.equal(1n);
+  });
+  it("rejects other types", () => {
+    const t = v.bigint();
+    for (const val of ["1", 1, true, null, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+});
+
+describe("boolean()", () => {
+  it("accepts booleans", () => {
+    const t = v.boolean();
+    expect(t.parse(true)).to.equal(true);
+  });
+  it("rejects other types", () => {
+    const t = v.boolean();
+    for (const val of ["1", 1, 1n, null, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
   });
 });
 
@@ -34,6 +75,12 @@ describe("object()", () => {
     });
     const o = { a: 1 };
     expect(t.parse(o)).to.not.equal(o);
+  });
+  it("rejects other types", () => {
+    const t = v.object({}).passthrough();
+    for (const val of ["1", 1n, true, null, undefined, []]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
   });
 });
 
@@ -89,9 +136,11 @@ describe("array()", () => {
     const t = v.array(v.number());
     expect(t.parse([1])).to.deep.equal([1]);
   });
-  it("rejects non-arrays", () => {
+  it("rejects other types", () => {
     const t = v.array(v.number());
-    expect(() => t.parse({ 0: 1 })).to.throw(v.ValitaError);
+    for (const val of ["1", 1n, true, null, undefined, { 0: 1 }]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
   });
   it("throws on item mismatch", () => {
     const t = v.array(v.string());

@@ -319,6 +319,10 @@ function number(): Vx<number> {
   const e = err("invalid_type", "expected a number");
   return new Vx(() => (v) => (typeof v === "number" ? true : e), false);
 }
+function bigint(): Vx<bigint> {
+  const e = err("invalid_type", "expected a bigint");
+  return new Vx(() => (v) => (typeof v === "bigint" ? true : e), false);
+}
 function string(): Vx<string> {
   const e = err("invalid_type", "expected a string");
   return new Vx(() => (v) => (typeof v === "string" ? true : e), false);
@@ -353,6 +357,7 @@ function null_(): Vx<null> {
 
 export {
   number,
+  bigint,
   string,
   boolean,
   object,
