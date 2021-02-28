@@ -81,10 +81,10 @@ function err(message: string): ErrorContext {
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
 
 class Vx<T> {
-  constructor(private readonly _genFunc: () => (v: unknown) => Result<T>) {}
+  constructor(private readonly genFunc: () => (v: unknown) => Result<T>) {}
 
   get func(): (v: unknown) => Result<T> {
-    const f = this._genFunc();
+    const f = this.genFunc();
     Object.defineProperty(this, "func", {
       value: f,
       writable: false,
@@ -142,20 +142,7 @@ class VxObj<
 > extends Vx<VxObjOutput<T, U>> {
   constructor(private readonly shape: T, private readonly unknownKeys: U) {
     super(() => {
-      const obj = this.shape;
-
-      const keys: string[] = [];
-      const vals: ((v: unknown) => Result<unknown>)[] = [];
-      for (const k in obj) {
-        keys.push(k);
-        vals.push(obj[k].func);
-      }
-      const l = keys.length;
-      const q = Object.create(null);
-      keys.forEach((k) => {
-        q[k] = true;
-      });
-
+      const shape = this.shape;
       const strip = this.unknownKeys === "strip";
       const strict = this.unknownKeys === "strict";
       const passthrough = this.unknownKeys === "passthrough";
@@ -164,71 +151,77 @@ class VxObj<
           ? (this.unknownKeys.func as (v: unknown) => Result<unknown>)
           : undefined;
 
-      const template = {} as Record<string, unknown>;
-      keys.forEach((key) => {
-        template[key] = undefined;
-      });
+      const keys: string[] = [];
+      const funcs: ((v: unknown) => Result<unknown>)[] = [];
+      const knownKeys = Object.create(null);
+      const shapeTemplate = {} as Record<string, unknown>;
+      for (const key in shape) {
+        keys.push(key);
+        funcs.push(shape[key].func);
+        knownKeys[key] = true;
+        shapeTemplate[key] = undefined;
+      }
 
-      return (v) => {
-        if (!isObject(v)) {
+      return (value) => {
+        if (!isObject(value)) {
           return err("expected an object");
         }
         let ctx: ErrorContext | undefined = undefined;
-        let output = v as Record<string, unknown>;
-        const tpl = strict || strip ? template : v;
+        let output: Record<string, unknown> = value;
+        const template = strict || strip ? shapeTemplate : value;
         if (!passthrough) {
-          for (const k in v) {
-            if (!q[k]) {
+          for (const key in value) {
+            if (!knownKeys[key]) {
               if (strict) {
-                return err(`unexpected key ${JSON.stringify(k)}`);
+                return err(`unexpected key ${JSON.stringify(key)}`);
               } else if (strip) {
-                output = { ...tpl };
+                output = { ...template };
                 break;
               } else if (catchall) {
-                const r = catchall(v[k]);
-                if (r === true) {
-                  // pass
-                } else if (!r.ok) {
-                  ctx = {
-                    ok: false,
-                    type: "path",
-                    value: k,
-                    current: r,
-                    next: ctx,
-                  };
-                } else {
-                  if (output === v) {
-                    output = { ...tpl };
+                const r = catchall(value[key]);
+                if (r !== true) {
+                  if (r.ok) {
+                    if (output === value) {
+                      output = { ...template };
+                    }
+                    output[key] = r.value;
+                  } else {
+                    ctx = {
+                      ok: false,
+                      type: "path",
+                      value: key,
+                      current: r,
+                      next: ctx,
+                    };
                   }
-                  output[k] = r.value;
                 }
               }
             }
           }
         }
-        for (let i = 0; i < l; i++) {
-          const r = vals[i](v[keys[i]]);
-          if (r === true) {
-            // pass
-          } else if (r.ok) {
-            if (output === v) {
-              output = { ...tpl };
+        for (let i = 0; i < keys.length; i++) {
+          const r = funcs[i](value[keys[i]]);
+          if (r !== true) {
+            if (r.ok) {
+              if (output === value) {
+                output = { ...template };
+              }
+              output[keys[i]] = r.value;
+            } else {
+              ctx = {
+                ok: false,
+                type: "path",
+                value: keys[i],
+                current: r,
+                next: ctx,
+              };
             }
-            output[keys[i]] = r.value;
-          } else {
-            ctx = {
-              ok: false,
-              type: "path",
-              value: keys[i],
-              current: r,
-              next: ctx,
-            };
           }
         }
         if (ctx) {
           return ctx;
         }
-        return v === output
+        return value === output
           ? true
           : { ok: true, value: output as VxObjOutput<T, U> };
       };
