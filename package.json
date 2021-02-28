@@ -11,7 +11,7 @@
     "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
     "typecheck": "tsc --skipLibCheck --noEmit",
     "test": "mocha --require ts-node/register tests/**/*.test.ts",
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc -p ./tsconfig.build.json",
     "prepack": "npm run build"
   },
   "devDependencies": {

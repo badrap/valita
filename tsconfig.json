@@ -1,12 +1,11 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "module": "commonjs",
-    "lib": ["es2015"],
+    "target": "es2020",
     "declaration": true,
     "strict": true,
     "noImplicitReturns": true,
+    "moduleResolution": "node",
     "outDir": "./dist"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "tests/**/*"]
 }
