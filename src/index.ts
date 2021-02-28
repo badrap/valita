@@ -250,23 +250,23 @@ class VxObj<
 
 function number(): Vx<number> {
   const e = err("expected a number");
-  return new Vx<number>(() => (v) => (typeof v === "number" ? true : e));
+  return new Vx(() => (v) => (typeof v === "number" ? true : e));
 }
 function string(): Vx<string> {
   const e = err("expected a string");
-  return new Vx<string>(() => (v) => (typeof v === "string" ? true : e));
+  return new Vx(() => (v) => (typeof v === "string" ? true : e));
 }
 function boolean(): Vx<boolean> {
   const e = err("expected a boolean");
-  return new Vx<boolean>(() => (v) => (typeof v === "boolean" ? true : e));
+  return new Vx(() => (v) => (typeof v === "boolean" ? true : e));
 }
 function undefined_(): Vx<undefined> {
   const e = err("expected undefined");
-  return new Vx<undefined>(() => (v) => (v === undefined ? true : e));
+  return new Vx(() => (v) => (v === undefined ? true : e));
 }
 function null_(): Vx<null> {
   const e = err("expected null");
-  return new Vx<null>(() => (v) => (v === null ? true : e));
+  return new Vx(() => (v) => (v === null ? true : e));
 }
 function object<T extends Record<string, Vx<unknown>>>(
   obj: T
