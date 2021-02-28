@@ -15,36 +15,47 @@ A motivating example in lack of any better documentation:
 ```ts
 import * as v from "@badrap/valita";
 
-const Thing = v.object({
+const Pet = v.object({
+  type: v.union(v.literal("dog"), v.literal("cat")),
+  name: v.string(),
+});
+
+const Person = v.object({
   name: v.string(),
   age: v.number(),
-  exists: v.boolean(),
-  
-  subThing: v.object({
-    text: v.string(),
-    count: v.number(),
-  }).optional()
+  pets: v.array(Pet).optional(),
 });
 ```
 
-Now `Thing.parse(value)` returns `value` if it matches the Thing schema - or throws an error otherwise.
+Now `Person.parse(value)` returns `value` if it matches the Person schema - or throws an error otherwise.
 
 ```ts
-const gragnor = Thing.parse({ name: "Gragnor", age: 101, exists: true });
+const grizzlor = Person.parse({
+  name: "Grizzlor",
+  age: 101,
+  pets: [
+    { type: "cat", name: "Mittens" },
+    { type: "cat", name: "Parsley" },
+    { type: "cat", name: "Lulu" },
+    { type: "cat", name: "Thomas Percival Meowther III" },
+  ],
+});
 ```
 
-The real magic here comes from TypeScript's type inference. The inferred type for `gragnor` is:
+The real magic here comes from TypeScript's type inference. The inferred type for `grizzlor` is:
 
 ```ts
-const gragnor: {
-   name: string;
-   age: number;
-   exists: string;
-   subThing?: {
-       text: string;
-       count: number;
-   } | undefined;   
-}
+const grizzlor: {
+  name: string;
+  age: number;
+  pets?: { type: "dog" | "cat"; name: string }[] | undefined;
+};
+```
+
+In fact, you can get your mitts on the this type in the code:
+
+```ts
+type PersonType = v.infer<typeof Person>;
 ```
 
 ## License
