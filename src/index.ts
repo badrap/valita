@@ -1,6 +1,12 @@
+type IssueCode = "invalid_type" | "missing_key" | "unrecognized_key";
+
 type IssuePath = (string | number)[];
 
-type Issue = { path: IssuePath; message: string };
+type Issue = {
+  code: IssueCode;
+  path: IssuePath;
+  message: string;
+};
 
 function _collectIssues(
   ctx: ErrorContext,
@@ -9,6 +15,7 @@ function _collectIssues(
 ): void {
   if (ctx.type === "error") {
     issues.push({
+      code: ctx.code,
       path: path.slice(),
       message: ctx.message,
     });
@@ -63,6 +70,7 @@ type ErrorContext = Readonly<
   | {
       ok: false;
       type: "error";
+      code: IssueCode;
       message: string;
     }
 >;
@@ -74,14 +82,17 @@ type Ok<T> =
     }>;
 type Result<T> = Ok<T> | ErrorContext;
 
-function err(message: string): ErrorContext {
-  return { ok: false, type: "error", message };
+function err(code: IssueCode, message: string): ErrorContext {
+  return { ok: false, type: "error", code, message };
 }
 
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
 
 class Vx<T> {
-  constructor(private readonly genFunc: () => (v: unknown) => Result<T>) {}
+  constructor(
+    private readonly genFunc: () => (v: unknown) => Result<T>,
+    readonly isOptional: boolean
+  ) {}
 
   get func(): (v: unknown) => Result<T> {
     const f = this.genFunc();
@@ -94,14 +105,18 @@ class Vx<T> {
 
   transform<O>(func: (v: T) => Result<O>): Vx<O> {
     const f = this.func;
-    return new Vx(() => (v) => {
-      const r = f(v);
-      if (r !== true && !r.ok) {
-        return r;
-      }
-      return func(r === true ? (v as T) : r.value);
-    });
+    return new Vx(
+      () => (v) => {
+        const r = f(v);
+        if (r !== true && !r.ok) {
+          return r;
+        }
+        return func(r === true ? (v as T) : r.value);
+      },
+      this.isOptional
+    );
   }
+
   parse(v: unknown): T {
     const r = this.func(v);
     if (r === true) {
@@ -112,11 +127,15 @@ class Vx<T> {
       throw new ValitaError(r);
     }
   }
+
   optional(): Vx<T | undefined> {
     const f = this.func;
-    return new Vx(() => (v) => {
-      return v === undefined ? true : f(v);
-    });
+    return new Vx(
+      () => (v) => {
+        return v === undefined ? true : f(v);
+      },
+      true
+    );
   }
 }
 
@@ -153,35 +172,40 @@ class VxObj<
 
       const keys: string[] = [];
       const funcs: ((v: unknown) => Result<unknown>)[] = [];
+      const required: boolean[] = [];
       const knownKeys = Object.create(null);
       const shapeTemplate = {} as Record<string, unknown>;
       for (const key in shape) {
         keys.push(key);
         funcs.push(shape[key].func);
+        required.push(!shape[key].isOptional);
         knownKeys[key] = true;
         shapeTemplate[key] = undefined;
       }
 
-      return (value) => {
-        if (!isObject(value)) {
-          return err("expected an object");
+      return (obj) => {
+        if (!isObject(obj)) {
+          return err("invalid_type", "expected an object");
         }
         let ctx: ErrorContext | undefined = undefined;
-        let output: Record<string, unknown> = value;
-        const template = strict || strip ? shapeTemplate : value;
+        let output: Record<string, unknown> = obj;
+        const template = strict || strip ? shapeTemplate : obj;
         if (!passthrough) {
-          for (const key in value) {
+          for (const key in obj) {
             if (!knownKeys[key]) {
               if (strict) {
-                return err(`unexpected key ${JSON.stringify(key)}`);
+                return err(
+                  "unrecognized_key",
+                  `unrecognized key ${JSON.stringify(key)}`
+                );
               } else if (strip) {
                 output = { ...template };
                 break;
               } else if (catchall) {
-                const r = catchall(value[key]);
+                const r = catchall(obj[key]);
                 if (r !== true) {
                   if (r.ok) {
-                    if (output === value) {
+                    if (output === obj) {
                       output = { ...template };
                     }
                     output[key] = r.value;
@@ -200,32 +224,45 @@ class VxObj<
           }
         }
         for (let i = 0; i < keys.length; i++) {
-          const r = funcs[i](value[keys[i]]);
-          if (r !== true) {
-            if (r.ok) {
-              if (output === value) {
-                output = { ...template };
+          const key = keys[i];
+          const value = obj[key];
+
+          if (value === undefined && required[i]) {
+            ctx = {
+              ok: false,
+              type: "path",
+              value: key,
+              current: err("missing_key", `missing key`),
+              next: ctx,
+            };
+          } else {
+            const r = funcs[i](value);
+            if (r !== true) {
+              if (r.ok) {
+                if (output === obj) {
+                  output = { ...template };
+                }
+                output[keys[i]] = r.value;
+              } else {
+                ctx = {
+                  ok: false,
+                  type: "path",
+                  value: keys[i],
+                  current: r,
+                  next: ctx,
+                };
               }
-              output[keys[i]] = r.value;
-            } else {
-              ctx = {
-                ok: false,
-                type: "path",
-                value: keys[i],
-                current: r,
-                next: ctx,
-              };
             }
           }
         }
         if (ctx) {
           return ctx;
         }
-        return value === output
+        return obj === output
           ? true
           : { ok: true, value: output as VxObjOutput<T, U> };
       };
-    });
+    }, false);
   }
   passthrough(): VxObj<T, "passthrough"> {
     return new VxObj(this.shape, "passthrough");
@@ -242,24 +279,24 @@ class VxObj<
 }
 
 function number(): Vx<number> {
-  const e = err("expected a number");
-  return new Vx(() => (v) => (typeof v === "number" ? true : e));
+  const e = err("invalid_type", "expected a number");
+  return new Vx(() => (v) => (typeof v === "number" ? true : e), false);
 }
 function string(): Vx<string> {
-  const e = err("expected a string");
-  return new Vx(() => (v) => (typeof v === "string" ? true : e));
+  const e = err("invalid_type", "expected a string");
+  return new Vx(() => (v) => (typeof v === "string" ? true : e), false);
 }
 function boolean(): Vx<boolean> {
-  const e = err("expected a boolean");
-  return new Vx(() => (v) => (typeof v === "boolean" ? true : e));
+  const e = err("invalid_type", "expected a boolean");
+  return new Vx(() => (v) => (typeof v === "boolean" ? true : e), false);
 }
 function undefined_(): Vx<undefined> {
-  const e = err("expected undefined");
-  return new Vx(() => (v) => (v === undefined ? true : e));
+  const e = err("invalid_type", "expected undefined");
+  return new Vx(() => (v) => (v === undefined ? true : e), true);
 }
 function null_(): Vx<null> {
-  const e = err("expected null");
-  return new Vx(() => (v) => (v === null ? true : e));
+  const e = err("invalid_type", "expected null");
+  return new Vx(() => (v) => (v === null ? true : e), false);
 }
 function object<T extends Record<string, Vx<unknown>>>(
   obj: T

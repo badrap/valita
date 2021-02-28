@@ -12,10 +12,24 @@ describe("string()", () => {
   });
 });
 
+describe("object()", () => {
+  it("throws on missing required keys", () => {
+    const t = v.object({ a: v.string() });
+    expect(() => t.parse({}))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0].code", "missing_key");
+  });
+  it("does not throw on missing optional keys", () => {
+    const t = v.object({ a: v.string().optional() });
+    expect(t.parse({})).to.deep.equal({});
+  });
+});
+
 describe("ValitaError", () => {
   const error = new v.ValitaError({
     ok: false,
     type: "error",
+    code: "invalid_type",
     message: "test",
   });
   it("is derived from Error", () => {
@@ -28,6 +42,7 @@ describe("ValitaError", () => {
     expect(error.issues).to.deep.equal([
       {
         path: [],
+        code: "invalid_type",
         message: "test",
       },
     ]);
@@ -39,11 +54,13 @@ describe("ValitaError", () => {
       value: "first",
       current: {
         ok: false,
+        code: "invalid_type",
         type: "error",
         message: "test1",
       },
       next: {
         ok: false,
+        code: "invalid_type",
         type: "error",
         message: "test2",
       },
@@ -51,10 +68,12 @@ describe("ValitaError", () => {
     expect(error.issues).to.deep.equal([
       {
         path: [],
+        code: "invalid_type",
         message: "test2",
       },
       {
         path: ["first"],
+        code: "invalid_type",
         message: "test1",
       },
     ]);
