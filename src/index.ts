@@ -278,6 +278,44 @@ class VxObj<
   }
 }
 
+class VxArr<T extends Vx<unknown>> extends Vx<Infer<T>[]> {
+  constructor(private readonly item: T) {
+    super(() => {
+      const func = this.item.func;
+      return (arr) => {
+        if (!Array.isArray(arr)) {
+          return err("invalid_type", "expected an array");
+        }
+        let ctx: ErrorContext | undefined = undefined;
+        let output: Infer<T>[] = arr;
+        for (let i = 0; i < arr.length; i++) {
+          const r = func(arr[i]);
+          if (r !== true) {
+            if (r.ok) {
+              if (output === arr) {
+                output = arr.slice();
+              }
+              output[i] = r.value as Infer<T>;
+            } else {
+              ctx = {
+                ok: false,
+                type: "path",
+                value: i,
+                current: r,
+                next: ctx,
+              };
+            }
+          }
+        }
+        if (ctx) {
+          return ctx;
+        }
+        return arr === output ? true : { ok: true, value: output };
+      };
+    }, false);
+  }
+}
+
 function number(): Vx<number> {
   const e = err("invalid_type", "expected a number");
   return new Vx(() => (v) => (typeof v === "number" ? true : e), false);
@@ -303,6 +341,9 @@ function object<T extends Record<string, Vx<unknown>>>(
 ): VxObj<T, "strict"> {
   return new VxObj(obj, "strict");
 }
+function array<T extends Vx<unknown>>(item: T): VxArr<T> {
+  return new VxArr(item);
+}
 
 export {
   number,
@@ -311,6 +352,7 @@ export {
   null_ as null,
   undefined_ as undefined,
   object,
+  array,
 };
 
 export type { Infer as infer };

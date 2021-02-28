@@ -23,6 +23,45 @@ describe("object()", () => {
     const t = v.object({ a: v.string().optional() });
     expect(t.parse({})).to.deep.equal({});
   });
+  it("returns the original object instance if possible", () => {
+    const t = v.object({ a: v.number() });
+    const o = { a: 1 };
+    expect(t.parse(o)).to.equal(o);
+  });
+  it("returns a new object instance if the fields change", () => {
+    const t = v.object({
+      a: v.number().transform((n) => ({ ok: true, value: "" + n })),
+    });
+    const o = { a: 1 };
+    expect(t.parse(o)).to.not.equal(o);
+  });
+});
+
+describe("array()", () => {
+  it("accepts arrays", () => {
+    const t = v.array(v.number());
+    expect(t.parse([1])).to.deep.equal([1]);
+  });
+  it("rejects non-arrays", () => {
+    const t = v.array(v.number());
+    expect(() => t.parse({ 0: 1 })).to.throw(v.ValitaError);
+  });
+  it("throws on item mismatch", () => {
+    const t = v.array(v.string());
+    expect(() => t.parse([1])).to.throw(v.ValitaError);
+  });
+  it("returns the original array instance if possible", () => {
+    const t = v.array(v.number());
+    const a = [1];
+    expect(t.parse(a)).to.equal(a);
+  });
+  it("returns a new array instance if the items change", () => {
+    const t = v.array(
+      v.number().transform((n) => ({ ok: true, value: "" + n }))
+    );
+    const a = [1];
+    expect(t.parse(a)).to.not.equal(a);
+  });
 });
 
 describe("ValitaError", () => {
