@@ -1,6 +1,7 @@
 type IssueCode =
   | "invalid_type"
   | "invalid_literal_value"
+  | "invalid_union"
   | "missing_key"
   | "unrecognized_key";
 
@@ -354,6 +355,21 @@ function null_(): Vx<null> {
   const e = err("invalid_type", "expected null");
   return new Vx(() => (v) => (v === null ? true : e), false);
 }
+function union<T extends Vx<unknown>[]>(...args: T): Vx<Infer<T[number]>> {
+  return new Vx(() => {
+    const error = err("invalid_union", "invalid union");
+    const funcs = args.map((arg) => arg.func);
+    return (v) => {
+      for (let i = 0; i < args.length; i++) {
+        const r = funcs[i](v);
+        if (r === true || r.ok) {
+          return r as Result<Infer<T[number]>>;
+        }
+      }
+      return error;
+    };
+  }, false);
+}
 
 export {
   number,
@@ -363,6 +379,7 @@ export {
   object,
   array,
   literal,
+  union,
   null_ as null,
   undefined_ as undefined,
 };

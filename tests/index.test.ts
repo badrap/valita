@@ -160,6 +160,30 @@ describe("array()", () => {
   });
 });
 
+describe("union()", () => {
+  it("accepts two subvalidators", () => {
+    const t = v.union(v.string(), v.number());
+    expect(t.parse("test")).to.equal("test");
+    expect(t.parse(1)).to.equal(1);
+    expect(() => t.parse({})).to.throw(v.ValitaError);
+  });
+  it("accepts more than two subvalidators", () => {
+    const t = v.union(
+      v.string(),
+      v.number(),
+      v.null(),
+      v.undefined(),
+      v.boolean()
+    );
+    expect(t.parse("test")).to.equal("test");
+    expect(t.parse(1)).to.equal(1);
+    expect(t.parse(null)).to.equal(null);
+    expect(t.parse(undefined)).to.equal(undefined);
+    expect(t.parse(true)).to.equal(true);
+    expect(() => t.parse({})).to.throw(v.ValitaError);
+  });
+});
+
 describe("ValitaError", () => {
   const error = new v.ValitaError({
     ok: false,
