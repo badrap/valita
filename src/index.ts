@@ -86,6 +86,20 @@ function err(code: IssueCode, message: string): ErrorContext {
   return { ok: false, type: "error", code, message };
 }
 
+function appendErr(
+  to: ErrorContext | undefined,
+  key: string | number,
+  err: ErrorContext
+): ErrorContext {
+  return {
+    ok: false,
+    type: "path",
+    value: key,
+    current: err,
+    next: to,
+  };
+}
+
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
 
 class Vx<T> {
@@ -210,13 +224,7 @@ class VxObj<
                     }
                     output[key] = r.value;
                   } else {
-                    ctx = {
-                      ok: false,
-                      type: "path",
-                      value: key,
-                      current: r,
-                      next: ctx,
-                    };
+                    ctx = appendErr(ctx, key, r);
                   }
                 }
               }
@@ -228,13 +236,7 @@ class VxObj<
           const value = obj[key];
 
           if (value === undefined && required[i]) {
-            ctx = {
-              ok: false,
-              type: "path",
-              value: key,
-              current: err("missing_key", `missing key`),
-              next: ctx,
-            };
+            ctx = appendErr(ctx, key, err("missing_key", `missing key`));
           } else {
             const r = funcs[i](value);
             if (r !== true) {
@@ -244,23 +246,19 @@ class VxObj<
                 }
                 output[keys[i]] = r.value;
               } else {
-                ctx = {
-                  ok: false,
-                  type: "path",
-                  value: keys[i],
-                  current: r,
-                  next: ctx,
-                };
+                ctx = appendErr(ctx, key, r);
               }
             }
           }
         }
+
         if (ctx) {
           return ctx;
+        } else if (obj === output) {
+          return true;
+        } else {
+          return { ok: true, value: output as VxObjOutput<T, U> };
         }
-        return obj === output
-          ? true
-          : { ok: true, value: output as VxObjOutput<T, U> };
       };
     }, false);
   }
@@ -297,20 +295,17 @@ class VxArr<T extends Vx<unknown>> extends Vx<Infer<T>[]> {
               }
               output[i] = r.value as Infer<T>;
             } else {
-              ctx = {
-                ok: false,
-                type: "path",
-                value: i,
-                current: r,
-                next: ctx,
-              };
+              ctx = appendErr(ctx, i, r);
             }
           }
         }
         if (ctx) {
           return ctx;
+        } else if (arr === output) {
+          return true;
+        } else {
+          return { ok: true, value: output };
         }
-        return arr === output ? true : { ok: true, value: output };
       };
     }, false);
   }
