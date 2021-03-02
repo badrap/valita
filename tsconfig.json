@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "declaration": true,
+    "module": "commonjs",
     "strict": true,
     "noImplicitReturns": true,
     "moduleResolution": "node",
-    "outDir": "./dist"
+    "outDir": "./dist/main"
   },
   "include": ["src/**/*", "tests/**/*"]
 }

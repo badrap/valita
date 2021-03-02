@@ -2,7 +2,12 @@
   "name": "@badrap/valita",
   "version": "0.0.3",
   "description": "A validation & parsing library for TypeScript",
-  "main": "./dist/index.js",
+  "main": "./dist/main/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    "node": "./dist/node/index.js",
+    "default": "./dist/main/index.js"
+  },
   "sideEffects": false,
   "repository": "badrap/valita",
   "author": "Joachim Viide <jviide@iki.fi>",
@@ -11,7 +16,10 @@
     "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
     "typecheck": "tsc --skipLibCheck --noEmit",
     "test": "mocha --require ts-node/register tests/**/*.test.ts",
-    "build": "rm -rf dist && tsc -p ./tsconfig.build.json",
+    "build": "rm -rf dist && npm run build:types && npm run build:main && npm run build:node",
+    "build:types": "tsc -p ./tsconfig.build.json --emitDeclarationOnly --declaration --declarationDir ./dist/types",
+    "build:main": "tsc -p ./tsconfig.build.json --target es5 --outDir ./dist/default",
+    "build:node": "tsc -p ./tsconfig.build.json --target es2019 --outDir ./dist/node",
     "prepack": "npm run build"
   },
   "devDependencies": {
