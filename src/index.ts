@@ -121,64 +121,37 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
-
-type Type =
-  | {
-      type: "literal";
-      value: string | number | bigint | boolean;
-    }
-  | {
-      type: "object";
-      shape: Record<string, Type>;
-    }
-  | {
-      type: "array";
-      item: Type;
-    }
-  | {
-      type: "string" | "number" | "bigint" | "boolean" | "undefined" | "null";
-    }
-  | {
-      type: "union";
-      children: Type[];
-    };
-
-function isOptional(type: Type): boolean {
-  if (type.type === "union") {
-    return type.children.some(isOptional);
-  } else {
-    return type.type === "undefined";
-  }
+function toTerminals(type: Type): TerminalType[] {
+  const result: TerminalType[] = [];
+  type.toTerminals(result);
+  return result;
 }
 
-class Vx<Out, In extends Type = Type> {
-  constructor(
-    private readonly genFunc: () => (v: unknown) => Result<Out>,
-    readonly type: Type
-  ) {}
+type Infer<T extends Type> = T extends Type<infer I> ? I : never;
 
-  get func(): (v: unknown) => Result<Out> {
+type Func<T> = (v: unknown) => Result<T>;
+
+abstract class Type<Out = unknown> {
+  abstract readonly name: string;
+  abstract genFunc(): (v: unknown) => Result<Out>;
+  abstract toTerminals(into: TerminalType[]): void;
+
+  get isOptional(): boolean {
+    const isOptional = toTerminals(this).some((t) => t.name === "undefined");
+    Object.defineProperty(this, "isOptional", {
+      value: isOptional,
+      writable: false,
+    });
+    return isOptional;
+  }
+
+  get func(): Func<Out> {
     const f = this.genFunc();
     Object.defineProperty(this, "func", {
       value: f,
       writable: false,
     });
     return f;
-  }
-
-  transform<O>(func: (v: Out) => Result<O>): Vx<O, In> {
-    const f = this.func;
-    return new Vx(
-      () => (v) => {
-        const r = f(v);
-        if (r !== true && r.code !== "ok") {
-          return r;
-        }
-        return func(r === true ? (v as Out) : r.value);
-      },
-      this.type
-    );
   }
 
   parse(v: unknown): Out {
@@ -192,222 +165,191 @@ class Vx<Out, In extends Type = Type> {
     }
   }
 
-  optional(): Vx<
-    Out | undefined,
-    {
-      type: "union";
-      children: [In, { type: "undefined" }];
-    }
-  > {
-    const f = this.func;
-    return new Vx(
-      () => (v) => {
-        return v === undefined ? true : f(v);
-      },
-      {
-        type: "union",
-        children: [this.type, { type: "undefined" }],
-      }
-    );
+  optional<This extends Type>(this: This): UnionType<[UndefinedType, This]> {
+    return union(undefined_(), this);
+  }
+
+  transform<T>(this: Type, func: (v: Out) => Result<T>): TransformType<T> {
+    return new TransformType(this, func as (v: unknown) => Result<T>);
   }
 }
 
-type Optionals<T extends Record<string, Vx<unknown>>> = {
+type Optionals<T extends Record<string, Type>> = {
   [K in keyof T]: undefined extends Infer<T[K]> ? K : never;
 }[keyof T];
 
-type UnknownKeys = "passthrough" | "strict" | "strip" | Vx<unknown>;
+type UnknownKeys = "passthrough" | "strict" | "strip" | Type;
 
-type VxObjOutput<
-  T extends Record<string, Vx<unknown>>,
+type ObjectShape = Record<string, Type>;
+
+type ObjectOutput<
+  T extends ObjectShape,
   U extends UnknownKeys
 > = PrettyIntersection<
   { [K in Optionals<T>]?: Infer<T[K]> } &
     { [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]> } &
     (U extends "passthrough" ? { [K: string]: unknown } : unknown) &
-    (U extends Vx<infer C> ? { [K: string]: C } : unknown)
+    (U extends Type ? { [K: string]: Infer<U> } : unknown)
 >;
 
-function collectShape<T extends Record<string, Vx<unknown>>>(
-  shape: T
-): Record<string, Type> {
-  const output = Object.create(null);
-  for (const key in shape) {
-    output[key] = shape[key].type;
+class ObjectType<
+  T extends ObjectShape = ObjectShape,
+  U extends UnknownKeys = UnknownKeys
+> extends Type<ObjectOutput<T, U>> {
+  readonly name = "object";
+
+  constructor(readonly shape: T, private readonly unknownKeys: U) {
+    super();
   }
-  return output;
-}
 
-class VxObj<
-  T extends Record<string, Vx<unknown>>,
-  U extends UnknownKeys
-> extends Vx<
-  VxObjOutput<T, U>,
-  {
-    type: "object";
-    shape: {
-      [K in keyof T]: T[K]["type"];
-    };
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
   }
-> {
-  constructor(private readonly shape: T, private readonly unknownKeys: U) {
-    super(
-      () => {
-        const shape = this.shape;
-        const strip = this.unknownKeys === "strip";
-        const strict = this.unknownKeys === "strict";
-        const passthrough = this.unknownKeys === "passthrough";
-        const catchall =
-          this.unknownKeys instanceof Vx
-            ? (this.unknownKeys.func as (v: unknown) => Result<unknown>)
-            : undefined;
 
-        const keys: string[] = [];
-        const funcs: ((v: unknown) => Result<unknown>)[] = [];
-        const required: boolean[] = [];
-        const knownKeys = Object.create(null);
-        const shapeTemplate = {} as Record<string, unknown>;
-        for (const key in shape) {
-          keys.push(key);
-          funcs.push(shape[key].func);
-          required.push(!isOptional(shape[key].type));
-          knownKeys[key] = true;
-          shapeTemplate[key] = undefined;
-        }
+  genFunc(): Func<ObjectOutput<T, U>> {
+    const shape = this.shape;
+    const strip = this.unknownKeys === "strip";
+    const strict = this.unknownKeys === "strict";
+    const passthrough = this.unknownKeys === "passthrough";
+    const catchall =
+      this.unknownKeys instanceof Type ? this.unknownKeys.func : undefined;
 
-        return (obj) => {
-          if (!isObject(obj)) {
-            return { code: "invalid_type", expected: ["object"] };
-          }
-          let issueTree: IssueTree | undefined = undefined;
-          let output: Record<string, unknown> = obj;
-          const template = strict || strip ? shapeTemplate : obj;
-          if (!passthrough) {
-            for (const key in obj) {
-              if (!knownKeys[key]) {
-                if (strict) {
-                  return { code: "unrecognized_key", key };
-                } else if (strip) {
-                  output = { ...template };
-                  break;
-                } else if (catchall) {
-                  const r = catchall(obj[key]);
-                  if (r !== true) {
-                    if (r.code === "ok") {
-                      if (output === obj) {
-                        output = { ...template };
-                      }
-                      output[key] = r.value;
-                    } else {
-                      issueTree = joinIssues(prependPath(key, r), issueTree);
-                    }
-                  }
-                }
-              }
-            }
-          }
+    const keys: string[] = [];
+    const funcs: ((v: unknown) => Result<unknown>)[] = [];
+    const required: boolean[] = [];
+    const knownKeys = Object.create(null);
+    const shapeTemplate = {} as Record<string, unknown>;
+    for (const key in shape) {
+      keys.push(key);
+      funcs.push(shape[key].func);
+      required.push(!shape[key].isOptional);
+      knownKeys[key] = true;
+      shapeTemplate[key] = undefined;
+    }
 
-          for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
-            const value = obj[key];
-
-            if (value === undefined && required[i]) {
-              return { code: "missing_key", key };
-            } else {
-              const r = funcs[i](value);
+    return (obj) => {
+      if (!isObject(obj)) {
+        return { code: "invalid_type", expected: ["object"] };
+      }
+      let issueTree: IssueTree | undefined = undefined;
+      let output: Record<string, unknown> = obj;
+      const template = strict || strip ? shapeTemplate : obj;
+      if (!passthrough) {
+        for (const key in obj) {
+          if (!knownKeys[key]) {
+            if (strict) {
+              return { code: "unrecognized_key", key };
+            } else if (strip) {
+              output = { ...template };
+              break;
+            } else if (catchall) {
+              const r = catchall(obj[key]);
               if (r !== true) {
                 if (r.code === "ok") {
                   if (output === obj) {
                     output = { ...template };
                   }
-                  output[keys[i]] = r.value;
+                  output[key] = r.value;
                 } else {
                   issueTree = joinIssues(prependPath(key, r), issueTree);
                 }
               }
             }
           }
-
-          if (issueTree) {
-            return issueTree;
-          } else if (obj === output) {
-            return true;
-          } else {
-            return { code: "ok", value: output as VxObjOutput<T, U> };
-          }
-        };
-      },
-      {
-        type: "object",
-        shape: collectShape(shape),
+        }
       }
-    );
-  }
-  passthrough(): VxObj<T, "passthrough"> {
-    return new VxObj(this.shape, "passthrough");
-  }
-  strict(): VxObj<T, "strict"> {
-    return new VxObj(this.shape, "strict");
-  }
-  strip(): VxObj<T, "strip"> {
-    return new VxObj(this.shape, "strip");
-  }
-  catchall<C extends Vx<unknown>>(catchall: C): VxObj<T, C> {
-    return new VxObj(this.shape, catchall);
-  }
-}
 
-class VxArr<T extends Vx<unknown>> extends Vx<
-  Infer<T>[],
-  {
-    type: "array";
-    item: T["type"];
-  }
-> {
-  constructor(private readonly item: T) {
-    super(
-      () => {
-        const func = this.item.func;
-        return (arr) => {
-          if (!Array.isArray(arr)) {
-            return { code: "invalid_type", expected: ["array"] };
-          }
-          let issueTree: IssueTree | undefined = undefined;
-          let output: Infer<T>[] = arr;
-          for (let i = 0; i < arr.length; i++) {
-            const r = func(arr[i]);
-            if (r !== true) {
-              if (r.code === "ok") {
-                if (output === arr) {
-                  output = arr.slice();
-                }
-                output[i] = r.value as Infer<T>;
-              } else {
-                issueTree = joinIssues(prependPath(i, r), issueTree);
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const value = obj[key];
+
+        if (value === undefined && required[i]) {
+          return { code: "missing_key", key };
+        } else {
+          const r = funcs[i](value);
+          if (r !== true) {
+            if (r.code === "ok") {
+              if (output === obj) {
+                output = { ...template };
               }
+              output[keys[i]] = r.value;
+            } else {
+              issueTree = joinIssues(prependPath(key, r), issueTree);
             }
           }
-          if (issueTree) {
-            return issueTree;
-          } else if (arr === output) {
-            return true;
-          } else {
-            return { code: "ok", value: output };
-          }
-        };
-      },
-      {
-        type: "array",
-        item: item.type,
+        }
       }
-    );
+
+      if (issueTree) {
+        return issueTree;
+      } else if (obj === output) {
+        return true;
+      } else {
+        return { code: "ok", value: output as ObjectOutput<T, U> };
+      }
+    };
+  }
+  passthrough(): ObjectType<T, "passthrough"> {
+    return new ObjectType(this.shape, "passthrough");
+  }
+  strict(): ObjectType<T, "strict"> {
+    return new ObjectType(this.shape, "strict");
+  }
+  strip(): ObjectType<T, "strip"> {
+    return new ObjectType(this.shape, "strip");
+  }
+  catchall<C extends Type>(catchall: C): ObjectType<T, C> {
+    return new ObjectType(this.shape, catchall);
   }
 }
 
-function toType(v: unknown): string {
+class ArrayType<T extends Type = Type> extends Type<Infer<T>[]> {
+  readonly name = "array";
+
+  constructor(readonly item: T) {
+    super();
+  }
+
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+
+  genFunc(): (v: unknown) => Result<Infer<T>[]> {
+    const func = this.item.func;
+    return (arr) => {
+      if (!Array.isArray(arr)) {
+        return { code: "invalid_type", expected: ["array"] };
+      }
+      let issueTree: IssueTree | undefined = undefined;
+      let output: Infer<T>[] = arr;
+      for (let i = 0; i < arr.length; i++) {
+        const r = func(arr[i]);
+        if (r !== true) {
+          if (r.code === "ok") {
+            if (output === arr) {
+              output = arr.slice();
+            }
+            output[i] = r.value as Infer<T>;
+          } else {
+            issueTree = joinIssues(prependPath(i, r), issueTree);
+          }
+        }
+      }
+      if (issueTree) {
+        return issueTree;
+      } else if (arr === output) {
+        return true;
+      } else {
+        return { code: "ok", value: output };
+      }
+    };
+  }
+}
+
+function toBaseType(v: unknown): BaseType {
   const type = typeof v;
   if (type !== "object") {
-    return type;
+    return type as BaseType;
   } else if (v === null) {
     return "null";
   } else if (Array.isArray(v)) {
@@ -429,7 +371,7 @@ function dedup<T>(arr: T[]): T[] {
   return output;
 }
 
-function findCommonKeys(rs: Record<string, unknown>[]): string[] {
+function findCommonKeys(rs: ObjectShape[]): string[] {
   const map = new Map<string, number>();
   rs.forEach((r) => {
     for (const key in r) {
@@ -446,38 +388,41 @@ function findCommonKeys(rs: Record<string, unknown>[]): string[] {
 }
 
 function createObjectMatchers(
-  t: { vx: Vx<unknown>; type: Type }[]
+  t: { root: Type; terminal: TerminalType }[]
 ): {
   key: string;
   matcher: (v: unknown, k: unknown) => Result<unknown>;
   isOptional: boolean;
 }[] {
-  const objects: { vx: Vx<unknown>; type: Type & { type: "object" } }[] = [];
-  t.forEach(({ vx, type }) => {
-    if (type.type === "object") {
-      objects.push({ vx, type });
+  const objects: {
+    root: Type;
+    terminal: TerminalType & { name: "object" };
+  }[] = [];
+  t.forEach(({ root, terminal }) => {
+    if (terminal.name === "object") {
+      objects.push({ root, terminal });
     }
   });
-  const shapes = objects.map(({ type }) => type.shape);
+  const shapes = objects.map(({ terminal }) => terminal.shape);
   const common = findCommonKeys(shapes);
   const discriminants = common.filter((key) => {
-    const types = new Map<unknown, unknown[]>();
+    const types = new Map<BaseType, unknown[]>();
     const literals = new Map<unknown, unknown[]>();
     shapes.forEach((shape) => {
-      flattenType(shape[key]).forEach((type) => {
-        if (type.type === "literal") {
-          const options = literals.get(type.value) || [];
+      toTerminals(shape[key]).forEach((terminal) => {
+        if (terminal.name === "literal") {
+          const options = literals.get(terminal.value) || [];
           options.push(shape);
-          literals.set(type.value, options);
+          literals.set(terminal.value, options);
         } else {
-          const options = types.get(type.type) || [];
+          const options = types.get(terminal.name) || [];
           options.push(shape);
-          types.set(type.type, options);
+          types.set(terminal.name, options);
         }
       });
     });
     literals.forEach((found, value) => {
-      const options = types.get(toType(value));
+      const options = types.get(toBaseType(value));
       if (options) {
         options.push(...found);
         literals.delete(value);
@@ -497,47 +442,51 @@ function createObjectMatchers(
     return success;
   });
   return discriminants.map((key) => {
+    const flattened = flatten(
+      objects.map(({ root, terminal }) => ({
+        root,
+        type: terminal.shape[key],
+      }))
+    );
     return {
       key,
-      matcher: createUnionMatcher(
-        flatten(objects.map(({ vx, type }) => ({ vx, type: type.shape[key] })))
-      ),
-      isOptional: objects.some(({ type }) => isOptional(type)),
+      matcher: createUnionMatcher(flattened),
+      isOptional: flattened.some(({ terminal }) => terminal.isOptional),
     };
   });
 }
 
 function createUnionMatcher(
-  t: { vx: Vx<unknown>; type: Type }[]
+  t: { root: Type; terminal: TerminalType }[]
 ): (v: unknown, k: unknown) => Result<unknown> {
-  const literals = new Map<unknown, Vx<unknown>[]>();
-  const types = new Map<string, Vx<unknown>[]>();
-  const allTypes = new Set<string>();
-  t.forEach(({ vx, type }) => {
-    if (type.type === "literal") {
-      const options = literals.get(type.value) || [];
-      options.push(vx);
-      literals.set(type.value, options);
-      allTypes.add(toType(type.value));
+  const literals = new Map<unknown, Type[]>();
+  const types = new Map<BaseType, Type[]>();
+  const allTypes = new Set<BaseType>();
+  t.forEach(({ root, terminal }) => {
+    if (terminal.name === "literal") {
+      const roots = literals.get(terminal.value) || [];
+      roots.push(root);
+      literals.set(terminal.value, roots);
+      allTypes.add(toBaseType(terminal.value));
     } else {
-      const options = types.get(type.type) || [];
-      options.push(vx);
-      types.set(type.type, options);
-      allTypes.add(type.type);
+      const roots = types.get(terminal.name) || [];
+      roots.push(root);
+      types.set(terminal.name, roots);
+      allTypes.add(terminal.name);
     }
   });
   literals.forEach((vxs, value) => {
-    const options = types.get(toType(value));
+    const options = types.get(toBaseType(value));
     if (options) {
       options.push(...vxs);
       literals.delete(value);
     }
   });
-  types.forEach((vxs, type) => types.set(type, dedup(vxs)));
-  literals.forEach((vxs, value) => literals.set(value, dedup(vxs)));
+  types.forEach((roots, type) => types.set(type, dedup(roots)));
+  literals.forEach((roots, value) => literals.set(value, dedup(roots)));
 
   const expectedTypes: BaseType[] = [];
-  allTypes.forEach((type) => expectedTypes.push(type as BaseType));
+  allTypes.forEach((type) => expectedTypes.push(type));
 
   const expectedLiterals: Literal[] = [];
   literals.forEach((_, value) => {
@@ -554,7 +503,7 @@ function createUnionMatcher(
   };
 
   return (v: unknown, k: unknown) => {
-    const type = toType(k);
+    const type = toBaseType(k);
     if (!allTypes.has(type)) {
       return invalidType;
     }
@@ -580,122 +529,194 @@ function createUnionMatcher(
   };
 }
 
-function flattenType(type: Type): Type[] {
-  const result = [] as Type[];
-  function _flatten(type: Type): void {
-    if (type.type === "union") {
-      type.children.forEach((child) => _flatten(child));
-    } else {
-      result.push(type);
-    }
-  }
-  _flatten(type);
-  return result;
-}
-
 function flatten(
-  t: { vx: Vx<unknown>; type: Type }[]
-): { vx: Vx<unknown>; type: Type }[] {
-  const result = [] as { vx: Vx<unknown>; type: Type }[];
-  t.forEach(({ vx, type }) =>
-    flattenType(type).forEach((type) => {
-      result.push({ vx, type });
+  t: { root: Type; type: Type }[]
+): { root: Type; terminal: TerminalType }[] {
+  const result: { root: Type; terminal: TerminalType }[] = [];
+  t.forEach(({ root, type }) =>
+    toTerminals(type).forEach((terminal) => {
+      result.push({ root, terminal });
     })
   );
   return result;
 }
 
-class VxUnion<T extends Vx<unknown>[]> extends Vx<
-  Infer<T[number]>,
-  {
-    type: "union";
-    children: Type[];
+class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
+  readonly name = "union";
+
+  constructor(readonly options: T) {
+    super();
   }
-> {
-  constructor(private readonly args: T) {
-    super(
-      () => {
-        const flattened = flatten(args.map((vx) => ({ vx, type: vx.type })));
-        const objects = createObjectMatchers(flattened);
-        const base = createUnionMatcher(flattened);
-        return (v) => {
-          if (objects.length > 0 && isObject(v)) {
-            const item = objects[0];
-            const value = v[item.key];
-            if (value === undefined && !item.isOptional && !(item.key in v)) {
-              return { code: "missing_key", key: item.key };
-            }
-            const r = item.matcher(v, value);
-            if (r === true || r.code === "ok") {
-              return r as Result<Infer<T[number]>>;
-            }
-            return prependPath(item.key, r);
-          }
-          return base(v, v) as Result<Infer<T[number]>>;
-        };
-      },
-      {
-        type: "union",
-        children: args.map((arg) => arg.type),
-      }
+
+  toTerminals(into: TerminalType[]): void {
+    this.options.forEach((o) => o.toTerminals(into));
+  }
+
+  genFunc(): Func<Infer<T[number]>> {
+    const flattened = flatten(
+      this.options.map((root) => ({ root, type: root }))
     );
+    const objects = createObjectMatchers(flattened);
+    const base = createUnionMatcher(flattened);
+    return (v) => {
+      if (objects.length > 0 && isObject(v)) {
+        const item = objects[0];
+        const value = v[item.key];
+        if (value === undefined && !item.isOptional && !(item.key in v)) {
+          return { code: "missing_key", key: item.key };
+        }
+        const r = item.matcher(v, value);
+        if (r === true || r.code === "ok") {
+          return r as Result<Infer<T[number]>>;
+        }
+        return prependPath(item.key, r);
+      }
+      return base(v, v) as Result<Infer<T[number]>>;
+    };
   }
 }
 
-function number(): Vx<number> {
-  const e: Issue = { code: "invalid_type", expected: ["number"] };
-  return new Vx(() => (v) => (typeof v === "number" ? true : e), {
-    type: "number",
-  });
+class NumberType extends Type<number> {
+  readonly name = "number";
+  genFunc(): Func<number> {
+    const issue: Issue = { code: "invalid_type", expected: ["number"] };
+    return (v) => (typeof v === "number" ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
 }
-function bigint(): Vx<bigint> {
-  const e: Issue = { code: "invalid_type", expected: ["bigint"] };
-  return new Vx(() => (v) => (typeof v === "bigint" ? true : e), {
-    type: "bigint",
-  });
+class StringType extends Type<number> {
+  readonly name = "string";
+  genFunc(): Func<number> {
+    const issue: Issue = { code: "invalid_type", expected: ["string"] };
+    return (v) => (typeof v === "string" ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
 }
-function string(): Vx<string> {
-  const e: Issue = { code: "invalid_type", expected: ["string"] };
-  return new Vx(() => (v) => (typeof v === "string" ? true : e), {
-    type: "string",
-  });
+class BigIntType extends Type<number> {
+  readonly name = "bigint";
+  genFunc(): Func<number> {
+    const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
+    return (v) => (typeof v === "bigint" ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
 }
-function boolean(): Vx<boolean> {
-  const e: Issue = { code: "invalid_type", expected: ["boolean"] };
-  return new Vx(() => (v) => (typeof v === "boolean" ? true : e), {
-    type: "boolean",
-  });
+class BooleanType extends Type<number> {
+  readonly name = "boolean";
+  genFunc(): Func<number> {
+    const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
+    return (v) => (typeof v === "boolean" ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
 }
-function object<T extends Record<string, Vx<unknown>>>(
+class UndefinedType extends Type<undefined> {
+  readonly name = "undefined";
+  genFunc(): Func<undefined> {
+    const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
+    return (v) => (v === undefined ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+}
+class NullType extends Type<null> {
+  readonly name = "null";
+  genFunc(): Func<null> {
+    const issue: Issue = { code: "invalid_type", expected: ["null"] };
+    return (v) => (v === null ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+}
+class LiteralType<Out extends Literal = Literal> extends Type<Out> {
+  readonly name = "literal";
+  constructor(readonly value: Out) {
+    super();
+  }
+  genFunc(): Func<Out> {
+    const value = this.value;
+    const issue: Issue = { code: "invalid_literal", expected: [value] };
+    return (v) => (v === value ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+}
+class TransformType<Out> extends Type<Out> {
+  readonly name = "transform";
+  constructor(
+    readonly transformed: Type,
+    private readonly transformFunc: (v: unknown) => Result<Out>
+  ) {
+    super();
+  }
+  genFunc(): Func<Out> {
+    const f = this.transformed.func;
+    const t = this.transformFunc;
+    return (v) => {
+      const r = f(v);
+      if (r !== true && r.code !== "ok") {
+        return r;
+      }
+      return t(r === true ? v : r.value);
+    };
+  }
+  toTerminals(into: TerminalType[]): void {
+    this.transformed.toTerminals(into);
+  }
+}
+
+function number(): NumberType {
+  return new NumberType();
+}
+function bigint(): BigIntType {
+  return new BigIntType();
+}
+function string(): StringType {
+  return new StringType();
+}
+function boolean(): BooleanType {
+  return new BooleanType();
+}
+function undefined_(): UndefinedType {
+  return new UndefinedType();
+}
+function null_(): NullType {
+  return new NullType();
+}
+function object<T extends Record<string, Type>>(
   obj: T
-): VxObj<T, "strict"> {
-  return new VxObj(obj, "strict");
+): ObjectType<T, "strict"> {
+  return new ObjectType(obj, "strict");
 }
-function array<T extends Vx<unknown>>(item: T): VxArr<T> {
-  return new VxArr(item);
+function array<T extends Type>(item: T): ArrayType<T> {
+  return new ArrayType(item);
 }
-function literal<T extends string | number | boolean | bigint>(
-  value: T
-): Vx<T, { type: "literal"; value: T }> {
-  const e: Issue = { code: "invalid_literal", expected: [value] };
-  return new Vx(() => (v) => (v === value ? true : e), {
-    type: "literal",
-    value,
-  });
+function literal<T extends Literal>(value: T): LiteralType<T> {
+  return new LiteralType(value);
 }
-function undefined_(): Vx<undefined, { type: "undefined" }> {
-  const e: Issue = { code: "invalid_type", expected: ["undefined"] };
-  return new Vx(() => (v) => (v === undefined ? true : e), {
-    type: "undefined",
-  });
+function union<T extends Type[]>(...options: T): UnionType<T> {
+  return new UnionType(options);
 }
-function null_(): Vx<null, { type: "null" }> {
-  const e: Issue = { code: "invalid_type", expected: ["null"] };
-  return new Vx(() => (v) => (v === null ? true : e), { type: "null" });
-}
-function union<T extends Vx<unknown>[]>(...args: T): VxUnion<T> {
-  return new VxUnion(args);
-}
+
+type TerminalType =
+  | StringType
+  | NumberType
+  | BigIntType
+  | BooleanType
+  | UndefinedType
+  | NullType
+  | ObjectType
+  | ArrayType
+  | LiteralType;
 
 export {
   number,
