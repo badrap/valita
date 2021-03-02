@@ -71,7 +71,7 @@ describe("object()", () => {
   });
   it("returns a new object instance if the fields change", () => {
     const t = v.object({
-      a: v.number().transform((n) => ({ ok: true, value: "" + n })),
+      a: v.number().transform((n) => ({ code: "ok", value: "" + n })),
     });
     const o = { a: 1 };
     expect(t.parse(o)).to.not.equal(o);
@@ -153,7 +153,7 @@ describe("array()", () => {
   });
   it("returns a new array instance if the items change", () => {
     const t = v.array(
-      v.number().transform((n) => ({ ok: true, value: "" + n }))
+      v.number().transform((n) => ({ code: "ok", value: "" + n }))
     );
     const a = [1];
     expect(t.parse(a)).to.not.equal(a);
@@ -186,10 +186,8 @@ describe("union()", () => {
 
 describe("ValitaError", () => {
   const error = new v.ValitaError({
-    ok: false,
-    type: "error",
     code: "invalid_type",
-    message: "test",
+    expected: ["bigint"],
   });
   it("is derived from Error", () => {
     expect(error).to.be.instanceof(Error);
@@ -202,38 +200,36 @@ describe("ValitaError", () => {
       {
         path: [],
         code: "invalid_type",
-        message: "test",
+        expected: ["bigint"],
       },
     ]);
   });
   it("supports multiple issues", () => {
     const error = new v.ValitaError({
-      ok: false,
-      type: "path",
-      value: "first",
-      current: {
-        ok: false,
+      code: "join",
+      left: {
         code: "invalid_type",
-        type: "error",
-        message: "test1",
+        expected: ["bigint"],
       },
-      next: {
-        ok: false,
-        code: "invalid_type",
-        type: "error",
-        message: "test2",
+      right: {
+        code: "prepend",
+        key: "first",
+        tree: {
+          code: "invalid_type",
+          expected: ["string"],
+        },
       },
     });
     expect(error.issues).to.deep.equal([
       {
         path: [],
         code: "invalid_type",
-        message: "test2",
+        expected: ["bigint"],
       },
       {
         path: ["first"],
         code: "invalid_type",
-        message: "test1",
+        expected: ["string"],
       },
     ]);
   });
