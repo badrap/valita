@@ -1,55 +1,80 @@
-type IssueCode =
-  | "invalid_type"
-  | "invalid_literal_value"
-  | "invalid_union"
-  | "missing_key"
-  | "unrecognized_key";
+// This is magic that turns object intersections to nicer-looking types.
+type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
 
-type IssuePath = (string | number)[];
+type Literal = string | number | bigint | boolean;
+type Key = string | number;
+type BaseType =
+  | "object"
+  | "array"
+  | "null"
+  | "undefined"
+  | "string"
+  | "number"
+  | "bigint"
+  | "boolean";
 
-type Issue = {
-  code: IssueCode;
-  path: IssuePath;
-  message: string;
-};
-
-function _collectIssues(
-  ctx: ErrorContext,
-  path: IssuePath,
-  issues: Issue[]
-): void {
-  if (ctx.type === "error") {
-    issues.push({
-      code: ctx.code,
-      path: path.slice(),
-      message: ctx.message,
-    });
-  } else {
-    if (ctx.next) {
-      _collectIssues(ctx.next, path, issues);
+type I<Code, Extra = unknown> = Readonly<
+  PrettyIntersection<
+    Extra & {
+      code: Code;
+      path?: Key[];
     }
-    path.push(ctx.value);
-    _collectIssues(ctx.current, path, issues);
+  >
+>;
+
+type Issue =
+  | I<"invalid_type", { expected: BaseType[] }>
+  | I<"invalid_literal", { expected: Literal[] }>
+  | I<"missing_key", { key: Key }>
+  | I<"unrecognized_key", { key: Key }>
+  | I<"invalid_union", { tree: IssueTree }>;
+
+type IssueTree =
+  | Readonly<{ code: "prepend"; key: Key; tree: IssueTree }>
+  | Readonly<{ code: "join"; left: IssueTree; right: IssueTree }>
+  | Issue;
+
+function _collectIssues(tree: IssueTree, path: Key[], issues: Issue[]): void {
+  if (tree.code === "join") {
+    _collectIssues(tree.left, path, issues);
+    _collectIssues(tree.right, path, issues);
+  } else if (tree.code === "prepend") {
+    path.push(tree.key);
+    _collectIssues(tree.tree, path, issues);
     path.pop();
+  } else {
+    issues.push({ ...tree, path: path.concat(tree.path || []) });
   }
 }
 
-function collectIssues(ctx: ErrorContext): Issue[] {
+function collectIssues(tree: IssueTree): Issue[] {
   const issues: Issue[] = [];
-  const path: IssuePath = [];
-  _collectIssues(ctx, path, issues);
+  const path: Key[] = [];
+  _collectIssues(tree, path, issues);
   return issues;
 }
 
+function orList(list: string[]): string {
+  const last = list[list.length - 1];
+  if (list.length < 2) {
+    return last;
+  }
+  return `${list.slice(0, -1).join(", ")} or ${last}`;
+}
+
+function formatLiteral(value: Literal): string {
+  return typeof value === "bigint" ? `${value}n` : JSON.stringify(value);
+}
+
 export class ValitaError extends Error {
-  constructor(private readonly ctx: ErrorContext) {
+  constructor(private readonly issueTree: IssueTree) {
     super();
     Object.setPrototypeOf(this, new.target.prototype);
     this.name = new.target.name;
   }
 
   get issues(): readonly Issue[] {
-    const issues = collectIssues(this.ctx);
+    const issues = collectIssues(this.issueTree);
     Object.defineProperty(this, "issues", {
       value: issues,
       writable: false,
@@ -59,56 +84,41 @@ export class ValitaError extends Error {
 
   get message(): string {
     const issue = this.issues[0];
-    const path = "." + issue.path.join(".");
-    return `${issue.code} at ${path} (${issue.message})`;
+
+    let message = "invalid value";
+    if (issue.code === "invalid_type") {
+      message = `expected ${orList(issue.expected)}`;
+    } else if (issue.code === "invalid_literal") {
+      message = `expected ${orList(issue.expected.map(formatLiteral))}`;
+    } else if (issue.code === "missing_key") {
+      message = `missing key ${formatLiteral(issue.key)}`;
+    } else if (issue.code === "unrecognized_key") {
+      message = `unrecognized key ${formatLiteral(issue.key)}`;
+    }
+
+    const path = "." + (issue.path || []).join(".");
+    return `${issue.code} at ${path} (${message})`;
   }
 }
 
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+function joinIssues(left: IssueTree, right: IssueTree | undefined): IssueTree {
+  return right ? { code: "join", left, right } : left;
 }
 
-type PrettifyObjectType<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
+function prependPath(key: Key, tree: IssueTree): IssueTree {
+  return { code: "prepend", key, tree };
+}
 
-type ErrorContext = Readonly<
-  | {
-      ok: false;
-      type: "path";
-      value: string | number;
-      current: ErrorContext;
-      next?: ErrorContext;
-    }
-  | {
-      ok: false;
-      type: "error";
-      code: IssueCode;
-      message: string;
-    }
->;
 type Ok<T> =
   | true
   | Readonly<{
-      ok: true;
+      code: "ok";
       value: T;
     }>;
-type Result<T> = Ok<T> | ErrorContext;
+type Result<T> = Ok<T> | IssueTree;
 
-function err(code: IssueCode, message: string): ErrorContext {
-  return { ok: false, type: "error", code, message };
-}
-
-function appendErr(
-  to: ErrorContext | undefined,
-  key: string | number,
-  err: ErrorContext
-): ErrorContext {
-  return {
-    ok: false,
-    type: "path",
-    value: key,
-    current: err,
-    next: to,
-  };
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
@@ -155,7 +165,7 @@ class Vx<Out, In extends Type = Type> {
     return new Vx(
       () => (v) => {
         const r = f(v);
-        if (r !== true && !r.ok) {
+        if (r !== true && r.code !== "ok") {
           return r;
         }
         return func(r === true ? (v as Out) : r.value);
@@ -169,7 +179,7 @@ class Vx<Out, In extends Type = Type> {
     const r = this.func(v);
     if (r === true) {
       return v as Out;
-    } else if (r.ok) {
+    } else if (r.code === "ok") {
       return r.value;
     } else {
       throw new ValitaError(r);
@@ -206,7 +216,7 @@ type UnknownKeys = "passthrough" | "strict" | "strip" | Vx<unknown>;
 type VxObjOutput<
   T extends Record<string, Vx<unknown>>,
   U extends UnknownKeys
-> = PrettifyObjectType<
+> = PrettyIntersection<
   { [K in Optionals<T>]?: Infer<T[K]> } &
     { [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]> } &
     (U extends "passthrough" ? { [K: string]: unknown } : unknown) &
@@ -262,65 +272,63 @@ class VxObj<
 
         return (obj) => {
           if (!isObject(obj)) {
-            return err("invalid_type", "expected an object");
+            return { code: "invalid_type", expected: ["object"] };
           }
-          let ctx: ErrorContext | undefined = undefined;
+          let issueTree: IssueTree | undefined = undefined;
           let output: Record<string, unknown> = obj;
           const template = strict || strip ? shapeTemplate : obj;
           if (!passthrough) {
             for (const key in obj) {
               if (!knownKeys[key]) {
                 if (strict) {
-                  return err(
-                    "unrecognized_key",
-                    `unrecognized key ${JSON.stringify(key)}`
-                  );
+                  return { code: "unrecognized_key", key };
                 } else if (strip) {
                   output = { ...template };
                   break;
                 } else if (catchall) {
                   const r = catchall(obj[key]);
                   if (r !== true) {
-                    if (r.ok) {
+                    if (r.code === "ok") {
                       if (output === obj) {
                         output = { ...template };
                       }
                       output[key] = r.value;
                     } else {
-                      ctx = appendErr(ctx, key, r);
+                      issueTree = joinIssues(prependPath(key, r), issueTree);
                     }
                   }
                 }
               }
             }
           }
+
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i];
             const value = obj[key];
 
             if (value === undefined && required[i]) {
-              ctx = appendErr(ctx, key, err("missing_key", `missing key`));
+              return { code: "missing_key", key };
             } else {
               const r = funcs[i](value);
               if (r !== true) {
-                if (r.ok) {
+                if (r.code === "ok") {
                   if (output === obj) {
                     output = { ...template };
                   }
                   output[keys[i]] = r.value;
                 } else {
-                  ctx = appendErr(ctx, key, r);
+                  issueTree = joinIssues(prependPath(key, r), issueTree);
                 }
               }
             }
           }
 
-          if (ctx) {
-            return ctx;
+          if (issueTree) {
+            return issueTree;
           } else if (obj === output) {
             return true;
           } else {
-            return { ok: true, value: output as VxObjOutput<T, U> };
+            return { code: "ok", value: output as VxObjOutput<T, U> };
           }
         };
       },
@@ -358,29 +366,29 @@ class VxArr<T extends Vx<unknown>> extends Vx<
         const func = this.item.func;
         return (arr) => {
           if (!Array.isArray(arr)) {
-            return err("invalid_type", "expected an array");
+            return { code: "invalid_type", expected: ["array"] };
           }
-          let ctx: ErrorContext | undefined = undefined;
+          let issueTree: IssueTree | undefined = undefined;
           let output: Infer<T>[] = arr;
           for (let i = 0; i < arr.length; i++) {
             const r = func(arr[i]);
             if (r !== true) {
-              if (r.ok) {
+              if (r.code === "ok") {
                 if (output === arr) {
                   output = arr.slice();
                 }
                 output[i] = r.value as Infer<T>;
               } else {
-                ctx = appendErr(ctx, i, r);
+                issueTree = joinIssues(prependPath(i, r), issueTree);
               }
             }
           }
-          if (ctx) {
-            return ctx;
+          if (issueTree) {
+            return issueTree;
           } else if (arr === output) {
             return true;
           } else {
-            return { ok: true, value: output };
+            return { code: "ok", value: output };
           }
         };
       },
@@ -502,15 +510,18 @@ function createUnionMatcher(
 ): (v: unknown, k: unknown) => Result<unknown> {
   const literals = new Map<unknown, Vx<unknown>[]>();
   const types = new Map<string, Vx<unknown>[]>();
+  const allTypes = new Set<string>();
   t.forEach(({ vx, type }) => {
     if (type.type === "literal") {
       const options = literals.get(type.value) || [];
       options.push(vx);
       literals.set(type.value, options);
+      allTypes.add(toType(type.value));
     } else {
       const options = types.get(type.type) || [];
       options.push(vx);
       types.set(type.type, options);
+      allTypes.add(type.type);
     }
   });
   literals.forEach((vxs, value) => {
@@ -520,44 +531,50 @@ function createUnionMatcher(
       literals.delete(value);
     }
   });
-  types.forEach((vxs, type) => {
-    types.set(type, dedup(vxs));
-  });
-  literals.forEach((vxs, value) => {
-    literals.set(value, dedup(vxs));
+  types.forEach((vxs, type) => types.set(type, dedup(vxs)));
+  literals.forEach((vxs, value) => literals.set(value, dedup(vxs)));
+
+  const expectedTypes: BaseType[] = [];
+  allTypes.forEach((type) => expectedTypes.push(type as BaseType));
+
+  const expectedLiterals: Literal[] = [];
+  literals.forEach((_, value) => {
+    expectedLiterals.push(value as Literal);
   });
 
-  const expected = [] as string[];
-  types.forEach((_, type) => {
-    expected.push(type);
-  });
-  literals.forEach((_, value) => {
-    expected.push(JSON.stringify(value));
-  });
-  const last = expected.pop();
-  const e = err(
-    "invalid_union",
-    `expected ${expected.join(", ")}${expected.length > 0 ? " or " : ""}${last}`
-  );
+  const invalidType: Issue = {
+    code: "invalid_type",
+    expected: expectedTypes,
+  };
+  const invalidLiteral: Issue = {
+    code: "invalid_literal",
+    expected: expectedLiterals,
+  };
 
   return (v: unknown, k: unknown) => {
-    const options = literals.get(k) || types.get(toType(k));
+    const type = toType(k);
+    if (!allTypes.has(type)) {
+      return invalidType;
+    }
+
+    const options = literals.get(k) || types.get(type);
     if (options) {
-      let lastError: ErrorContext | undefined;
+      let issueTree: IssueTree | undefined;
       for (let i = 0; i < options.length; i++) {
         const r = options[i].func(v);
-        if (r === true || r.ok) {
+        if (r === true || r.code === "ok") {
           return r;
         }
-        lastError = r;
+        issueTree = joinIssues(r, issueTree);
       }
-      if (options.length > 1) {
-        return err("invalid_union", `invalid ${toType(k)}`);
-      } else if (lastError) {
-        return lastError;
+      if (issueTree) {
+        if (options.length > 1) {
+          return { code: "invalid_union", tree: issueTree };
+        }
+        return issueTree;
       }
     }
-    return e;
+    return invalidLiteral;
   };
 }
 
@@ -604,17 +621,13 @@ class VxUnion<T extends Vx<unknown>[]> extends Vx<
             const item = objects[0];
             const value = v[item.key];
             if (value === undefined && !item.isOptional && !(item.key in v)) {
-              return appendErr(
-                undefined,
-                item.key,
-                err("missing_key", "missing key")
-              );
+              return { code: "missing_key", key: item.key };
             }
             const r = item.matcher(v, value);
-            if (r === true || r.ok) {
+            if (r === true || r.code === "ok") {
               return r as Result<Infer<T[number]>>;
             }
-            return appendErr(undefined, item.key, r);
+            return prependPath(item.key, r);
           }
           return base(v, v) as Result<Infer<T[number]>>;
         };
@@ -629,25 +642,25 @@ class VxUnion<T extends Vx<unknown>[]> extends Vx<
 }
 
 function number(): Vx<number> {
-  const e = err("invalid_type", "expected a number");
+  const e: Issue = { code: "invalid_type", expected: ["number"] };
   return new Vx(() => (v) => (typeof v === "number" ? true : e), false, {
     type: "number",
   });
 }
 function bigint(): Vx<bigint> {
-  const e = err("invalid_type", "expected a bigint");
+  const e: Issue = { code: "invalid_type", expected: ["bigint"] };
   return new Vx(() => (v) => (typeof v === "bigint" ? true : e), false, {
     type: "bigint",
   });
 }
 function string(): Vx<string> {
-  const e = err("invalid_type", "expected a string");
+  const e: Issue = { code: "invalid_type", expected: ["string"] };
   return new Vx(() => (v) => (typeof v === "string" ? true : e), false, {
     type: "string",
   });
 }
 function boolean(): Vx<boolean> {
-  const e = err("invalid_type", "expected a boolean");
+  const e: Issue = { code: "invalid_type", expected: ["boolean"] };
   return new Vx(() => (v) => (typeof v === "boolean" ? true : e), false, {
     type: "boolean",
   });
@@ -663,21 +676,20 @@ function array<T extends Vx<unknown>>(item: T): VxArr<T> {
 function literal<T extends string | number | boolean | bigint>(
   value: T
 ): Vx<T, { type: "literal"; value: T }> {
-  const exp = typeof value === "bigint" ? `${value}n` : JSON.stringify(value);
-  const e = err("invalid_literal_value", `expected ${exp}`);
+  const e: Issue = { code: "invalid_literal", expected: [value] };
   return new Vx(() => (v) => (v === value ? true : e), false, {
     type: "literal",
     value,
   });
 }
 function undefined_(): Vx<undefined, { type: "undefined"; value: undefined }> {
-  const e = err("invalid_type", "expected undefined");
+  const e: Issue = { code: "invalid_type", expected: ["undefined"] };
   return new Vx(() => (v) => (v === undefined ? true : e), true, {
     type: "undefined",
   });
 }
 function null_(): Vx<null, { type: "null"; value: null }> {
-  const e = err("invalid_type", "expected null");
+  const e: Issue = { code: "invalid_type", expected: ["null"] };
   return new Vx(() => (v) => (v === null ? true : e), false, {
     type: "null",
   });
