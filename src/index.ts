@@ -165,8 +165,8 @@ abstract class Type<Out = unknown> {
     }
   }
 
-  optional<This extends Type>(this: This): UnionType<[UndefinedType, This]> {
-    return union(undefined_(), this);
+  optional(): OptionalType<Out, undefined> {
+    return new OptionalType(this, undefined);
   }
 
   transform<T>(this: Type, func: (v: Out) => Result<T>): TransformType<T> {
@@ -451,7 +451,9 @@ function createObjectMatchers(
     return {
       key,
       matcher: createUnionMatcher(flattened),
-      isOptional: flattened.some(({ terminal }) => terminal.isOptional),
+      isOptional: objects.some(
+        ({ terminal }) => terminal.shape[key].isOptional
+      ),
     };
   });
 }
@@ -648,6 +650,27 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
+  }
+}
+class OptionalType<Out, Default> extends Type<Out | Default> {
+  readonly name = "optional";
+  constructor(
+    private readonly type: Type<Out>,
+    private readonly defaultValue: Default
+  ) {
+    super();
+  }
+  genFunc(): Func<Out | Default> {
+    const func = this.type.func;
+    const defaultResult =
+      this.defaultValue === undefined
+        ? true
+        : ({ code: "ok", value: this.defaultValue } as const);
+    return (v) => (v === undefined ? defaultResult : func(v));
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(undefined_());
+    this.type.toTerminals(into);
   }
 }
 class TransformType<Out> extends Type<Out> {
