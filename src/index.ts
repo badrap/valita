@@ -391,7 +391,7 @@ function createObjectMatchers(
   t: { root: Type; terminal: TerminalType }[]
 ): {
   key: string;
-  matcher: (v: unknown, k: unknown) => Result<unknown>;
+  matcher: (rootValue: unknown, value: unknown) => Result<unknown>;
   isOptional: boolean;
 }[] {
   const objects: {
@@ -460,7 +460,7 @@ function createObjectMatchers(
 
 function createUnionMatcher(
   t: { root: Type; terminal: TerminalType }[]
-): (v: unknown, k: unknown) => Result<unknown> {
+): (rootValue: unknown, value: unknown) => Result<unknown> {
   const literals = new Map<unknown, Type[]>();
   const types = new Map<BaseType, Type[]>();
   const allTypes = new Set<BaseType>();
@@ -504,17 +504,17 @@ function createUnionMatcher(
     expected: expectedLiterals,
   };
 
-  return (v: unknown, k: unknown) => {
-    const type = toBaseType(k);
+  return (rootValue: unknown, value: unknown) => {
+    const type = toBaseType(value);
     if (!allTypes.has(type)) {
       return invalidType;
     }
 
-    const options = literals.get(k) || types.get(type);
+    const options = literals.get(value) || types.get(type);
     if (options) {
       let issueTree: IssueTree | undefined;
       for (let i = 0; i < options.length; i++) {
-        const r = options[i].func(v);
+        const r = options[i].func(rootValue);
         if (r === true || r.code === "ok") {
           return r;
         }
