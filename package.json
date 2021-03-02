@@ -1,6 +1,6 @@
 {
   "name": "@badrap/valita",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A validation & parsing library for TypeScript",
   "main": "./dist/main/index.js",
   "types": "./dist/types/index.d.ts",
