@@ -56,6 +56,12 @@ export class ValitaError extends Error {
     });
     return issues;
   }
+
+  get message(): string {
+    const issue = this.issues[0];
+    const path = "." + issue.path.join(".");
+    return `${issue.code} at ${path} (${issue.message})`;
+  }
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -107,13 +113,35 @@ function appendErr(
 
 type Infer<T extends Vx<unknown>> = T extends Vx<infer I> ? I : never;
 
-class Vx<T> {
+type Type =
+  | {
+      type: "literal";
+      value: string | number | bigint | boolean;
+    }
+  | {
+      type: "object";
+      shape: Record<string, Type>;
+    }
+  | {
+      type: "array";
+      item: Type;
+    }
+  | {
+      type: "string" | "number" | "bigint" | "boolean" | "undefined" | "null";
+    }
+  | {
+      type: "union";
+      children: Type[];
+    };
+
+class Vx<Out, In extends Type = Type> {
   constructor(
-    private readonly genFunc: () => (v: unknown) => Result<T>,
-    readonly isOptional: boolean
+    private readonly genFunc: () => (v: unknown) => Result<Out>,
+    readonly isOptional: boolean,
+    readonly type: Type
   ) {}
 
-  get func(): (v: unknown) => Result<T> {
+  get func(): (v: unknown) => Result<Out> {
     const f = this.genFunc();
     Object.defineProperty(this, "func", {
       value: f,
@@ -122,7 +150,7 @@ class Vx<T> {
     return f;
   }
 
-  transform<O>(func: (v: T) => Result<O>): Vx<O> {
+  transform<O>(func: (v: Out) => Result<O>): Vx<O, In> {
     const f = this.func;
     return new Vx(
       () => (v) => {
@@ -130,16 +158,17 @@ class Vx<T> {
         if (r !== true && !r.ok) {
           return r;
         }
-        return func(r === true ? (v as T) : r.value);
+        return func(r === true ? (v as Out) : r.value);
       },
-      this.isOptional
+      this.isOptional,
+      this.type
     );
   }
 
-  parse(v: unknown): T {
+  parse(v: unknown): Out {
     const r = this.func(v);
     if (r === true) {
-      return v as T;
+      return v as Out;
     } else if (r.ok) {
       return r.value;
     } else {
@@ -147,13 +176,23 @@ class Vx<T> {
     }
   }
 
-  optional(): Vx<T | undefined> {
+  optional(): Vx<
+    Out | undefined,
+    {
+      type: "union";
+      children: [In, { type: "undefined" }];
+    }
+  > {
     const f = this.func;
     return new Vx(
       () => (v) => {
         return v === undefined ? true : f(v);
       },
-      true
+      true,
+      {
+        type: "union",
+        children: [this.type, { type: "undefined" }],
+      }
     );
   }
 }
@@ -174,98 +213,123 @@ type VxObjOutput<
     (U extends Vx<infer C> ? { [K: string]: C } : unknown)
 >;
 
+function collectShape<T extends Record<string, Vx<unknown>>>(
+  shape: T
+): Record<string, Type> {
+  const output = Object.create(null);
+  for (const key in shape) {
+    output[key] = shape[key].type;
+  }
+  return output;
+}
+
 class VxObj<
   T extends Record<string, Vx<unknown>>,
   U extends UnknownKeys
-> extends Vx<VxObjOutput<T, U>> {
+> extends Vx<
+  VxObjOutput<T, U>,
+  {
+    type: "object";
+    shape: {
+      [K in keyof T]: T[K]["type"];
+    };
+  }
+> {
   constructor(private readonly shape: T, private readonly unknownKeys: U) {
-    super(() => {
-      const shape = this.shape;
-      const strip = this.unknownKeys === "strip";
-      const strict = this.unknownKeys === "strict";
-      const passthrough = this.unknownKeys === "passthrough";
-      const catchall =
-        this.unknownKeys instanceof Vx
-          ? (this.unknownKeys.func as (v: unknown) => Result<unknown>)
-          : undefined;
+    super(
+      () => {
+        const shape = this.shape;
+        const strip = this.unknownKeys === "strip";
+        const strict = this.unknownKeys === "strict";
+        const passthrough = this.unknownKeys === "passthrough";
+        const catchall =
+          this.unknownKeys instanceof Vx
+            ? (this.unknownKeys.func as (v: unknown) => Result<unknown>)
+            : undefined;
 
-      const keys: string[] = [];
-      const funcs: ((v: unknown) => Result<unknown>)[] = [];
-      const required: boolean[] = [];
-      const knownKeys = Object.create(null);
-      const shapeTemplate = {} as Record<string, unknown>;
-      for (const key in shape) {
-        keys.push(key);
-        funcs.push(shape[key].func);
-        required.push(!shape[key].isOptional);
-        knownKeys[key] = true;
-        shapeTemplate[key] = undefined;
-      }
-
-      return (obj) => {
-        if (!isObject(obj)) {
-          return err("invalid_type", "expected an object");
+        const keys: string[] = [];
+        const funcs: ((v: unknown) => Result<unknown>)[] = [];
+        const required: boolean[] = [];
+        const knownKeys = Object.create(null);
+        const shapeTemplate = {} as Record<string, unknown>;
+        for (const key in shape) {
+          keys.push(key);
+          funcs.push(shape[key].func);
+          required.push(!shape[key].isOptional);
+          knownKeys[key] = true;
+          shapeTemplate[key] = undefined;
         }
-        let ctx: ErrorContext | undefined = undefined;
-        let output: Record<string, unknown> = obj;
-        const template = strict || strip ? shapeTemplate : obj;
-        if (!passthrough) {
-          for (const key in obj) {
-            if (!knownKeys[key]) {
-              if (strict) {
-                return err(
-                  "unrecognized_key",
-                  `unrecognized key ${JSON.stringify(key)}`
-                );
-              } else if (strip) {
-                output = { ...template };
-                break;
-              } else if (catchall) {
-                const r = catchall(obj[key]);
-                if (r !== true) {
-                  if (r.ok) {
-                    if (output === obj) {
-                      output = { ...template };
+
+        return (obj) => {
+          if (!isObject(obj)) {
+            return err("invalid_type", "expected an object");
+          }
+          let ctx: ErrorContext | undefined = undefined;
+          let output: Record<string, unknown> = obj;
+          const template = strict || strip ? shapeTemplate : obj;
+          if (!passthrough) {
+            for (const key in obj) {
+              if (!knownKeys[key]) {
+                if (strict) {
+                  return err(
+                    "unrecognized_key",
+                    `unrecognized key ${JSON.stringify(key)}`
+                  );
+                } else if (strip) {
+                  output = { ...template };
+                  break;
+                } else if (catchall) {
+                  const r = catchall(obj[key]);
+                  if (r !== true) {
+                    if (r.ok) {
+                      if (output === obj) {
+                        output = { ...template };
+                      }
+                      output[key] = r.value;
+                    } else {
+                      ctx = appendErr(ctx, key, r);
                     }
-                    output[key] = r.value;
-                  } else {
-                    ctx = appendErr(ctx, key, r);
                   }
                 }
               }
             }
           }
-        }
-        for (let i = 0; i < keys.length; i++) {
-          const key = keys[i];
-          const value = obj[key];
+          for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            const value = obj[key];
 
-          if (value === undefined && required[i]) {
-            ctx = appendErr(ctx, key, err("missing_key", `missing key`));
-          } else {
-            const r = funcs[i](value);
-            if (r !== true) {
-              if (r.ok) {
-                if (output === obj) {
-                  output = { ...template };
+            if (value === undefined && required[i]) {
+              ctx = appendErr(ctx, key, err("missing_key", `missing key`));
+            } else {
+              const r = funcs[i](value);
+              if (r !== true) {
+                if (r.ok) {
+                  if (output === obj) {
+                    output = { ...template };
+                  }
+                  output[keys[i]] = r.value;
+                } else {
+                  ctx = appendErr(ctx, key, r);
                 }
-                output[keys[i]] = r.value;
-              } else {
-                ctx = appendErr(ctx, key, r);
               }
             }
           }
-        }
 
-        if (ctx) {
-          return ctx;
-        } else if (obj === output) {
-          return true;
-        } else {
-          return { ok: true, value: output as VxObjOutput<T, U> };
-        }
-      };
-    }, false);
+          if (ctx) {
+            return ctx;
+          } else if (obj === output) {
+            return true;
+          } else {
+            return { ok: true, value: output as VxObjOutput<T, U> };
+          }
+        };
+      },
+      false,
+      {
+        type: "object",
+        shape: collectShape(shape),
+      }
+    );
   }
   passthrough(): VxObj<T, "passthrough"> {
     return new VxObj(this.shape, "passthrough");
@@ -281,56 +345,312 @@ class VxObj<
   }
 }
 
-class VxArr<T extends Vx<unknown>> extends Vx<Infer<T>[]> {
+class VxArr<T extends Vx<unknown>> extends Vx<
+  Infer<T>[],
+  {
+    type: "array";
+    item: T["type"];
+  }
+> {
   constructor(private readonly item: T) {
-    super(() => {
-      const func = this.item.func;
-      return (arr) => {
-        if (!Array.isArray(arr)) {
-          return err("invalid_type", "expected an array");
-        }
-        let ctx: ErrorContext | undefined = undefined;
-        let output: Infer<T>[] = arr;
-        for (let i = 0; i < arr.length; i++) {
-          const r = func(arr[i]);
-          if (r !== true) {
-            if (r.ok) {
-              if (output === arr) {
-                output = arr.slice();
+    super(
+      () => {
+        const func = this.item.func;
+        return (arr) => {
+          if (!Array.isArray(arr)) {
+            return err("invalid_type", "expected an array");
+          }
+          let ctx: ErrorContext | undefined = undefined;
+          let output: Infer<T>[] = arr;
+          for (let i = 0; i < arr.length; i++) {
+            const r = func(arr[i]);
+            if (r !== true) {
+              if (r.ok) {
+                if (output === arr) {
+                  output = arr.slice();
+                }
+                output[i] = r.value as Infer<T>;
+              } else {
+                ctx = appendErr(ctx, i, r);
               }
-              output[i] = r.value as Infer<T>;
-            } else {
-              ctx = appendErr(ctx, i, r);
             }
           }
-        }
-        if (ctx) {
-          return ctx;
-        } else if (arr === output) {
-          return true;
+          if (ctx) {
+            return ctx;
+          } else if (arr === output) {
+            return true;
+          } else {
+            return { ok: true, value: output };
+          }
+        };
+      },
+      false,
+      {
+        type: "array",
+        item: item.type,
+      }
+    );
+  }
+}
+
+function toType(v: unknown): string {
+  const type = typeof v;
+  if (type !== "object") {
+    return type;
+  } else if (v === null) {
+    return "null";
+  } else if (Array.isArray(v)) {
+    return "array";
+  } else {
+    return type;
+  }
+}
+
+function dedup<T>(arr: T[]): T[] {
+  const output = [];
+  const seen = new Set();
+  for (let i = 0; i < arr.length; i++) {
+    if (!seen.has(arr[i])) {
+      output.push(arr[i]);
+      seen.add(arr[i]);
+    }
+  }
+  return output;
+}
+
+function findCommonKeys(rs: Record<string, unknown>[]): string[] {
+  const map = new Map<string, number>();
+  rs.forEach((r) => {
+    for (const key in r) {
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+  });
+  const result = [] as string[];
+  map.forEach((count, key) => {
+    if (count === rs.length) {
+      result.push(key);
+    }
+  });
+  return result;
+}
+
+function createObjectMatchers(
+  t: { vx: Vx<unknown>; type: Type }[]
+): {
+  key: string;
+  matcher: (v: unknown, k: unknown) => Result<unknown>;
+  isOptional: boolean;
+}[] {
+  const objects: { vx: Vx<unknown>; type: Type & { type: "object" } }[] = [];
+  t.forEach(({ vx, type }) => {
+    if (type.type === "object") {
+      objects.push({ vx, type });
+    }
+  });
+  const shapes = objects.map(({ type }) => type.shape);
+  const common = findCommonKeys(shapes);
+  const discriminants = common.filter((key) => {
+    const types = new Map<unknown, unknown[]>();
+    const literals = new Map<unknown, unknown[]>();
+    shapes.forEach((shape) => {
+      flattenType(shape[key]).forEach((type) => {
+        if (type.type === "literal") {
+          const options = literals.get(type.value) || [];
+          options.push(shape);
+          literals.set(type.value, options);
         } else {
-          return { ok: true, value: output };
+          const options = types.get(type.type) || [];
+          options.push(shape);
+          types.set(type.type, options);
         }
-      };
-    }, false);
+      });
+    });
+    literals.forEach((found, value) => {
+      const options = types.get(toType(value));
+      if (options) {
+        options.push(...found);
+        literals.delete(value);
+      }
+    });
+    let success = true;
+    literals.forEach((found) => {
+      if (dedup(found).length > 1) {
+        success = false;
+      }
+    });
+    types.forEach((found) => {
+      if (dedup(found).length > 1) {
+        success = false;
+      }
+    });
+    return success;
+  });
+  return discriminants.map((key) => {
+    const flattened = flatten(
+      objects.map(({ vx, type }) => ({ vx, type: type.shape[key] }))
+    );
+    return {
+      key,
+      matcher: createUnionMatcher(flattened),
+      isOptional: flattened.some((x) => x.type.type === "undefined"),
+    };
+  });
+}
+
+function createUnionMatcher(
+  t: { vx: Vx<unknown>; type: Type }[]
+): (v: unknown, k: unknown) => Result<unknown> {
+  const literals = new Map<unknown, Vx<unknown>[]>();
+  const types = new Map<string, Vx<unknown>[]>();
+  t.forEach(({ vx, type }) => {
+    if (type.type === "literal") {
+      const options = literals.get(type.value) || [];
+      options.push(vx);
+      literals.set(type.value, options);
+    } else {
+      const options = types.get(type.type) || [];
+      options.push(vx);
+      types.set(type.type, options);
+    }
+  });
+  literals.forEach((vxs, value) => {
+    const options = types.get(toType(value));
+    if (options) {
+      options.push(...vxs);
+      literals.delete(value);
+    }
+  });
+  types.forEach((vxs, type) => {
+    types.set(type, dedup(vxs));
+  });
+  literals.forEach((vxs, value) => {
+    literals.set(value, dedup(vxs));
+  });
+
+  const expected = [] as string[];
+  types.forEach((_, type) => {
+    expected.push(type);
+  });
+  literals.forEach((_, value) => {
+    expected.push(JSON.stringify(value));
+  });
+  const last = expected.pop();
+  const e = err(
+    "invalid_union",
+    `expected ${expected.join(", ")}${expected.length > 0 ? " or " : ""}${last}`
+  );
+
+  return (v: unknown, k: unknown) => {
+    const options = literals.get(k) || types.get(toType(k));
+    if (options) {
+      let lastError: ErrorContext | undefined;
+      for (let i = 0; i < options.length; i++) {
+        const r = options[i].func(v);
+        if (r === true || r.ok) {
+          return r;
+        }
+        lastError = r;
+      }
+      if (options.length > 1) {
+        return err("invalid_union", `invalid ${toType(k)}`);
+      } else if (lastError) {
+        return lastError;
+      }
+    }
+    return e;
+  };
+}
+
+function flattenType(type: Type): Type[] {
+  const result = [] as Type[];
+  function _flatten(type: Type): void {
+    if (type.type === "union") {
+      type.children.forEach((child) => _flatten(child));
+    } else {
+      result.push(type);
+    }
+  }
+  _flatten(type);
+  return result;
+}
+
+function flatten(
+  t: { vx: Vx<unknown>; type: Type }[]
+): { vx: Vx<unknown>; type: Type }[] {
+  const result = [] as { vx: Vx<unknown>; type: Type }[];
+  t.forEach(({ vx, type }) =>
+    flattenType(type).forEach((type) => {
+      result.push({ vx, type });
+    })
+  );
+  return result;
+}
+
+class VxUnion<T extends Vx<unknown>[]> extends Vx<
+  Infer<T[number]>,
+  {
+    type: "union";
+    children: Type[];
+  }
+> {
+  constructor(private readonly args: T) {
+    super(
+      () => {
+        const flattened = flatten(args.map((vx) => ({ vx, type: vx.type })));
+        const objects = createObjectMatchers(flattened);
+        const base = createUnionMatcher(flattened);
+        return (v) => {
+          if (objects.length > 0 && isObject(v)) {
+            const item = objects[0];
+            const value = v[item.key];
+            if (value === undefined && !item.isOptional && !(item.key in v)) {
+              return appendErr(
+                undefined,
+                item.key,
+                err("missing_key", "missing key")
+              );
+            }
+            const r = item.matcher(v, value);
+            if (r === true || r.ok) {
+              return r as Result<Infer<T[number]>>;
+            }
+            return appendErr(undefined, item.key, r);
+          }
+          return base(v, v) as Result<Infer<T[number]>>;
+        };
+      },
+      args.some((arg) => arg.isOptional),
+      {
+        type: "union",
+        children: args.map((arg) => arg.type),
+      }
+    );
   }
 }
 
 function number(): Vx<number> {
   const e = err("invalid_type", "expected a number");
-  return new Vx(() => (v) => (typeof v === "number" ? true : e), false);
+  return new Vx(() => (v) => (typeof v === "number" ? true : e), false, {
+    type: "number",
+  });
 }
 function bigint(): Vx<bigint> {
   const e = err("invalid_type", "expected a bigint");
-  return new Vx(() => (v) => (typeof v === "bigint" ? true : e), false);
+  return new Vx(() => (v) => (typeof v === "bigint" ? true : e), false, {
+    type: "bigint",
+  });
 }
 function string(): Vx<string> {
   const e = err("invalid_type", "expected a string");
-  return new Vx(() => (v) => (typeof v === "string" ? true : e), false);
+  return new Vx(() => (v) => (typeof v === "string" ? true : e), false, {
+    type: "string",
+  });
 }
 function boolean(): Vx<boolean> {
   const e = err("invalid_type", "expected a boolean");
-  return new Vx(() => (v) => (typeof v === "boolean" ? true : e), false);
+  return new Vx(() => (v) => (typeof v === "boolean" ? true : e), false, {
+    type: "boolean",
+  });
 }
 function object<T extends Record<string, Vx<unknown>>>(
   obj: T
@@ -342,33 +662,28 @@ function array<T extends Vx<unknown>>(item: T): VxArr<T> {
 }
 function literal<T extends string | number | boolean | bigint>(
   value: T
-): Vx<T> {
+): Vx<T, { type: "literal"; value: T }> {
   const exp = typeof value === "bigint" ? `${value}n` : JSON.stringify(value);
   const e = err("invalid_literal_value", `expected ${exp}`);
-  return new Vx(() => (v) => (v === value ? true : e), false);
+  return new Vx(() => (v) => (v === value ? true : e), false, {
+    type: "literal",
+    value,
+  });
 }
-function undefined_(): Vx<undefined> {
+function undefined_(): Vx<undefined, { type: "undefined"; value: undefined }> {
   const e = err("invalid_type", "expected undefined");
-  return new Vx(() => (v) => (v === undefined ? true : e), true);
+  return new Vx(() => (v) => (v === undefined ? true : e), true, {
+    type: "undefined",
+  });
 }
-function null_(): Vx<null> {
+function null_(): Vx<null, { type: "null"; value: null }> {
   const e = err("invalid_type", "expected null");
-  return new Vx(() => (v) => (v === null ? true : e), false);
+  return new Vx(() => (v) => (v === null ? true : e), false, {
+    type: "null",
+  });
 }
-function union<T extends Vx<unknown>[]>(...args: T): Vx<Infer<T[number]>> {
-  return new Vx(() => {
-    const error = err("invalid_union", "invalid union");
-    const funcs = args.map((arg) => arg.func);
-    return (v) => {
-      for (let i = 0; i < args.length; i++) {
-        const r = funcs[i](v);
-        if (r === true || r.ok) {
-          return r as Result<Infer<T[number]>>;
-        }
-      }
-      return error;
-    };
-  }, false);
+function union<T extends Vx<unknown>[]>(...args: T): VxUnion<T> {
+  return new VxUnion(args);
 }
 
 export {
