@@ -144,10 +144,17 @@ type Type =
       children: Type[];
     };
 
+function isOptional(type: Type): boolean {
+  if (type.type === "union") {
+    return type.children.some(isOptional);
+  } else {
+    return type.type === "undefined";
+  }
+}
+
 class Vx<Out, In extends Type = Type> {
   constructor(
     private readonly genFunc: () => (v: unknown) => Result<Out>,
-    readonly isOptional: boolean,
     readonly type: Type
   ) {}
 
@@ -170,7 +177,6 @@ class Vx<Out, In extends Type = Type> {
         }
         return func(r === true ? (v as Out) : r.value);
       },
-      this.isOptional,
       this.type
     );
   }
@@ -198,7 +204,6 @@ class Vx<Out, In extends Type = Type> {
       () => (v) => {
         return v === undefined ? true : f(v);
       },
-      true,
       {
         type: "union",
         children: [this.type, { type: "undefined" }],
@@ -265,7 +270,7 @@ class VxObj<
         for (const key in shape) {
           keys.push(key);
           funcs.push(shape[key].func);
-          required.push(!shape[key].isOptional);
+          required.push(!isOptional(shape[key].type));
           knownKeys[key] = true;
           shapeTemplate[key] = undefined;
         }
@@ -332,7 +337,6 @@ class VxObj<
           }
         };
       },
-      false,
       {
         type: "object",
         shape: collectShape(shape),
@@ -392,7 +396,6 @@ class VxArr<T extends Vx<unknown>> extends Vx<
           }
         };
       },
-      false,
       {
         type: "array",
         item: item.type,
@@ -494,13 +497,12 @@ function createObjectMatchers(
     return success;
   });
   return discriminants.map((key) => {
-    const flattened = flatten(
-      objects.map(({ vx, type }) => ({ vx, type: type.shape[key] }))
-    );
     return {
       key,
-      matcher: createUnionMatcher(flattened),
-      isOptional: flattened.some((x) => x.type.type === "undefined"),
+      matcher: createUnionMatcher(
+        flatten(objects.map(({ vx, type }) => ({ vx, type: type.shape[key] })))
+      ),
+      isOptional: objects.some(({ type }) => isOptional(type)),
     };
   });
 }
@@ -632,7 +634,6 @@ class VxUnion<T extends Vx<unknown>[]> extends Vx<
           return base(v, v) as Result<Infer<T[number]>>;
         };
       },
-      args.some((arg) => arg.isOptional),
       {
         type: "union",
         children: args.map((arg) => arg.type),
@@ -643,25 +644,25 @@ class VxUnion<T extends Vx<unknown>[]> extends Vx<
 
 function number(): Vx<number> {
   const e: Issue = { code: "invalid_type", expected: ["number"] };
-  return new Vx(() => (v) => (typeof v === "number" ? true : e), false, {
+  return new Vx(() => (v) => (typeof v === "number" ? true : e), {
     type: "number",
   });
 }
 function bigint(): Vx<bigint> {
   const e: Issue = { code: "invalid_type", expected: ["bigint"] };
-  return new Vx(() => (v) => (typeof v === "bigint" ? true : e), false, {
+  return new Vx(() => (v) => (typeof v === "bigint" ? true : e), {
     type: "bigint",
   });
 }
 function string(): Vx<string> {
   const e: Issue = { code: "invalid_type", expected: ["string"] };
-  return new Vx(() => (v) => (typeof v === "string" ? true : e), false, {
+  return new Vx(() => (v) => (typeof v === "string" ? true : e), {
     type: "string",
   });
 }
 function boolean(): Vx<boolean> {
   const e: Issue = { code: "invalid_type", expected: ["boolean"] };
-  return new Vx(() => (v) => (typeof v === "boolean" ? true : e), false, {
+  return new Vx(() => (v) => (typeof v === "boolean" ? true : e), {
     type: "boolean",
   });
 }
@@ -677,22 +678,20 @@ function literal<T extends string | number | boolean | bigint>(
   value: T
 ): Vx<T, { type: "literal"; value: T }> {
   const e: Issue = { code: "invalid_literal", expected: [value] };
-  return new Vx(() => (v) => (v === value ? true : e), false, {
+  return new Vx(() => (v) => (v === value ? true : e), {
     type: "literal",
     value,
   });
 }
-function undefined_(): Vx<undefined, { type: "undefined"; value: undefined }> {
+function undefined_(): Vx<undefined, { type: "undefined" }> {
   const e: Issue = { code: "invalid_type", expected: ["undefined"] };
-  return new Vx(() => (v) => (v === undefined ? true : e), true, {
+  return new Vx(() => (v) => (v === undefined ? true : e), {
     type: "undefined",
   });
 }
-function null_(): Vx<null, { type: "null"; value: null }> {
+function null_(): Vx<null, { type: "null" }> {
   const e: Issue = { code: "invalid_type", expected: ["null"] };
-  return new Vx(() => (v) => (v === null ? true : e), false, {
-    type: "null",
-  });
+  return new Vx(() => (v) => (v === null ? true : e), { type: "null" });
 }
 function union<T extends Vx<unknown>[]>(...args: T): VxUnion<T> {
   return new VxUnion(args);
