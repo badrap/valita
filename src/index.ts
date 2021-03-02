@@ -314,7 +314,7 @@ class ArrayType<T extends Type = Type> extends Type<Infer<T>[]> {
     into.push(this);
   }
 
-  genFunc(): (v: unknown) => Result<Infer<T>[]> {
+  genFunc(): Func<Infer<T>[]> {
     const func = this.item.func;
     return (arr) => {
       if (!Array.isArray(arr)) {
