@@ -77,7 +77,7 @@ describe("object()", () => {
     expect(t.parse(o)).to.not.equal(o);
   });
   it("rejects other types", () => {
-    const t = v.object({}).passthrough();
+    const t = v.object({});
     for (const val of ["1", 1n, true, null, undefined, []]) {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }

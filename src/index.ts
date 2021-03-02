@@ -129,11 +129,20 @@ function toTerminals(type: Type): TerminalType[] {
 
 type Infer<T extends Type> = T extends Type<infer I> ? I : never;
 
-type Func<T> = (v: unknown) => Result<T>;
+const enum FuncMode {
+  PASS = 0,
+  STRICT = 1,
+  STRIP = 2,
+}
+type Func<T> = (v: unknown, mode: FuncMode) => Result<T>;
+
+type ParseOptions = {
+  mode: "passthrough" | "strict" | "strip";
+};
 
 abstract class Type<Out = unknown> {
   abstract readonly name: string;
-  abstract genFunc(): (v: unknown) => Result<Out>;
+  abstract genFunc(): Func<Out>;
   abstract toTerminals(into: TerminalType[]): void;
 
   get isOptional(): boolean {
@@ -154,8 +163,15 @@ abstract class Type<Out = unknown> {
     return f;
   }
 
-  parse(v: unknown): Out {
-    const r = this.func(v);
+  parse(v: unknown, options?: Partial<ParseOptions>): Out {
+    let mode: FuncMode = FuncMode.PASS;
+    if (options && options.mode === "strict") {
+      mode = FuncMode.STRICT;
+    } else if (options && options.mode === "strip") {
+      mode = FuncMode.STRIP;
+    }
+
+    const r = this.func(v, mode);
     if (r === true) {
       return v as Out;
     } else if (r.code === "ok") {
@@ -178,27 +194,24 @@ type Optionals<T extends Record<string, Type>> = {
   [K in keyof T]: undefined extends Infer<T[K]> ? K : never;
 }[keyof T];
 
-type UnknownKeys = "passthrough" | "strict" | "strip" | Type;
-
 type ObjectShape = Record<string, Type>;
 
 type ObjectOutput<
   T extends ObjectShape,
-  U extends UnknownKeys
+  R extends Type | undefined
 > = PrettyIntersection<
   { [K in Optionals<T>]?: Infer<T[K]> } &
     { [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]> } &
-    (U extends "passthrough" ? { [K: string]: unknown } : unknown) &
-    (U extends Type ? { [K: string]: Infer<U> } : unknown)
+    (R extends Type ? { [K: string]: Infer<R> } : unknown)
 >;
 
 class ObjectType<
   T extends ObjectShape = ObjectShape,
-  U extends UnknownKeys = UnknownKeys
-> extends Type<ObjectOutput<T, U>> {
+  Rest extends Type | undefined = Type | undefined
+> extends Type<ObjectOutput<T, Rest>> {
   readonly name = "object";
 
-  constructor(readonly shape: T, private readonly unknownKeys: U) {
+  constructor(readonly shape: T, private readonly restType: Rest) {
     super();
   }
 
@@ -206,16 +219,12 @@ class ObjectType<
     into.push(this);
   }
 
-  genFunc(): Func<ObjectOutput<T, U>> {
+  genFunc(): Func<ObjectOutput<T, Rest>> {
     const shape = this.shape;
-    const strip = this.unknownKeys === "strip";
-    const strict = this.unknownKeys === "strict";
-    const passthrough = this.unknownKeys === "passthrough";
-    const catchall =
-      this.unknownKeys instanceof Type ? this.unknownKeys.func : undefined;
+    const rest = this.restType ? this.restType.func : undefined;
 
     const keys: string[] = [];
-    const funcs: ((v: unknown) => Result<unknown>)[] = [];
+    const funcs: Func<unknown>[] = [];
     const required: boolean[] = [];
     const knownKeys = Object.create(null);
     const shapeTemplate = {} as Record<string, unknown>;
@@ -227,14 +236,18 @@ class ObjectType<
       shapeTemplate[key] = undefined;
     }
 
-    return (obj) => {
+    return (obj, mode) => {
       if (!isObject(obj)) {
         return { code: "invalid_type", expected: ["object"] };
       }
+      const pass = mode === FuncMode.PASS;
+      const strict = mode === FuncMode.STRICT;
+      const strip = mode === FuncMode.STRIP;
+      const template = pass || rest ? obj : shapeTemplate;
+
       let issueTree: IssueTree | undefined = undefined;
       let output: Record<string, unknown> = obj;
-      const template = strict || strip ? shapeTemplate : obj;
-      if (!passthrough) {
+      if (strict || strip || rest) {
         for (const key in obj) {
           if (!knownKeys[key]) {
             if (strict) {
@@ -242,8 +255,8 @@ class ObjectType<
             } else if (strip) {
               output = { ...template };
               break;
-            } else if (catchall) {
-              const r = catchall(obj[key]);
+            } else if (rest) {
+              const r = rest(obj[key], mode);
               if (r !== true) {
                 if (r.code === "ok") {
                   if (output === obj) {
@@ -266,7 +279,7 @@ class ObjectType<
         if (value === undefined && required[i]) {
           return { code: "missing_key", key };
         } else {
-          const r = funcs[i](value);
+          const r = funcs[i](value, mode);
           if (r !== true) {
             if (r.code === "ok") {
               if (output === obj) {
@@ -285,21 +298,12 @@ class ObjectType<
       } else if (obj === output) {
         return true;
       } else {
-        return { code: "ok", value: output as ObjectOutput<T, U> };
+        return { code: "ok", value: output as ObjectOutput<T, Rest> };
       }
     };
   }
-  passthrough(): ObjectType<T, "passthrough"> {
-    return new ObjectType(this.shape, "passthrough");
-  }
-  strict(): ObjectType<T, "strict"> {
-    return new ObjectType(this.shape, "strict");
-  }
-  strip(): ObjectType<T, "strip"> {
-    return new ObjectType(this.shape, "strip");
-  }
-  catchall<C extends Type>(catchall: C): ObjectType<T, C> {
-    return new ObjectType(this.shape, catchall);
+  rest<R extends Type>(restType: R): ObjectType<T, R> {
+    return new ObjectType(this.shape, restType);
   }
 }
 
@@ -316,14 +320,14 @@ class ArrayType<T extends Type = Type> extends Type<Infer<T>[]> {
 
   genFunc(): Func<Infer<T>[]> {
     const func = this.item.func;
-    return (arr) => {
+    return (arr, mode) => {
       if (!Array.isArray(arr)) {
         return { code: "invalid_type", expected: ["array"] };
       }
       let issueTree: IssueTree | undefined = undefined;
       let output: Infer<T>[] = arr;
       for (let i = 0; i < arr.length; i++) {
-        const r = func(arr[i]);
+        const r = func(arr[i], mode);
         if (r !== true) {
           if (r.code === "ok") {
             if (output === arr) {
@@ -391,8 +395,12 @@ function createObjectMatchers(
   t: { root: Type; terminal: TerminalType }[]
 ): {
   key: string;
-  matcher: (rootValue: unknown, value: unknown) => Result<unknown>;
   isOptional: boolean;
+  matcher: (
+    rootValue: unknown,
+    value: unknown,
+    mode: FuncMode
+  ) => Result<unknown>;
 }[] {
   const objects: {
     root: Type;
@@ -460,7 +468,7 @@ function createObjectMatchers(
 
 function createUnionMatcher(
   t: { root: Type; terminal: TerminalType }[]
-): (rootValue: unknown, value: unknown) => Result<unknown> {
+): (rootValue: unknown, value: unknown, mode: FuncMode) => Result<unknown> {
   const literals = new Map<unknown, Type[]>();
   const types = new Map<BaseType, Type[]>();
   const allTypes = new Set<BaseType>();
@@ -504,7 +512,7 @@ function createUnionMatcher(
     expected: expectedLiterals,
   };
 
-  return (rootValue: unknown, value: unknown) => {
+  return (rootValue, value, mode) => {
     const type = toBaseType(value);
     if (!allTypes.has(type)) {
       return invalidType;
@@ -514,7 +522,7 @@ function createUnionMatcher(
     if (options) {
       let issueTree: IssueTree | undefined;
       for (let i = 0; i < options.length; i++) {
-        const r = options[i].func(rootValue);
+        const r = options[i].func(rootValue, mode);
         if (r === true || r.code === "ok") {
           return r;
         }
@@ -560,20 +568,20 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     );
     const objects = createObjectMatchers(flattened);
     const base = createUnionMatcher(flattened);
-    return (v) => {
+    return (v, mode) => {
       if (objects.length > 0 && isObject(v)) {
         const item = objects[0];
         const value = v[item.key];
         if (value === undefined && !item.isOptional && !(item.key in v)) {
           return { code: "missing_key", key: item.key };
         }
-        const r = item.matcher(v, value);
+        const r = item.matcher(v, value, mode);
         if (r === true || r.code === "ok") {
           return r as Result<Infer<T[number]>>;
         }
         return prependPath(item.key, r);
       }
-      return base(v, v) as Result<Infer<T[number]>>;
+      return base(v, v, mode) as Result<Infer<T[number]>>;
     };
   }
 }
@@ -582,7 +590,7 @@ class NumberType extends Type<number> {
   readonly name = "number";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["number"] };
-    return (v) => (typeof v === "number" ? true : issue);
+    return (v, _mode) => (typeof v === "number" ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -592,7 +600,7 @@ class StringType extends Type<number> {
   readonly name = "string";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["string"] };
-    return (v) => (typeof v === "string" ? true : issue);
+    return (v, _mode) => (typeof v === "string" ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -602,7 +610,7 @@ class BigIntType extends Type<number> {
   readonly name = "bigint";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
-    return (v) => (typeof v === "bigint" ? true : issue);
+    return (v, _mode) => (typeof v === "bigint" ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -612,7 +620,7 @@ class BooleanType extends Type<number> {
   readonly name = "boolean";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
-    return (v) => (typeof v === "boolean" ? true : issue);
+    return (v, _mode) => (typeof v === "boolean" ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -622,7 +630,7 @@ class UndefinedType extends Type<undefined> {
   readonly name = "undefined";
   genFunc(): Func<undefined> {
     const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
-    return (v) => (v === undefined ? true : issue);
+    return (v, _mode) => (v === undefined ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -632,7 +640,7 @@ class NullType extends Type<null> {
   readonly name = "null";
   genFunc(): Func<null> {
     const issue: Issue = { code: "invalid_type", expected: ["null"] };
-    return (v) => (v === null ? true : issue);
+    return (v, _mode) => (v === null ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -646,7 +654,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   genFunc(): Func<Out> {
     const value = this.value;
     const issue: Issue = { code: "invalid_literal", expected: [value] };
-    return (v) => (v === value ? true : issue);
+    return (v, _) => (v === value ? true : issue);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -666,7 +674,7 @@ class OptionalType<Out, Default> extends Type<Out | Default> {
       this.defaultValue === undefined
         ? true
         : ({ code: "ok", value: this.defaultValue } as const);
-    return (v) => (v === undefined ? defaultResult : func(v));
+    return (v, mode) => (v === undefined ? defaultResult : func(v, mode));
   }
   toTerminals(into: TerminalType[]): void {
     into.push(undefined_());
@@ -684,8 +692,8 @@ class TransformType<Out> extends Type<Out> {
   genFunc(): Func<Out> {
     const f = this.transformed.func;
     const t = this.transformFunc;
-    return (v) => {
-      const r = f(v);
+    return (v, mode) => {
+      const r = f(v, mode);
       if (r !== true && r.code !== "ok") {
         return r;
       }
@@ -717,8 +725,8 @@ function null_(): NullType {
 }
 function object<T extends Record<string, Type>>(
   obj: T
-): ObjectType<T, "strict"> {
-  return new ObjectType(obj, "strict");
+): ObjectType<T, undefined> {
+  return new ObjectType(obj, undefined);
 }
 function array<T extends Type>(item: T): ArrayType<T> {
   return new ArrayType(item);
