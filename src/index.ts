@@ -596,9 +596,9 @@ class NumberType extends Type<number> {
     into.push(this);
   }
 }
-class StringType extends Type<number> {
+class StringType extends Type<string> {
   readonly name = "string";
-  genFunc(): Func<number> {
+  genFunc(): Func<string> {
     const issue: Issue = { code: "invalid_type", expected: ["string"] };
     return (v, _mode) => (typeof v === "string" ? true : issue);
   }
@@ -606,9 +606,9 @@ class StringType extends Type<number> {
     into.push(this);
   }
 }
-class BigIntType extends Type<number> {
+class BigIntType extends Type<bigint> {
   readonly name = "bigint";
-  genFunc(): Func<number> {
+  genFunc(): Func<bigint> {
     const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
     return (v, _mode) => (typeof v === "bigint" ? true : issue);
   }
@@ -616,9 +616,9 @@ class BigIntType extends Type<number> {
     into.push(this);
   }
 }
-class BooleanType extends Type<number> {
+class BooleanType extends Type<boolean> {
   readonly name = "boolean";
-  genFunc(): Func<number> {
+  genFunc(): Func<boolean> {
     const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
     return (v, _mode) => (typeof v === "boolean" ? true : issue);
   }
