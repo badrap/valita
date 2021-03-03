@@ -762,4 +762,4 @@ export {
   undefined_ as undefined,
 };
 
-export type { Infer as infer };
+export type { Infer, Type };

@@ -64,10 +64,10 @@ const grizzlor: {
 };
 ```
 
-You can use `infer<T>` to get your mitts on the inferred type in your code:
+You can use `Infer<T>` to get your mitts on the inferred type in your code:
 
 ```ts
-type PersonType = v.infer<typeof Person>;
+type PersonType = v.Infer<typeof Person>;
 ```
 
 ## License
