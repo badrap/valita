@@ -238,13 +238,13 @@ describe("object()", () => {
     const o = { a: 1 };
     expect(t.parse(o)).to.equal(o);
   });
-  // it("returns a new object instance if the fields change", () => {
-  //   const t = v.object({
-  //     a: v.number().transform((n) => ({ code: "ok", value: "" + n })),
-  //   });
-  //   const o = { a: 1 };
-  //   expect(t.parse(o)).to.not.equal(o);
-  // });
+  it("returns a new object instance if the fields change", () => {
+    const t = v.object({
+      a: v.number().apply(() => "test"),
+    });
+    const o = { a: 1 };
+    expect(t.parse(o)).to.not.equal(o);
+  });
   it("rejects other types", () => {
     const t = v.object({});
     for (const val of ["1", 1n, true, null, undefined, []]) {
@@ -361,13 +361,11 @@ describe("array()", () => {
     const a = [1];
     expect(t.parse(a)).to.equal(a);
   });
-  // it("returns a new array instance if the items change", () => {
-  //   const t = v.array(
-  //     v.number().transform((n) => ({ code: "ok", value: "" + n }))
-  //   );
-  //   const a = [1];
-  //   expect(t.parse(a)).to.not.equal(a);
-  // });
+  it("returns a new array instance if the items change", () => {
+    const t = v.array(v.number().apply(() => "test"));
+    const a = [1];
+    expect(t.parse(a)).to.not.equal(a);
+  });
 });
 
 describe("union()", () => {
