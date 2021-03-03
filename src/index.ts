@@ -177,6 +177,16 @@ type ChainResult<T> =
       error?: CustomError;
     };
 
+function ok<T>(value: T): { ok: true; value: T } {
+  return { ok: true, value };
+}
+
+function err<E extends CustomError>(
+  error?: E
+): { ok: false; error?: CustomError } {
+  return { ok: false, error };
+}
+
 abstract class Type<Out = unknown> {
   abstract readonly name: string;
   abstract genFunc(): Func<Out>;
@@ -826,6 +836,8 @@ export {
   union,
   null_ as null,
   undefined_ as undefined,
+  ok,
+  err,
 };
 
 export type { Infer, Type };
