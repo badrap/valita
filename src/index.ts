@@ -451,6 +451,17 @@ function dedup<T>(arr: T[]): T[] {
   return output;
 }
 
+function difference<T>(arr1: T[], arr2: T[]): T[] {
+  const output = [];
+  const remove = new Set(arr2);
+  for (let i = 0; i < arr1.length; i++) {
+    if (!remove.has(arr1[i])) {
+      output.push(arr1[i]);
+    }
+  }
+  return output;
+}
+
 function findCommonKeys(rs: ObjectShape[]): string[] {
   const map = new Map<string, number>();
   rs.forEach((r) => {
@@ -492,8 +503,15 @@ function createObjectMatchers(
   const discriminants = common.filter((key) => {
     const types = new Map<BaseType, unknown[]>();
     const literals = new Map<unknown, unknown[]>();
-    shapes.forEach((shape) => {
-      toTerminals(shape[key]).forEach((terminal) => {
+    for (let i = 0; i < shapes.length; i++) {
+      const shape = shapes[i];
+      const terminals = toTerminals(shape[key]);
+      for (let j = 0; j < terminals.length; j++) {
+        const terminal = terminals[j];
+        if (terminal.name === "unknown") {
+          return false;
+        }
+
         if (terminal.name === "literal") {
           const options = literals.get(terminal.value) || [];
           options.push(shape);
@@ -503,8 +521,8 @@ function createObjectMatchers(
           options.push(shape);
           types.set(terminal.name, options);
         }
-      });
-    });
+      }
+    }
     literals.forEach((found, value) => {
       const options = types.get(toBaseType(value));
       if (options) {
@@ -549,8 +567,12 @@ function createUnionMatcher(
   const literals = new Map<unknown, Type[]>();
   const types = new Map<BaseType, Type[]>();
   const allTypes = new Set<BaseType>();
+  const unknowns = [] as Type[];
+
   t.forEach(({ root, terminal }) => {
-    if (terminal.name === "literal") {
+    if (terminal.name === "unknown") {
+      unknowns.push(root);
+    } else if (terminal.name === "literal") {
       const roots = literals.get(terminal.value) || [];
       roots.push(root);
       literals.set(terminal.value, roots);
@@ -569,8 +591,12 @@ function createUnionMatcher(
       literals.delete(value);
     }
   });
-  types.forEach((roots, type) => types.set(type, dedup(roots)));
-  literals.forEach((roots, value) => literals.set(value, dedup(roots)));
+  types.forEach((roots, type) =>
+    types.set(type, difference(dedup(roots), unknowns))
+  );
+  literals.forEach((roots, value) =>
+    literals.set(value, difference(dedup(roots), unknowns))
+  );
 
   const expectedTypes: BaseType[] = [];
   allTypes.forEach((type) => expectedTypes.push(type));
@@ -593,27 +619,39 @@ function createUnionMatcher(
 
   return (rootValue, value, mode) => {
     const type = toBaseType(value);
-    if (!allTypes.has(type)) {
+    if (unknowns.length === 0 && !allTypes.has(type)) {
       return invalidType;
     }
 
+    let issueTree: IssueTree | undefined;
+    let count = 0;
+
     const options = literals.get(value) || types.get(type);
     if (options) {
-      let issueTree: IssueTree | undefined;
       for (let i = 0; i < options.length; i++) {
         const r = options[i].func(rootValue, mode);
         if (r === true || r.code === "ok") {
           return r;
         }
         issueTree = joinIssues(r, issueTree);
-      }
-      if (issueTree) {
-        if (options.length > 1) {
-          return { code: "invalid_union", tree: issueTree };
-        }
-        return issueTree;
+        count++;
       }
     }
+    for (let i = 0; i < unknowns.length; i++) {
+      const r = unknowns[i].func(rootValue, mode);
+      if (r === true || r.code === "ok") {
+        return r;
+      }
+      issueTree = joinIssues(r, issueTree);
+      count++;
+    }
+    if (issueTree) {
+      if (count > 1) {
+        return { code: "invalid_union", tree: issueTree };
+      }
+      return issueTree;
+    }
+
     return invalidLiteral;
   };
 }
@@ -661,6 +699,15 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   }
 }
 
+class UnknownType extends Type<unknown> {
+  readonly name = "unknown";
+  genFunc(): Func<number> {
+    return (_v, _mode) => true;
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+}
 class NumberType extends Type<number> {
   readonly name = "number";
   genFunc(): Func<number> {
@@ -756,6 +803,7 @@ class OptionalType<Out, Default> extends Type<Out | Default> {
     this.type.toTerminals(into);
   }
 }
+
 class TransformType<Out> extends Type<Out> {
   readonly name = "transform";
   constructor(
@@ -780,6 +828,9 @@ class TransformType<Out> extends Type<Out> {
   }
 }
 
+function unknown(): UnknownType {
+  return new UnknownType();
+}
 function number(): NumberType {
   return new NumberType();
 }
@@ -814,6 +865,7 @@ function union<T extends Type[]>(...options: T): UnionType<T> {
 }
 
 type TerminalType =
+  | UnknownType
   | StringType
   | NumberType
   | BigIntType
@@ -825,6 +877,7 @@ type TerminalType =
   | LiteralType;
 
 export {
+  unknown,
   number,
   bigint,
   string,

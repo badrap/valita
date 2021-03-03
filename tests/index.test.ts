@@ -172,6 +172,15 @@ describe("string()", () => {
   });
 });
 
+describe("unknown()", () => {
+  it("accepts anything", () => {
+    const t = v.unknown();
+    for (const val of ["test", 1, 1n, true, null, undefined, [], {}]) {
+      expect(t.parse(val)).to.equal(val);
+    }
+  });
+});
+
 describe("number()", () => {
   it("accepts numbers", () => {
     const t = v.number();
@@ -448,6 +457,33 @@ describe("union()", () => {
         expected: ["number"],
       });
   });
+  it("matches unknowns if nothing else matches", () => {
+    const t = v.union(
+      v.literal(1),
+      v.literal(2),
+      v.unknown().assert(() => false, "test")
+    );
+    expect(() => t.parse({ a: 1 }))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "custom_error",
+        error: "test",
+      });
+  });
+  it("considers unknown to overlap with everything", () => {
+    const t = v.union(
+      v.literal(1),
+      v.literal(2).assert(() => false),
+      v.unknown().assert(() => false)
+    );
+    expect(() => t.parse(2))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_union",
+      });
+  });
   describe("of objects", () => {
     it("discriminates based on base types", () => {
       const t = v.union(
@@ -490,6 +526,16 @@ describe("union()", () => {
           path: ["type"],
           expected: ["number", "string"],
         });
+    });
+    it("considers unknown to overlap with everything", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.unknown().assert(() => false) })
+      );
+      expect(() => t.parse({ type: "test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({ code: "invalid_union" });
     });
     it("consider literals to overlap with their base types", () => {
       const t = v.union(
