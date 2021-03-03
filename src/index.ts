@@ -534,7 +534,7 @@ function createObjectMatchers(
     );
     return {
       key,
-      matcher: createUnionMatcher(flattened),
+      matcher: createUnionMatcher(flattened, [key]),
       isOptional: objects.some(
         ({ terminal }) => terminal.shape[key].isOptional
       ),
@@ -543,7 +543,8 @@ function createObjectMatchers(
 }
 
 function createUnionMatcher(
-  t: { root: Type; terminal: TerminalType }[]
+  t: { root: Type; terminal: TerminalType }[],
+  path?: Key[]
 ): (rootValue: unknown, value: unknown, mode: FuncMode) => Result<unknown> {
   const literals = new Map<unknown, Type[]>();
   const types = new Map<BaseType, Type[]>();
@@ -581,10 +582,12 @@ function createUnionMatcher(
 
   const invalidType: Issue = {
     code: "invalid_type",
+    path,
     expected: expectedTypes,
   };
   const invalidLiteral: Issue = {
     code: "invalid_literal",
+    path,
     expected: expectedLiterals,
   };
 
@@ -651,11 +654,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
         if (value === undefined && !item.isOptional && !(item.key in v)) {
           return { code: "missing_key", key: item.key };
         }
-        const r = item.matcher(v, value, mode);
-        if (r === true || r.code === "ok") {
-          return r as Result<Infer<T[number]>>;
-        }
-        return prependPath(item.key, r);
+        return item.matcher(v, value, mode) as Result<Infer<T[number]>>;
       }
       return base(v, v, mode) as Result<Infer<T[number]>>;
     };
