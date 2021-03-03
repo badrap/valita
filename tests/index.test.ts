@@ -421,75 +421,146 @@ describe("union()", () => {
     expect(t.parse(true)).to.equal(true);
     expect(() => t.parse({})).to.throw(v.ValitaError);
   });
-  it("reports possible discriminator values in errors when possible", () => {
-    const t = v.union(
-      v.object({ type: v.literal(1) }),
-      v.object({ type: v.literal(2) })
-    );
-    expect(() => t.parse({ type: 3 }))
+  it("reports the expected type even for literals when the base type doesn't match", () => {
+    const t = v.union(v.literal(1), v.literal("test"));
+    expect(() => t.parse(true))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_type",
+        expected: ["number", "string"],
+      });
+  });
+  it("reports the expected literals when the base type matches", () => {
+    const t = v.union(v.literal(1), v.literal("test"));
+    expect(() => t.parse(2))
       .to.throw(v.ValitaError)
       .with.nested.property("issues[0]")
       .that.deep.includes({
         code: "invalid_literal",
-        path: ["type"],
-        expected: [1, 2],
+        expected: [1, "test"],
       });
   });
-  it("consider literals to overlap with their base types", () => {
-    const t = v.union(
-      v.object({ type: v.literal(1) }),
-      v.object({ type: v.number() })
-    );
-    expect(() => t.parse({ type: "test" }))
-      .to.throw(v.ValitaError)
-      .with.nested.property("issues[0]")
-      .that.deep.includes({ code: "invalid_union" });
-  });
-  it("folds multiple overlapping types together in same branch", () => {
-    const t = v.union(
-      v.object({
-        type: v.union(v.string(), v.union(v.string(), v.literal("test"))),
-      }),
-      v.object({
-        type: v.union(v.literal(2).optional().optional(), v.undefined()),
-        other: v.literal("test"),
-      })
-    );
-    expect(() => t.parse({ type: 2, other: "not_test" }))
+  it("reports the errors from a branch that doesn't overlap with any other branch", () => {
+    const t = v.union(v.literal(1), v.number(), v.object({ a: v.number() }));
+    expect(() => t.parse({ a: "test" }))
       .to.throw(v.ValitaError)
       .with.nested.property("issues[0]")
       .that.deep.includes({
-        code: "invalid_literal",
-        path: ["other"],
-        expected: ["test"],
+        code: "invalid_type",
+        path: ["a"],
+        expected: ["number"],
       });
   });
-  it("considers two optionals to overlap", () => {
-    const t = v.union(
-      v.object({ type: v.literal(1).optional() }),
-      v.object({ type: v.literal(2).optional() })
-    );
-    expect(() => t.parse({ type: 3 }))
-      .to.throw(v.ValitaError)
-      .with.nested.property("issues[0].code", "invalid_union");
-  });
-  it("considers two optionals and undefineds to overlap", () => {
-    const t = v.union(
-      v.object({ type: v.undefined() }),
-      v.object({ type: v.literal(2).optional() })
-    );
-    expect(() => t.parse({ type: 3 }))
-      .to.throw(v.ValitaError)
-      .with.nested.property("issues[0].code", "invalid_union");
-  });
-  it("considers two unions with partially same types to overlap", () => {
-    const t = v.union(
-      v.object({ type: v.union(v.literal(1), v.literal(2)) }),
-      v.object({ type: v.union(v.literal(2), v.literal(3)) })
-    );
-    expect(() => t.parse({ type: 4 }))
-      .to.throw(v.ValitaError)
-      .with.nested.property("issues[0].code", "invalid_union");
+  describe("of objects", () => {
+    it("discriminates based on base types", () => {
+      const t = v.union(
+        v.object({ type: v.number() }),
+        v.object({ type: v.string() })
+      );
+      expect(() => t.parse({ type: true }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_type",
+          path: ["type"],
+          expected: ["number", "string"],
+        });
+    });
+    it("discriminates based on literal values", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.literal(2) })
+      );
+      expect(() => t.parse({ type: 3 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["type"],
+          expected: [1, 2],
+        });
+    });
+    it("discriminates based on mixture of base types and literal values", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.string() })
+      );
+      expect(() => t.parse({ type: true }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_type",
+          path: ["type"],
+          expected: ["number", "string"],
+        });
+    });
+    it("consider literals to overlap with their base types", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.number() })
+      );
+      expect(() => t.parse({ type: "test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({ code: "invalid_union" });
+    });
+    it("consider equal literals to overlap", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.literal(1) })
+      );
+      expect(() => t.parse({ type: "test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({ code: "invalid_union" });
+    });
+    it("folds multiple overlapping types together in same branch", () => {
+      const t = v.union(
+        v.object({
+          type: v.union(v.string(), v.union(v.string(), v.literal("test"))),
+        }),
+        v.object({
+          type: v.union(v.literal(2).optional().optional(), v.undefined()),
+          other: v.literal("test"),
+        })
+      );
+      expect(() => t.parse({ type: 2, other: "not_test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["other"],
+          expected: ["test"],
+        });
+    });
+    it("considers two optionals to overlap", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1).optional() }),
+        v.object({ type: v.literal(2).optional() })
+      );
+      expect(() => t.parse({ type: 3 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0].code", "invalid_union");
+    });
+    it("considers two optionals and undefineds to overlap", () => {
+      const t = v.union(
+        v.object({ type: v.undefined() }),
+        v.object({ type: v.literal(2).optional() })
+      );
+      expect(() => t.parse({ type: 3 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0].code", "invalid_union");
+    });
+    it("considers two unions with partially same types to overlap", () => {
+      const t = v.union(
+        v.object({ type: v.union(v.literal(1), v.literal(2)) }),
+        v.object({ type: v.union(v.literal(2), v.literal(3)) })
+      );
+      expect(() => t.parse({ type: 4 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0].code", "invalid_union");
+    });
   });
 });
 
