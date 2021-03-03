@@ -1,5 +1,24 @@
 import { expect } from "chai";
+import { TypeEqual } from "ts-expect";
 import * as v from "../src";
+
+// A helper for checking whether the given validator's
+// inferred output type is _exactly_ the same as given one.
+// For example the following are valid:
+//  expectType(v.number()).toImply<number>(true);
+//  expectType(v.number()).toImply<1>(false);
+//  expectType(v.number()).toImply<string>(false);
+//  expectType(v.number()).toImply<string | number>(false);
+//  expectType(v.number()).toImply<unknown>(false);
+//  expectType(v.number()).toImply<any>(false);
+//  expectType(v.number()).toImply<never>(false);
+function expectType<T extends v.Type>(
+  _type: T
+): {
+  toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
+} {
+  return { toImply: () => void {} };
+}
 
 describe("string()", () => {
   it("accepts strings", () => {
@@ -54,6 +73,13 @@ describe("boolean()", () => {
 });
 
 describe("object()", () => {
+  it("acceps empty objects", () => {
+    const t = v.object({});
+    expect(t.parse({})).to.deep.equal({});
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    expectType(t).toImply<{}>(true);
+  });
+
   it("throws on missing required keys", () => {
     const t = v.object({ a: v.string() });
     expect(() => t.parse({}))
@@ -81,6 +107,14 @@ describe("object()", () => {
     for (const val of ["1", 1n, true, null, undefined, []]) {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
+  });
+
+  describe("rest", () => {
+    it("adds an index signature to the inferred type", () => {
+      const t = v.object({ a: v.number() }).rest(v.number());
+      expectType(t).toImply<{ [K: string]: number; a: number }>(true);
+      expectType(t).toImply<{ a: number }>(false);
+    });
   });
 });
 
