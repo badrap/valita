@@ -101,24 +101,24 @@ describe("Type", () => {
   });
   describe("chain", () => {
     it("changes the output type to the function's return type", () => {
-      const t = v.number().chain(() => ({ ok: true, value: "test" }));
+      const t = v.number().chain(() => v.ok("test"));
       expectType(t).toImply<string>(true);
     });
     it("passes in the parsed value", () => {
       let value: unknown;
-      const t = v.number().chain((v) => {
-        value = v;
-        return { ok: true, value: "test" };
+      const t = v.number().chain((n) => {
+        value = n;
+        return v.ok("test");
       });
       t.parse(1000);
       expect(value).to.equal(1000);
     });
     it("passes on the success value", () => {
-      const t = v.number().chain(() => ({ ok: true, value: "test" }));
+      const t = v.number().chain(() => v.ok("test"));
       expect(t.parse(1)).to.equal("test");
     });
     it("fails on error result", () => {
-      const t = v.number().chain(() => ({ ok: false }));
+      const t = v.number().chain(() => v.err());
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
@@ -127,7 +127,7 @@ describe("Type", () => {
         });
     });
     it("allows passing in a custom error message", () => {
-      const t = v.number().chain(() => ({ ok: false, error: "test" }));
+      const t = v.number().chain(() => v.err("test"));
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
@@ -137,9 +137,7 @@ describe("Type", () => {
         });
     });
     it("allows passing in a custom error message in an object", () => {
-      const t = v
-        .number()
-        .chain(() => ({ ok: false, error: { message: "test" } }));
+      const t = v.number().chain(() => v.err({ message: "test" }));
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
@@ -149,9 +147,7 @@ describe("Type", () => {
         });
     });
     it("allows passing in an error path", () => {
-      const t = v
-        .number()
-        .chain(() => ({ ok: false, error: { path: ["test"] } }));
+      const t = v.number().chain(() => v.err({ path: ["test"] }));
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
