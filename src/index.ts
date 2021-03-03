@@ -27,7 +27,8 @@ type Issue =
   | I<"invalid_literal", { expected: Literal[] }>
   | I<"missing_key", { key: Key }>
   | I<"unrecognized_key", { key: Key }>
-  | I<"invalid_union", { tree: IssueTree }>;
+  | I<"invalid_union", { tree: IssueTree }>
+  | I<"custom_error", { message?: string }>;
 
 type IssueTree =
   | Readonly<{ code: "prepend"; key: Key; tree: IssueTree }>
@@ -140,6 +141,10 @@ type ParseOptions = {
   mode: "passthrough" | "strict" | "strip";
 };
 
+type CustomError = {
+  message?: string;
+};
+
 abstract class Type<Out = unknown> {
   abstract readonly name: string;
   abstract genFunc(): Func<Out>;
@@ -185,8 +190,18 @@ abstract class Type<Out = unknown> {
     return new OptionalType(this, undefined);
   }
 
-  transform<T>(this: Type, func: (v: Out) => Result<T>): TransformType<T> {
-    return new TransformType(this, func as (v: unknown) => Result<T>);
+  assert<T extends Out>(
+    func: (v: Out) => v is T,
+    error?: CustomError
+  ): TransformType<T>;
+  assert<T extends Out = Out>(
+    func: (v: Out) => boolean,
+    error?: CustomError
+  ): TransformType<T>;
+  assert<T>(func: (v: Out) => boolean, error?: CustomError): TransformType<T> {
+    const err = { code: "custom_error", ...error } as const;
+    const wrap = (v: unknown): Result<T> => (func(v as Out) ? true : err);
+    return new TransformType(this, wrap);
   }
 }
 
