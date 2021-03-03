@@ -285,10 +285,12 @@ class ObjectType<
               if (output === obj) {
                 output = { ...template };
               }
-              output[keys[i]] = r.value;
+              output[key] = r.value;
             } else {
               issueTree = joinIssues(prependPath(key, r), issueTree);
             }
+          } else if (strip && output !== obj) {
+            output[key] = value;
           }
         }
       }
