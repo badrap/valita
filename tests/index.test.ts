@@ -109,6 +109,39 @@ describe("object()", () => {
     }
   });
 
+  it("passes through unrecognized keys by default", () => {
+    const t = v.object({ a: v.number() });
+    const o = t.parse({ a: 1, b: 2 });
+    expect(o).to.deep.equal({ a: 1, b: 2 });
+  });
+  it("passes through unrecognized keys when mode=passthrough", () => {
+    const t = v.object({ a: v.number() });
+    const o = t.parse({ a: 1, b: 2 }, { mode: "passthrough" });
+    expect(o).to.deep.equal({ a: 1, b: 2 });
+  });
+  it("strips unrecognized keys when mode=strip", () => {
+    const t = v.object({ a: v.number() });
+    const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
+    expect(o).to.deep.equal({ a: 1 });
+  });
+  it("fails on unrecognized keys when mode=strict", () => {
+    const t = v.object({ a: v.number() });
+    expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "unrecognized_key",
+        "issues[0].key": "b",
+      });
+  });
+  it("forwards parsing mode to nested types", () => {
+    const t = v.object({ nested: v.object({ a: v.number() }) });
+    const i = { nested: { a: 1, b: 2 } };
+    expect(t.parse(i)).to.equal(i);
+    expect(t.parse(i, { mode: "passthrough" })).to.equal(i);
+    expect(t.parse(i, { mode: "strip" })).to.deep.equal({ nested: { a: 1 } });
+    expect(() => t.parse(i, { mode: "strict" })).to.throw(v.ValitaError);
+  });
+
   describe("rest", () => {
     it("adds an index signature to the inferred type", () => {
       const t = v.object({ a: v.number() }).rest(v.number());
