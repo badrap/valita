@@ -53,11 +53,34 @@ describe("Type", () => {
         .that.includes({ code: "custom_error" });
     });
     it("allows passing in a custom error message", () => {
+      const t = v.number().assert(() => false, "test");
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "test",
+        });
+    });
+    it("allows passing in a custom error message in an object", () => {
       const t = v.number().assert(() => false, { message: "test" });
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
-        .that.includes({ code: "custom_error", message: "test" });
+        .that.deep.includes({
+          code: "custom_error",
+          error: { message: "test" },
+        });
+    });
+    it("allows passing in a error path", () => {
+      const t = v.number().assert(() => false, { path: ["test"] });
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          path: ["test"],
+        });
     });
   });
   describe("apply", () => {
@@ -74,6 +97,68 @@ describe("Type", () => {
     it("passes on the return value", () => {
       const t = v.number().apply(() => "test");
       expect(t.parse(1000)).to.equal("test");
+    });
+  });
+  describe("chain", () => {
+    it("changes the output type to the function's return type", () => {
+      const t = v.number().chain(() => ({ ok: true, value: "test" }));
+      expectType(t).toImply<string>(true);
+    });
+    it("passes in the parsed value", () => {
+      let value: unknown;
+      const t = v.number().chain((v) => {
+        value = v;
+        return { ok: true, value: "test" };
+      });
+      t.parse(1000);
+      expect(value).to.equal(1000);
+    });
+    it("passes on the success value", () => {
+      const t = v.number().chain(() => ({ ok: true, value: "test" }));
+      expect(t.parse(1)).to.equal("test");
+    });
+    it("fails on error result", () => {
+      const t = v.number().chain(() => ({ ok: false }));
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+        });
+    });
+    it("allows passing in a custom error message", () => {
+      const t = v.number().chain(() => ({ ok: false, error: "test" }));
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "test",
+        });
+    });
+    it("allows passing in a custom error message in an object", () => {
+      const t = v
+        .number()
+        .chain(() => ({ ok: false, error: { message: "test" } }));
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: { message: "test" },
+        });
+    });
+    it("allows passing in an error path", () => {
+      const t = v
+        .number()
+        .chain(() => ({ ok: false, error: { path: ["test"] } }));
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          path: ["test"],
+        });
     });
   });
 });

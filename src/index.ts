@@ -22,13 +22,21 @@ type I<Code, Extra = unknown> = Readonly<
   >
 >;
 
+type CustomError =
+  | undefined
+  | string
+  | {
+      message?: string;
+      path?: Key[];
+    };
+
 type Issue =
   | I<"invalid_type", { expected: BaseType[] }>
   | I<"invalid_literal", { expected: Literal[] }>
   | I<"missing_key", { key: Key }>
   | I<"unrecognized_key", { key: Key }>
   | I<"invalid_union", { tree: IssueTree }>
-  | I<"custom_error", { message?: string }>;
+  | I<"custom_error", { error: CustomError }>;
 
 type IssueTree =
   | Readonly<{ code: "prepend"; key: Key; tree: IssueTree }>
@@ -44,7 +52,18 @@ function _collectIssues(tree: IssueTree, path: Key[], issues: Issue[]): void {
     _collectIssues(tree.tree, path, issues);
     path.pop();
   } else {
-    issues.push({ ...tree, path: path.concat(tree.path || []) });
+    const finalPath = path.slice();
+    if (tree.path) {
+      finalPath.push(...tree.path);
+    }
+    if (
+      tree.code === "custom_error" &&
+      typeof tree.error !== "string" &&
+      tree.error?.path
+    ) {
+      finalPath.push(...tree.error.path);
+    }
+    issues.push({ ...tree, path: finalPath });
   }
 }
 
@@ -85,8 +104,9 @@ export class ValitaError extends Error {
 
   get message(): string {
     const issue = this.issues[0];
+    const path = issue.path || [];
 
-    let message = "invalid value";
+    let message = "validation failed";
     if (issue.code === "invalid_type") {
       message = `expected ${orList(issue.expected)}`;
     } else if (issue.code === "invalid_literal") {
@@ -95,10 +115,16 @@ export class ValitaError extends Error {
       message = `missing key ${formatLiteral(issue.key)}`;
     } else if (issue.code === "unrecognized_key") {
       message = `unrecognized key ${formatLiteral(issue.key)}`;
+    } else if (issue.code === "custom_error") {
+      const error = issue.error;
+      if (typeof error === "string") {
+        message = error;
+      } else if (error && error.message === "string") {
+        message = error.message;
+      }
     }
 
-    const path = "." + (issue.path || []).join(".");
-    return `${issue.code} at ${path} (${message})`;
+    return `${issue.code} at .${path.join(".")} (${message})`;
   }
 }
 
@@ -141,9 +167,15 @@ type ParseOptions = {
   mode: "passthrough" | "strict" | "strip";
 };
 
-type CustomError = {
-  message?: string;
-};
+type ChainResult<T> =
+  | {
+      ok: true;
+      value: T;
+    }
+  | {
+      ok: false;
+      error?: CustomError;
+    };
 
 abstract class Type<Out = unknown> {
   abstract readonly name: string;
@@ -199,7 +231,7 @@ abstract class Type<Out = unknown> {
     error?: CustomError
   ): TransformType<T>;
   assert<T>(func: (v: Out) => boolean, error?: CustomError): TransformType<T> {
-    const err = { code: "custom_error", ...error } as const;
+    const err = { code: "custom_error", error } as const;
     const wrap = (v: unknown): Result<T> => (func(v as Out) ? true : err);
     return new TransformType(this, wrap);
   }
@@ -207,6 +239,17 @@ abstract class Type<Out = unknown> {
   apply<T>(func: (v: Out) => T): TransformType<T> {
     return new TransformType(this, (v) => {
       return { code: "ok", value: func(v as Out) } as const;
+    });
+  }
+
+  chain<T>(func: (v: Out) => ChainResult<T>): TransformType<T> {
+    return new TransformType(this, (v) => {
+      const r = func(v as Out);
+      if (r.ok) {
+        return { code: "ok", value: r.value };
+      } else {
+        return { code: "custom_error", error: r.error };
+      }
     });
   }
 }
