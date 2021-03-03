@@ -60,6 +60,22 @@ describe("Type", () => {
         .that.includes({ code: "custom_error", message: "test" });
     });
   });
+  describe("apply", () => {
+    it("changes the output type to the function's return type", () => {
+      const t = v.number().apply(() => "test");
+      expectType(t).toImply<string>(true);
+    });
+    it("passes in the parsed value", () => {
+      let value: unknown;
+      const t = v.number().apply((v) => (value = v));
+      t.parse(1000);
+      expect(value).to.equal(1000);
+    });
+    it("passes on the return value", () => {
+      const t = v.number().apply(() => "test");
+      expect(t.parse(1000)).to.equal("test");
+    });
+  });
 });
 
 describe("string()", () => {

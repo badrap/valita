@@ -203,6 +203,12 @@ abstract class Type<Out = unknown> {
     const wrap = (v: unknown): Result<T> => (func(v as Out) ? true : err);
     return new TransformType(this, wrap);
   }
+
+  apply<T>(func: (v: Out) => T): TransformType<T> {
+    return new TransformType(this, (v) => {
+      return { code: "ok", value: func(v as Out) } as const;
+    });
+  }
 }
 
 type Optionals<T extends Record<string, Type>> = {
