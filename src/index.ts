@@ -892,7 +892,7 @@ class TransformType<Out> extends Type<Out> {
       if (r !== true && r.code !== "ok") {
         return r;
       }
-      return t(r === true ? v : r.value);
+      return t(r === true ? (v === Nothing ? undefined : v) : r.value);
     };
   }
   toTerminals(into: TerminalType[]): void {

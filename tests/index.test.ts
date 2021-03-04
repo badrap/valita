@@ -231,6 +231,38 @@ describe("nothing()", () => {
     const t = v.nothing();
     expectType(t).toImply<never>(true);
   });
+  it("passes undefined to assert()", () => {
+    let value: unknown = null;
+    const t = v.object({
+      missing: v.nothing().assert((input) => {
+        value = input;
+        return true;
+      }),
+    });
+    t.parse({});
+    expect(value).to.be.undefined;
+  });
+  it("passes undefined to apply()", () => {
+    let value: unknown = null;
+    const t = v.object({
+      missing: v.nothing().apply((input) => {
+        value = input;
+      }),
+    });
+    t.parse({});
+    expect(value).to.be.undefined;
+  });
+  it("passes undefined to chain()", () => {
+    let value: unknown = null;
+    const t = v.object({
+      missing: v.nothing().chain((input) => {
+        value = input;
+        return v.ok(true);
+      }),
+    });
+    t.parse({});
+    expect(value).to.be.undefined;
+  });
 });
 
 describe("object()", () => {
