@@ -333,6 +333,13 @@ describe("object()", () => {
     // eslint-disable-next-line @typescript-eslint/ban-types
     expectType(t).toImply<{}>(true);
   });
+  it("infers required keys object({})", () => {
+    const t = v.object({
+      a: v.object({}),
+    });
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    expectType(t).toImply<{ a: {} }>(true);
+  });
   it("infers optional keys for optional()", () => {
     const t = v.object({
       a: v.undefined().optional(),
@@ -345,6 +352,7 @@ describe("object()", () => {
     });
     expectType(t).toImply<{ a: never }>(true);
   });
+
   it("infers optional undefined for nothing().optional()", () => {
     const t = v.object({
       a: v.nothing().optional(),
