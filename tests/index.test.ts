@@ -333,7 +333,42 @@ describe("object()", () => {
     // eslint-disable-next-line @typescript-eslint/ban-types
     expectType(t).toImply<{}>(true);
   });
-
+  it("infers optional keys for optional()", () => {
+    const t = v.object({
+      a: v.undefined().optional(),
+    });
+    expectType(t).toImply<{ a?: undefined }>(true);
+  });
+  it("infers never for nothing()", () => {
+    const t = v.object({
+      a: v.nothing(),
+    });
+    expectType(t).toImply<{ a: never }>(true);
+  });
+  it("infers optional undefined for nothing().optional()", () => {
+    const t = v.object({
+      a: v.nothing().optional(),
+    });
+    expectType(t).toImply<{ a?: undefined }>(true);
+  });
+  it("infers required keys for undefined()", () => {
+    const t = v.object({
+      a: v.undefined(),
+    });
+    expectType(t).toImply<{ a: undefined }>(true);
+  });
+  it("infers required keys for unknown()", () => {
+    const t = v.object({
+      a: v.unknown(),
+    });
+    expectType(t).toImply<{ a: unknown }>(true);
+  });
+  it("infers optional keys for union of nothing() and base type", () => {
+    const t = v.object({
+      a: v.union(v.nothing(), v.string()),
+    });
+    expectType(t).toImply<{ a?: string }>(true);
+  });
   it("throws on missing required keys", () => {
     const t = v.object({ a: v.string() });
     expect(() => t.parse({}))

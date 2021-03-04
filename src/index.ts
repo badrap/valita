@@ -16,6 +16,9 @@ type BaseType =
 const Nothing: unique symbol = Symbol();
 type Nothing = typeof Nothing;
 
+const Unknown: unique symbol = Symbol();
+type Unknown = { readonly brand: typeof Unknown };
+
 type I<Code, Extra = unknown> = Readonly<
   PrettyIntersection<
     Extra & {
@@ -160,8 +163,12 @@ function toTerminals(type: Type): TerminalType[] {
   return result;
 }
 
+type RawInfer<T extends Type> = T extends Type<infer I> ? I : never;
+
 type Infer<T extends Type> = T extends Type<infer I>
-  ? Exclude<I, Nothing>
+  ?
+      | Exclude<I, Nothing | Unknown>
+      | (I extends Exclude<I, Unknown> ? never : unknown)
   : never;
 
 const enum FuncMode {
@@ -405,7 +412,7 @@ class ObjectType<
   }
 }
 
-class ArrayType<T extends Type = Type> extends Type<Infer<T>[]> {
+class ArrayType<T extends Type = Type> extends Type<RawInfer<T>[]> {
   readonly name = "array";
 
   constructor(readonly item: T) {
@@ -416,14 +423,14 @@ class ArrayType<T extends Type = Type> extends Type<Infer<T>[]> {
     into.push(this);
   }
 
-  genFunc(): Func<Infer<T>[]> {
+  genFunc(): Func<RawInfer<T>[]> {
     const func = this.item.func;
     return (arr, mode) => {
       if (!Array.isArray(arr)) {
         return { code: "invalid_type", expected: ["array"] };
       }
       let issueTree: IssueTree | undefined = undefined;
-      let output: Infer<T>[] = arr;
+      let output: RawInfer<T>[] = arr;
       for (let i = 0; i < arr.length; i++) {
         const r = func(arr[i], mode);
         if (r !== true) {
@@ -431,7 +438,7 @@ class ArrayType<T extends Type = Type> extends Type<Infer<T>[]> {
             if (output === arr) {
               output = arr.slice();
             }
-            output[i] = r.value as Infer<T>;
+            output[i] = r.value as RawInfer<T>;
           } else {
             issueTree = joinIssues(prependPath(i, r), issueTree);
           }
@@ -732,7 +739,7 @@ function flatten(
   return result;
 }
 
-class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
+class UnionType<T extends Type[] = Type[]> extends Type<RawInfer<T[number]>> {
   readonly name = "union";
 
   constructor(readonly options: T) {
@@ -743,7 +750,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     this.options.forEach((o) => o.toTerminals(into));
   }
 
-  genFunc(): Func<Infer<T[number]>> {
+  genFunc(): Func<RawInfer<T[number]>> {
     const flattened = flatten(
       this.options.map((root) => ({ root, type: root }))
     );
@@ -755,13 +762,15 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
         const value = v[item.key];
         if (value === undefined && !(item.key in v)) {
           if (item.nothing) {
-            return item.nothing.func(Nothing, mode) as Result<Infer<T[number]>>;
+            return item.nothing.func(Nothing, mode) as Result<
+              RawInfer<T[number]>
+            >;
           }
           return { code: "missing_key", key: item.key };
         }
-        return item.matcher(v, value, mode) as Result<Infer<T[number]>>;
+        return item.matcher(v, value, mode) as Result<RawInfer<T[number]>>;
       }
-      return base(v, v, mode) as Result<Infer<T[number]>>;
+      return base(v, v, mode) as Result<RawInfer<T[number]>>;
     };
   }
 }
@@ -776,9 +785,9 @@ class NothingType extends Type<Nothing> {
     into.push(this);
   }
 }
-class UnknownType extends Type<unknown> {
+class UnknownType extends Type<Unknown> {
   readonly name = "unknown";
-  genFunc(): Func<unknown> {
+  genFunc(): Func<Unknown> {
     return (_v, _mode) => true;
   }
   toTerminals(into: TerminalType[]): void {
