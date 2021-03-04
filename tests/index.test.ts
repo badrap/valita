@@ -220,6 +220,19 @@ describe("boolean()", () => {
   });
 });
 
+describe("nothing()", () => {
+  it("rejects everything", () => {
+    const t = v.nothing();
+    for (const val of ["1", 1, 1n, true, null, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+  it("has output type 'never'", () => {
+    const t = v.nothing();
+    expectType(t).toImply<never>(true);
+  });
+});
+
 describe("object()", () => {
   it("acceps empty objects", () => {
     const t = v.object({});
@@ -471,7 +484,7 @@ describe("union()", () => {
         error: "test",
       });
   });
-  it("considers unknown to overlap with everything", () => {
+  it("considers unknown() to overlap with everything except nothing()", () => {
     const t = v.union(
       v.literal(1),
       v.literal(2).assert(() => false),
@@ -482,6 +495,32 @@ describe("union()", () => {
       .with.nested.property("issues[0]")
       .that.deep.includes({
         code: "invalid_union",
+      });
+  });
+  it("considers unknown() and nothing() to not overlap", () => {
+    const t = v.union(
+      v.nothing().assert(() => false, "nothing"),
+      v.unknown().assert(() => false, "unknown")
+    );
+    expect(() => t.parse(2))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "custom_error",
+        error: "unknown",
+      });
+  });
+  it("considers nothing() to not overlap with base types", () => {
+    const t = v.union(
+      v.nothing().assert(() => false, "nothing"),
+      v.number().assert(() => false, "number")
+    );
+    expect(() => t.parse(2))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "custom_error",
+        error: "number",
       });
   });
   describe("of objects", () => {
@@ -527,7 +566,7 @@ describe("union()", () => {
           expected: ["number", "string"],
         });
     });
-    it("considers unknown to overlap with everything", () => {
+    it("considers unknown() to overlap with everything except nothing()", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
         v.object({ type: v.unknown().assert(() => false) })
@@ -537,7 +576,50 @@ describe("union()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({ code: "invalid_union" });
     });
-    it("consider literals to overlap with their base types", () => {
+    it("considers unknown() to not overlap with nothing()", () => {
+      const t = v.union(
+        v.object({ type: v.nothing() }),
+        v.object({ type: v.unknown().assert(() => false, "test") })
+      );
+      expect(() => t.parse({ type: "test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({ code: "custom_error", error: "test" });
+    });
+    it("considers nothing() to overlap with nothing()", () => {
+      const t = v.union(
+        v.object({ type: v.nothing() }),
+        v.object({ type: v.nothing() })
+      );
+      expect(() => t.parse({ type: 1 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({ code: "invalid_union" });
+    });
+    it("considers nothing() to overlap with optional()", () => {
+      const t = v.union(
+        v.object({ type: v.nothing() }),
+        v.object({ type: v.string().optional() })
+      );
+      expect(() => t.parse({ type: 1 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({ code: "invalid_union" });
+    });
+    it("considers nothing() to not overlap with base types", () => {
+      const t = v.union(
+        v.object({ type: v.nothing() }),
+        v.object({ type: v.string().assert(() => false, "string") })
+      );
+      expect(() => t.parse({ type: "test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "string",
+        });
+    });
+    it("considers literals to overlap with their base types", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
         v.object({ type: v.number() })
@@ -547,7 +629,7 @@ describe("union()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({ code: "invalid_union" });
     });
-    it("consider equal literals to overlap", () => {
+    it("considers equal literals to overlap", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
         v.object({ type: v.literal(1) })
