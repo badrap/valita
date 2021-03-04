@@ -176,6 +176,122 @@ describe("Type", () => {
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
+    it("adds undefined to output if there's nothing overlapping undefined()", () => {
+      const t = v.object({
+        a: v
+          .nothing()
+          .apply(() => 1)
+          .optional(),
+      });
+      expectType(t).toImply<{ a: number | undefined }>(true);
+    });
+    it("makes the output type optional the wrapped type doesn't contain nothing()", () => {
+      const t1 = v.object({ a: v.number().optional() });
+      expectType(t1).toImply<{ a?: number | undefined }>(true);
+
+      const t2 = v.object({
+        a: v
+          .undefined()
+          .apply(() => 1)
+          .optional(),
+      });
+      expectType(t2).toImply<{ a?: number | undefined }>(true);
+
+      const t3 = v.object({
+        a: v
+          .unknown()
+          .apply(() => 1)
+          .optional(),
+      });
+      expectType(t3).toImply<{ a?: number | undefined }>(true);
+
+      const t4 = v.object({
+        a: v
+          .union(
+            v.unknown().apply(() => 1),
+            v.undefined().apply(() => 2)
+          )
+          .optional(),
+      });
+      expectType(t4).toImply<{ a?: number | undefined }>(true);
+    });
+    it("keeps the output type if there's something overlapping nothing() and undefined()", () => {
+      const t1 = v.object({
+        a: v
+          .union(
+            v.nothing().apply(() => 1),
+            v.undefined().apply(() => 2)
+          )
+          .optional(),
+      });
+      expectType(t1).toImply<{ a: number }>(true);
+
+      const t2 = v.object({
+        a: v
+          .union(
+            v.nothing().apply(() => 1),
+            v.unknown().apply(() => 2)
+          )
+          .optional(),
+      });
+      expectType(t2).toImply<{ a: number }>(true);
+
+      const t3 = v.object({
+        a: v
+          .union(
+            v.nothing().apply(() => 1),
+            v.undefined().apply(() => 2),
+            v.unknown().apply(() => 3)
+          )
+          .optional(),
+      });
+      expectType(t3).toImply<{ a: number }>(true);
+    });
+    it("won't short-circuit unknown()", () => {
+      const t = v.object({
+        missing: v
+          .undefined()
+          .assert(() => false, "test")
+          .optional(),
+      });
+      expect(() => t.parse({ missing: undefined }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "test",
+        });
+    });
+    it("won't short-circuit undefined()", () => {
+      const t = v.object({
+        missing: v
+          .undefined()
+          .assert(() => false, "test")
+          .optional(),
+      });
+      expect(() => t.parse({ missing: undefined }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "test",
+        });
+    });
+    it("won't short-circuit nothing()", () => {
+      const t = v.object({
+        missing: v
+          .nothing()
+          .assert(() => false, "test")
+          .optional(),
+      });
+      expect(() => t.parse({}))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "test",
+        });
+    });
     it("passes undefined to assert() for missing values", () => {
       let value: unknown = null;
       const t = v.object({
@@ -559,6 +675,40 @@ describe("union()", () => {
     expect(t.parse("test")).to.equal("test");
     expect(t.parse(1)).to.equal(1);
     expect(() => t.parse({})).to.throw(v.ValitaError);
+  });
+  it("picks the first successful parse", () => {
+    const t = v.union(
+      v
+        .string()
+        .apply(() => 1)
+        .assert(() => false),
+      v.string().apply(() => 2)
+    );
+    expect(t.parse("test")).to.equal(2);
+  });
+  it("respects the order of overlapping parsers", () => {
+    const a = v.literal(1).apply(() => "literal");
+    const b = v.number().apply(() => "number");
+    const c = v.unknown().apply(() => "unknown");
+    const u = v.union;
+    expect(u(a, b, c).parse(1)).to.equal("literal");
+    expect(u(a, c, b).parse(1)).to.equal("literal");
+    expect(u(b, a, c).parse(1)).to.equal("number");
+    expect(u(b, c, a).parse(1)).to.equal("number");
+    expect(u(c, b, a).parse(1)).to.equal("unknown");
+    expect(u(c, a, b).parse(1)).to.equal("unknown");
+  });
+  it("deduplicates strictly equal parsers", () => {
+    const a = v.unknown().assert(() => false, "test");
+    expect(() => v.union(a, a).parse(1))
+      .to.throw(v.ValitaError)
+      .with.property("issues")
+      .with.lengthOf(1);
+  });
+  it("keeps the matching order when deduplicating", () => {
+    const a = v.unknown().apply(() => "a");
+    const b = v.unknown().apply(() => "b");
+    expect(v.union(a, b, a).parse(1)).to.equal("a");
   });
   it("accepts more than two subvalidators", () => {
     const t = v.union(
