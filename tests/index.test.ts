@@ -157,6 +157,67 @@ describe("Type", () => {
         });
     });
   });
+  describe("optional()", () => {
+    it("accepts missing values", () => {
+      const t = v.object({
+        a: v.string().optional(),
+      });
+      expect(t.parse({})).to.deep.equal({});
+    });
+    it("accepts undefined", () => {
+      const t = v.object({
+        a: v.string().optional(),
+      });
+      expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
+    });
+    it("accepts the original type", () => {
+      const t = v.object({
+        missing: v.string().optional(),
+      });
+      expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
+    });
+    it("passes undefined to assert() for missing values", () => {
+      let value: unknown = null;
+      const t = v.object({
+        missing: v
+          .string()
+          .optional()
+          .assert((input) => {
+            value = input;
+            return true;
+          }),
+      });
+      t.parse({});
+      expect(value).to.be.undefined;
+    });
+    it("passes undefined to apply() for missing values", () => {
+      let value: unknown = null;
+      const t = v.object({
+        missing: v
+          .string()
+          .optional()
+          .apply((input) => {
+            value = input;
+          }),
+      });
+      t.parse({});
+      expect(value).to.be.undefined;
+    });
+    it("passes undefined to chain() for missing values", () => {
+      let value: unknown = null;
+      const t = v.object({
+        missing: v
+          .string()
+          .optional()
+          .chain((input) => {
+            value = input;
+            return v.ok(true);
+          }),
+      });
+      t.parse({});
+      expect(value).to.be.undefined;
+    });
+  });
 });
 
 describe("string()", () => {
