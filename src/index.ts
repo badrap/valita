@@ -701,7 +701,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
 
 class UnknownType extends Type<unknown> {
   readonly name = "unknown";
-  genFunc(): Func<number> {
+  genFunc(): Func<unknown> {
     return (_v, _mode) => true;
   }
   toTerminals(into: TerminalType[]): void {
