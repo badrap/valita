@@ -312,6 +312,7 @@ class ObjectType<
   genFunc(): Func<ObjectOutput<T, Rest>> {
     const shape = this.shape;
     const rest = this.restType ? this.restType.func : undefined;
+    const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
 
     const keys: string[] = [];
     const funcs: Func<unknown>[] = [];
@@ -328,12 +329,10 @@ class ObjectType<
 
     return (obj, mode) => {
       if (!isObject(obj)) {
-        return { code: "invalid_type", expected: ["object"] };
+        return invalidType;
       }
-      const pass = mode === FuncMode.PASS;
       const strict = mode === FuncMode.STRICT;
       const strip = mode === FuncMode.STRIP;
-      const template = pass || rest ? obj : shapeTemplate;
 
       let issueTree: IssueTree | undefined = undefined;
       let output: Record<string, unknown> = obj;
@@ -343,14 +342,14 @@ class ObjectType<
             if (strict) {
               return { code: "unrecognized_key", key };
             } else if (strip) {
-              output = { ...template };
+              output = { ...shapeTemplate };
               break;
             } else if (rest) {
               const r = rest(obj[key], mode);
               if (r !== true) {
                 if (r.code === "ok") {
                   if (output === obj) {
-                    output = { ...template };
+                    output = { ...obj };
                   }
                   output[key] = r.value;
                 } else {
@@ -376,7 +375,7 @@ class ObjectType<
         if (r !== true) {
           if (r.code === "ok") {
             if (output === obj) {
-              output = { ...template };
+              output = { ...obj };
             }
             output[key] = r.value;
           } else {
