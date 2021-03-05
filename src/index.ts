@@ -199,7 +199,7 @@ declare namespace Type {
     | "accepts_something"
     | "accepts_undefined"
     | "accepts_nothing";
-  type OutputFlags = "outputs_nothing" | "outputs_something";
+  type OutputFlags = "outputs_something" | "outputs_nothing";
   type InputFlagsOf<T> = T extends Type<unknown, unknown, infer I, OutputFlags>
     ? I
     : never;
@@ -213,6 +213,25 @@ declare namespace Type {
     ? I
     : never;
 }
+
+type DefaultOutput<T extends Type, DefaultValue> = Type<
+  undefined extends
+    | Type.SomethingOutputOf<T>
+    | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined)
+    ? DefaultValue | Exclude<Type.SomethingOutputOf<T>, undefined>
+    : Type.SomethingOutputOf<T>,
+  undefined extends
+    | Type.NothingOutputOf<T>
+    | ("accepts_nothing" extends Type.InputFlagsOf<T> ? never : undefined)
+    | ("outputs_nothing" extends Type.OutputFlagsOf<T> ? undefined : never)
+    ? DefaultValue | Exclude<Type.NothingOutputOf<T>, undefined>
+    : Type.NothingOutputOf<T>,
+  | "accepts_nothing"
+  | "accepts_undefined"
+  | "accepts_something"
+  | Type.InputFlagsOf<T>,
+  Exclude<Type.OutputFlagsOf<T>, "outputs_nothing"> | "outputs_something"
+>;
 
 abstract class Type<
   SomethingOutput = unknown,
@@ -263,6 +282,15 @@ abstract class Type<
 
   optional<This extends this>(this: This): OptionalType<This> {
     return new OptionalType(this);
+  }
+
+  default<T, This extends this>(
+    this: This,
+    defaultValue: T
+  ): DefaultOutput<This, T> {
+    return (this.optional().map((v) =>
+      v === undefined ? defaultValue : v
+    ) as unknown) as DefaultOutput<This, T>;
   }
 
   assert<T extends SomethingOutput | NothingOutput, This extends this>(
