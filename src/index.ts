@@ -262,7 +262,7 @@ abstract class Type<
     return new TransformType(this, wrap);
   }
 
-  apply<T>(func: (v: Out) => T): TransformType<this, false, T> {
+  map<T>(func: (v: Out) => T): TransformType<this, false, T> {
     return new TransformType(this, (v) => {
       return { code: "ok", value: func(v as Out) } as const;
     });

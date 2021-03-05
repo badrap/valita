@@ -83,19 +83,19 @@ describe("Type", () => {
         });
     });
   });
-  describe("apply", () => {
+  describe("map", () => {
     it("changes the output type to the function's return type", () => {
-      const t = v.number().apply(() => "test");
+      const t = v.number().map(() => "test");
       expectType(t).toImply<string>(true);
     });
     it("passes in the parsed value", () => {
       let value: unknown;
-      const t = v.number().apply((v) => (value = v));
+      const t = v.number().map((v) => (value = v));
       t.parse(1000);
       expect(value).to.equal(1000);
     });
     it("passes on the return value", () => {
-      const t = v.number().apply(() => "test");
+      const t = v.number().map(() => "test");
       expect(t.parse(1000)).to.equal("test");
     });
   });
@@ -180,7 +180,7 @@ describe("Type", () => {
       const t = v.object({
         a: v
           .nothing()
-          .apply(() => 1)
+          .map(() => 1)
           .optional(),
       });
       expectType(t).toImply<{ a: number | undefined }>(true);
@@ -192,7 +192,7 @@ describe("Type", () => {
       const t2 = v.object({
         a: v
           .undefined()
-          .apply(() => 1)
+          .map(() => 1)
           .optional(),
       });
       expectType(t2).toImply<{ a?: number | undefined }>(true);
@@ -200,7 +200,7 @@ describe("Type", () => {
       const t3 = v.object({
         a: v
           .unknown()
-          .apply(() => 1)
+          .map(() => 1)
           .optional(),
       });
       expectType(t3).toImply<{ a?: number | undefined }>(true);
@@ -208,8 +208,8 @@ describe("Type", () => {
       const t4 = v.object({
         a: v
           .union(
-            v.unknown().apply(() => 1),
-            v.undefined().apply(() => 2)
+            v.unknown().map(() => 1),
+            v.undefined().map(() => 2)
           )
           .optional(),
       });
@@ -219,8 +219,8 @@ describe("Type", () => {
       const t1 = v.object({
         a: v
           .union(
-            v.nothing().apply(() => 1),
-            v.undefined().apply(() => 2)
+            v.nothing().map(() => 1),
+            v.undefined().map(() => 2)
           )
           .optional(),
       });
@@ -229,8 +229,8 @@ describe("Type", () => {
       const t2 = v.object({
         a: v
           .union(
-            v.nothing().apply(() => 1),
-            v.unknown().apply(() => 2)
+            v.nothing().map(() => 1),
+            v.unknown().map(() => 2)
           )
           .optional(),
       });
@@ -239,9 +239,9 @@ describe("Type", () => {
       const t3 = v.object({
         a: v
           .union(
-            v.nothing().apply(() => 1),
-            v.undefined().apply(() => 2),
-            v.unknown().apply(() => 3)
+            v.nothing().map(() => 1),
+            v.undefined().map(() => 2),
+            v.unknown().map(() => 3)
           )
           .optional(),
       });
@@ -306,13 +306,13 @@ describe("Type", () => {
       t.parse({});
       expect(value).to.be.undefined;
     });
-    it("passes undefined to apply() for missing values", () => {
+    it("passes undefined to map() for missing values", () => {
       let value: unknown = null;
       const t = v.object({
         missing: v
           .string()
           .optional()
-          .apply((input) => {
+          .map((input) => {
             value = input;
           }),
       });
@@ -419,10 +419,10 @@ describe("nothing()", () => {
     t.parse({});
     expect(value).to.be.undefined;
   });
-  it("passes undefined to apply()", () => {
+  it("passes undefined to map()", () => {
     let value: unknown = null;
     const t = v.object({
-      missing: v.nothing().apply((input) => {
+      missing: v.nothing().map((input) => {
         value = input;
       }),
     });
@@ -510,7 +510,7 @@ describe("object()", () => {
   });
   it("returns a new object instance if the fields change", () => {
     const t = v.object({
-      a: v.number().apply(() => "test"),
+      a: v.number().map(() => "test"),
     });
     const o = { a: 1 };
     expect(t.parse(o)).to.not.equal(o);
@@ -663,7 +663,7 @@ describe("array()", () => {
     expect(t.parse(a)).to.equal(a);
   });
   it("returns a new array instance if the items change", () => {
-    const t = v.array(v.number().apply(() => "test"));
+    const t = v.array(v.number().map(() => "test"));
     const a = [1];
     expect(t.parse(a)).to.not.equal(a);
   });
@@ -680,16 +680,16 @@ describe("union()", () => {
     const t = v.union(
       v
         .string()
-        .apply(() => 1)
+        .map(() => 1)
         .assert(() => false),
-      v.string().apply(() => 2)
+      v.string().map(() => 2)
     );
     expect(t.parse("test")).to.equal(2);
   });
   it("respects the order of overlapping parsers", () => {
-    const a = v.literal(1).apply(() => "literal");
-    const b = v.number().apply(() => "number");
-    const c = v.unknown().apply(() => "unknown");
+    const a = v.literal(1).map(() => "literal");
+    const b = v.number().map(() => "number");
+    const c = v.unknown().map(() => "unknown");
     const u = v.union;
     expect(u(a, b, c).parse(1)).to.equal("literal");
     expect(u(a, c, b).parse(1)).to.equal("literal");
@@ -706,8 +706,8 @@ describe("union()", () => {
       .with.lengthOf(1);
   });
   it("keeps the matching order when deduplicating", () => {
-    const a = v.unknown().apply(() => "a");
-    const b = v.unknown().apply(() => "b");
+    const a = v.unknown().map(() => "a");
+    const b = v.unknown().map(() => "b");
     expect(v.union(a, b, a).parse(1)).to.equal("a");
   });
   it("accepts more than two subvalidators", () => {
