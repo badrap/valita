@@ -473,17 +473,6 @@ function dedup<T>(arr: T[]): T[] {
   return output;
 }
 
-function difference<T>(arr1: T[], arr2: T[]): T[] {
-  const output = [];
-  const remove = new Set(arr2);
-  for (let i = 0; i < arr1.length; i++) {
-    if (!remove.has(arr1[i])) {
-      output.push(arr1[i]);
-    }
-  }
-  return output;
-}
-
 function findCommonKeys(rs: ObjectShape[]): string[] {
   const map = new Map<string, number>();
   rs.forEach((r) => {
@@ -547,8 +536,14 @@ function createObjectMatchers(
         }
       }
     }
-    unknowns = dedup(unknowns);
     nothings = dedup(nothings);
+    if (nothings.length > 1) {
+      return false;
+    }
+    unknowns = dedup(unknowns);
+    if (unknowns.length > 1) {
+      return false;
+    }
     literals.forEach((found, value) => {
       const options = types.get(toBaseType(value));
       if (options) {
@@ -556,30 +551,14 @@ function createObjectMatchers(
         literals.delete(value);
       }
     });
-    types.forEach((roots, type) =>
-      types.set(type, difference(dedup(roots), unknowns))
-    );
-    literals.forEach((roots, value) =>
-      literals.set(value, difference(dedup(roots), unknowns))
-    );
-    if (nothings.length > 1) {
-      return false;
-    }
-    if (unknowns.length > 1) {
-      return false;
-    }
-    if (unknowns.length === 1) {
-      return literals.size === 0 && types.size === 0;
-    }
-
     let success = true;
     literals.forEach((found) => {
-      if (found.length > 1) {
+      if (dedup(found.concat(unknowns)).length > 1) {
         success = false;
       }
     });
     types.forEach((found) => {
-      if (found.length > 1) {
+      if (dedup(found.concat(unknowns)).length > 1) {
         success = false;
       }
     });
@@ -612,12 +591,19 @@ function createUnionMatcher(
   t: { root: Type; terminal: TerminalType }[],
   path?: Key[]
 ): (rootValue: unknown, value: unknown, mode: FuncMode) => Result<unknown> {
+  const order = new Map<Type, number>();
+  t.forEach(({ root }, i) => {
+    order.set(root, order.get(root) ?? i);
+  });
+  const byOrder = (a: Type, b: Type): number => {
+    return (order.get(a) ?? 0) - (order.get(b) ?? 0);
+  };
+
+  const expectedTypes = [] as BaseType[];
   const literals = new Map<unknown, Type[]>();
   const types = new Map<BaseType, Type[]>();
-  const allTypes = new Set<BaseType>();
   let unknowns = [] as Type[];
   let nothings = [] as Type[];
-
   t.forEach(({ root, terminal }) => {
     if (terminal.name === "nothing") {
       nothings.push(root);
@@ -627,42 +613,40 @@ function createUnionMatcher(
       const roots = literals.get(terminal.value) || [];
       roots.push(root);
       literals.set(terminal.value, roots);
-      allTypes.add(toBaseType(terminal.value));
+      expectedTypes.push(toBaseType(terminal.value));
     } else {
       const roots = types.get(terminal.name) || [];
       roots.push(root);
       types.set(terminal.name, roots);
-      allTypes.add(terminal.name);
+      expectedTypes.push(terminal.name);
     }
   });
-  unknowns = dedup(unknowns);
-  nothings = dedup(nothings);
-  literals.forEach((vxs, value) => {
+
+  literals.forEach((roots, value) => {
     const options = types.get(toBaseType(value));
     if (options) {
-      options.push(...vxs);
+      options.push(...roots);
       literals.delete(value);
     }
   });
+
+  unknowns = dedup(unknowns).sort(byOrder);
+  nothings = dedup(nothings).sort(byOrder);
   types.forEach((roots, type) =>
-    types.set(type, difference(dedup(roots), unknowns))
+    types.set(type, dedup(roots.concat(unknowns).sort(byOrder)))
   );
   literals.forEach((roots, value) =>
-    literals.set(value, difference(dedup(roots), unknowns))
+    literals.set(value, dedup(roots.concat(unknowns)).sort(byOrder))
   );
 
-  const expectedTypes: BaseType[] = [];
-  allTypes.forEach((type) => expectedTypes.push(type));
-
-  const expectedLiterals: Literal[] = [];
+  const expectedLiterals = [] as Literal[];
   literals.forEach((_, value) => {
     expectedLiterals.push(value as Literal);
   });
-
   const invalidType: Issue = {
     code: "invalid_type",
     path,
-    expected: expectedTypes,
+    expected: dedup(expectedTypes),
   };
   const invalidLiteral: Issue = {
     code: "invalid_literal",
@@ -670,36 +654,12 @@ function createUnionMatcher(
     expected: expectedLiterals,
   };
 
+  const literalTypes = new Set(expectedLiterals.map(toBaseType));
   return (rootValue, value, mode) => {
-    let issueTree: IssueTree | undefined;
     let count = 0;
+    let issueTree: IssueTree | undefined;
 
-    if (value !== Nothing) {
-      const type = toBaseType(value);
-      if (unknowns.length === 0 && !allTypes.has(type)) {
-        return invalidType;
-      }
-
-      const options = literals.get(value) || types.get(type);
-      if (options) {
-        for (let i = 0; i < options.length; i++) {
-          const r = options[i].func(rootValue, mode);
-          if (r === true || r.code === "ok") {
-            return r;
-          }
-          issueTree = joinIssues(r, issueTree);
-          count++;
-        }
-      }
-      for (let i = 0; i < unknowns.length; i++) {
-        const r = unknowns[i].func(rootValue, mode);
-        if (r === true || r.code === "ok") {
-          return r;
-        }
-        issueTree = joinIssues(r, issueTree);
-        count++;
-      }
-    } else {
+    if (value === Nothing) {
       for (let i = 0; i < nothings.length; i++) {
         const r = nothings[i].func(rootValue, mode);
         if (r === true || r.code === "ok") {
@@ -708,15 +668,32 @@ function createUnionMatcher(
         issueTree = joinIssues(r, issueTree);
         count++;
       }
-    }
-    if (issueTree) {
-      if (count > 1) {
+      if (!issueTree) {
+        return invalidType;
+      } else if (count > 1) {
         return { code: "invalid_union", tree: issueTree };
+      } else {
+        return issueTree;
       }
-      return issueTree;
     }
 
-    return invalidLiteral;
+    const type = toBaseType(value);
+    const options = literals.get(value) || types.get(type) || unknowns;
+    for (let i = 0; i < options.length; i++) {
+      const r = options[i].func(rootValue, mode);
+      if (r === true || r.code === "ok") {
+        return r;
+      }
+      issueTree = joinIssues(r, issueTree);
+      count++;
+    }
+    if (!issueTree) {
+      return literalTypes.has(type) ? invalidLiteral : invalidType;
+    } else if (count > 1) {
+      return { code: "invalid_union", tree: issueTree };
+    } else {
+      return issueTree;
+    }
   };
 }
 
