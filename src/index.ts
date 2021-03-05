@@ -284,6 +284,14 @@ abstract class Type<
     return new OptionalType(this);
   }
 
+  default<T extends Literal, This extends this>(
+    this: This,
+    defaultValue: T
+  ): DefaultOutput<This, T>;
+  default<T, This extends this>(
+    this: This,
+    defaultValue: T
+  ): DefaultOutput<This, T>;
   default<T, This extends this>(
     this: This,
     defaultValue: T

@@ -363,19 +363,19 @@ describe("Type", () => {
     });
     it("infers literals when possible", () => {
       const t = v.undefined().default(2);
-      expectType(t).toImply<number>(true);
+      expectType(t).toImply<2>(true);
     });
     it("considers nothing's output undefined", () => {
       const t = v.nothing().default(2);
-      expectType(t).toImply<number>(true);
+      expectType(t).toImply<2>(true);
     });
     it("removes undefined from the return type", () => {
       const t = v.union(v.string(), v.undefined()).default(2);
-      expectType(t).toImply<string | number>(true);
+      expectType(t).toImply<string | 2>(true);
     });
     it("considers nothing's output undefined", () => {
       const t = v.nothing().default(2);
-      expectType(t).toImply<number>(true);
+      expectType(t).toImply<2>(true);
     });
     it("considers nothing's output undefined in object keys", () => {
       const t = v.object({
@@ -386,7 +386,7 @@ describe("Type", () => {
           )
           .default(2),
       });
-      expectType(t).toImply<{ a: number | string }>(true);
+      expectType(t).toImply<{ a: 2 | string }>(true);
     });
   });
 });
