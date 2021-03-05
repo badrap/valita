@@ -854,6 +854,14 @@ describe("union()", () => {
         code: "invalid_union",
       });
   });
+  it("considers unknown() to overlap with objects", () => {
+    const t = v.union(
+      v.unknown(),
+      v.object({ type: v.literal("a") }),
+      v.object({ type: v.literal("b") })
+    );
+    expect(t.parse({ type: "c" })).to.deep.equal({ type: "c" });
+  });
   it("considers unknown() and nothing() to not overlap", () => {
     const t = v.union(
       v.nothing().assert(() => false, "nothing"),

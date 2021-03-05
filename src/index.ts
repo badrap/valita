@@ -823,10 +823,11 @@ class UnionType<T extends Type[] = Type[]> extends Type<
     const flattened = flatten(
       this.options.map((root) => ({ root, type: root }))
     );
+    const hasUnknown = hasTerminal(this, "unknown");
     const objects = createObjectMatchers(flattened);
     const base = createUnionMatcher(flattened);
     return (v, mode) => {
-      if (objects.length > 0 && isObject(v)) {
+      if (!hasUnknown && objects.length > 0 && isObject(v)) {
         const item = objects[0];
         const value = v[item.key];
         if (value === undefined && !(item.key in v)) {
