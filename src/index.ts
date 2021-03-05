@@ -164,12 +164,6 @@ function hasTerminal(type: Type, name: TerminalType["name"]): boolean {
 const Nothing: unique symbol = Symbol();
 
 type Infer<T extends Type> = T extends Type<infer I> ? I : never;
-type InferNothing<T extends Type> = T extends Type<unknown, infer I>
-  ? I
-  : never;
-type InferTerminals<T extends Type> = T extends Type<unknown, boolean, infer I>
-  ? I
-  : never;
 
 const enum FuncMode {
   PASS = 0,
@@ -202,13 +196,25 @@ function err<E extends CustomError>(
   return { ok: false, error };
 }
 
+declare namespace Type {
+  type NoFlags = never;
+  type InputFlags = "accepts_unknown" | "accepts_undefined" | "accepts_nothing";
+  type OutputFlags = "outputs_nothing" | "outputs_something";
+  type InputFlagsOf<T> = T extends Type<unknown, infer I, OutputFlags>
+    ? I
+    : NoFlags;
+  type OutputFlagsOf<T> = T extends Type<unknown, InputFlags, infer I>
+    ? I
+    : NoFlags;
+}
+
 abstract class Type<
   Out = unknown,
-  Nothing extends boolean = boolean,
-  Terminals extends string = string
+  InputFlags extends Type.InputFlags = Type.InputFlags,
+  OutputFlags extends Type.OutputFlags = Type.OutputFlags
 > {
-  private declare _nothing: Nothing;
-  private declare _terminals: Terminals;
+  private declare _inFlags: InputFlags;
+  private declare _outFlags: OutputFlags;
 
   abstract readonly name: string;
   abstract genFunc(): Func<Out>;
@@ -248,27 +254,31 @@ abstract class Type<
   assert<T extends Out>(
     func: (v: Out) => v is T,
     error?: CustomError
-  ): TransformType<this, Nothing, T>;
+  ): TransformType<this, T, OutputFlags>;
   assert<T extends Out>(
     func: (v: Out) => boolean,
     error?: CustomError
-  ): TransformType<this, Nothing, T>;
+  ): TransformType<this, T, OutputFlags>;
   assert<T>(
     func: (v: Out) => boolean,
     error?: CustomError
-  ): TransformType<this, Nothing, T> {
+  ): TransformType<this, T, OutputFlags> {
     const err = { code: "custom_error", error } as const;
     const wrap = (v: unknown): Result<T> => (func(v as Out) ? true : err);
     return new TransformType(this, wrap);
   }
 
-  map<T>(func: (v: Out) => T): TransformType<this, false, T> {
+  map<T>(
+    func: (v: Out) => T
+  ): TransformType<this, T, Exclude<OutputFlags, "outputs_nothing">> {
     return new TransformType(this, (v) => {
       return { code: "ok", value: func(v as Out) } as const;
     });
   }
 
-  chain<T>(func: (v: Out) => ChainResult<T>): TransformType<this, false, T> {
+  chain<T>(
+    func: (v: Out) => ChainResult<T>
+  ): TransformType<this, T, Exclude<OutputFlags, "outputs_nothing">> {
     return new TransformType(this, (v) => {
       const r = func(v as Out);
       if (r.ok) {
@@ -281,7 +291,11 @@ abstract class Type<
 }
 
 type Optionals<T extends Record<string, Type>> = {
-  [K in keyof T]: boolean extends InferNothing<T[K]> ? K : never;
+  [K in keyof T]:
+    | "outputs_nothing"
+    | "outputs_something" extends Type.OutputFlagsOf<T[K]>
+    ? K
+    : never;
 }[keyof T];
 
 type ObjectShape = Record<string, Type>;
@@ -298,7 +312,7 @@ type ObjectOutput<
 class ObjectType<
   T extends ObjectShape = ObjectShape,
   Rest extends Type | undefined = Type | undefined
-> extends Type<ObjectOutput<T, Rest>, false, "object"> {
+> extends Type<ObjectOutput<T, Rest>, Type.NoFlags, "outputs_something"> {
   readonly name = "object";
 
   constructor(readonly shape: T, private readonly restType: Rest) {
@@ -402,8 +416,8 @@ class ObjectType<
 
 class ArrayType<T extends Type = Type> extends Type<
   Infer<T>[],
-  false,
-  "array"
+  Type.NoFlags,
+  "outputs_something"
 > {
   readonly name = "array";
 
@@ -710,8 +724,8 @@ function flatten(
 
 class UnionType<T extends Type[] = Type[]> extends Type<
   Infer<T[number]>,
-  InferNothing<T[number]>,
-  InferTerminals<T[number]>
+  Type.InputFlagsOf<T[number]>,
+  Type.OutputFlagsOf<T[number]>
 > {
   readonly name = "union";
 
@@ -746,7 +760,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<
   }
 }
 
-class NothingType extends Type<never, true, "nothing"> {
+class NothingType extends Type<never, "accepts_nothing", "outputs_nothing"> {
   readonly name = "nothing";
   genFunc(): Func<never> {
     const issue: Issue = { code: "invalid_type", expected: [] };
@@ -756,7 +770,11 @@ class NothingType extends Type<never, true, "nothing"> {
     into.push(this);
   }
 }
-class UnknownType extends Type<unknown, false, "unknown"> {
+class UnknownType extends Type<
+  unknown,
+  "accepts_undefined",
+  "outputs_something"
+> {
   readonly name = "unknown";
   genFunc(): Func<unknown> {
     return (_v, _mode) => true;
@@ -765,7 +783,7 @@ class UnknownType extends Type<unknown, false, "unknown"> {
     into.push(this);
   }
 }
-class NumberType extends Type<number, false, "number"> {
+class NumberType extends Type<number, Type.NoFlags, "outputs_something"> {
   readonly name = "number";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["number"] };
@@ -775,7 +793,7 @@ class NumberType extends Type<number, false, "number"> {
     into.push(this);
   }
 }
-class StringType extends Type<string, false, "string"> {
+class StringType extends Type<string, Type.NoFlags, "outputs_something"> {
   readonly name = "string";
   genFunc(): Func<string> {
     const issue: Issue = { code: "invalid_type", expected: ["string"] };
@@ -785,7 +803,7 @@ class StringType extends Type<string, false, "string"> {
     into.push(this);
   }
 }
-class BigIntType extends Type<bigint, false, "bigint"> {
+class BigIntType extends Type<bigint, Type.NoFlags, "outputs_something"> {
   readonly name = "bigint";
   genFunc(): Func<bigint> {
     const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
@@ -795,7 +813,7 @@ class BigIntType extends Type<bigint, false, "bigint"> {
     into.push(this);
   }
 }
-class BooleanType extends Type<boolean, false, "boolean"> {
+class BooleanType extends Type<boolean, Type.NoFlags, "outputs_something"> {
   readonly name = "boolean";
   genFunc(): Func<boolean> {
     const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
@@ -805,7 +823,11 @@ class BooleanType extends Type<boolean, false, "boolean"> {
     into.push(this);
   }
 }
-class UndefinedType extends Type<undefined, false, "undefined"> {
+class UndefinedType extends Type<
+  undefined,
+  "accepts_undefined",
+  "outputs_something"
+> {
   readonly name = "undefined";
   genFunc(): Func<undefined> {
     const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
@@ -815,7 +837,7 @@ class UndefinedType extends Type<undefined, false, "undefined"> {
     into.push(this);
   }
 }
-class NullType extends Type<null, false, "null"> {
+class NullType extends Type<null, Type.NoFlags, "outputs_something"> {
   readonly name = "null";
   genFunc(): Func<null> {
     const issue: Issue = { code: "invalid_type", expected: ["null"] };
@@ -825,7 +847,11 @@ class NullType extends Type<null, false, "null"> {
     into.push(this);
   }
 }
-class LiteralType<Out extends Literal = Literal> extends Type<Out, false> {
+class LiteralType<Out extends Literal = Literal> extends Type<
+  Out,
+  Type.NoFlags,
+  "outputs_something"
+> {
   readonly name = "literal";
   constructor(readonly value: Out) {
     super();
@@ -840,22 +866,16 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out, false> {
   }
 }
 
-type IfOverlap<A, V, Yes, No> = 1 extends (A & V extends never ? 0 : 1)
-  ? Yes
-  : No;
-
 class OptionalType<T extends Type> extends Type<
   | Infer<T>
-  | IfOverlap<"undefined" | "unknown", InferTerminals<T>, never, undefined>
-  | IfOverlap<"nothing", InferTerminals<T>, never, undefined>,
-  | IfOverlap<"nothing", InferTerminals<T>, InferNothing<T>, true>
-  | IfOverlap<
-      "undefined" | "unknown",
-      InferTerminals<T>,
-      InferNothing<T>,
-      false
-    >,
-  "undefined" | "nothing" | InferTerminals<T>
+  | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined),
+  "accepts_undefined" | "accepts_nothing" | Type.InputFlagsOf<T>,
+  | ("accepts_nothing" extends Type.InputFlagsOf<T>
+      ? Type.OutputFlagsOf<T>
+      : "outputs_nothing")
+  | ("accepts_undefined" extends Type.InputFlagsOf<T>
+      ? Type.OutputFlagsOf<T>
+      : "outputs_something")
 > {
   readonly name = "optional";
   constructor(private readonly type: T) {
@@ -863,8 +883,7 @@ class OptionalType<T extends Type> extends Type<
   }
   genFunc(): Func<
     | Infer<T>
-    | IfOverlap<"undefined" | "unknown", InferTerminals<T>, never, undefined>
-    | IfOverlap<"nothing", InferTerminals<T>, never, undefined>
+    | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined)
   > {
     const func = this.type.func;
     const hasNothing = hasTerminal(this.type, "nothing");
@@ -886,11 +905,11 @@ class OptionalType<T extends Type> extends Type<
   }
 }
 
-class TransformType<T extends Type, Nothing extends boolean, Out> extends Type<
+class TransformType<
+  T extends Type,
   Out,
-  Nothing,
-  InferTerminals<T>
-> {
+  OutputFlags extends Type.OutputFlags
+> extends Type<Out, Type.InputFlagsOf<T>, OutputFlags> {
   readonly name = "transform";
   constructor(
     readonly transformed: T,

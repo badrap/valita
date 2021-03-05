@@ -37,6 +37,10 @@ module.exports = {
             caughtErrorsIgnorePattern: "^_",
           },
         ],
+        "@typescript-eslint/no-namespace": [
+          "error",
+          { allowDeclarations: true },
+        ],
       },
     },
   ],
