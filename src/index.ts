@@ -163,7 +163,11 @@ function hasTerminal(type: Type, name: TerminalType["name"]): boolean {
 
 const Nothing: unique symbol = Symbol();
 
-type Infer<T extends Type> = T extends Type<infer I> ? I : never;
+type Infer<T extends Type> = T extends Type<infer I, infer Flags>
+  ? "accepts_something" extends Flags
+    ? I
+    : never
+  : never;
 
 const enum FuncMode {
   PASS = 0,
@@ -198,7 +202,10 @@ function err<E extends CustomError>(
 
 declare namespace Type {
   type NoFlags = never;
-  type InputFlags = "accepts_unknown" | "accepts_undefined" | "accepts_nothing";
+  type InputFlags =
+    | "accepts_something"
+    | "accepts_undefined"
+    | "accepts_nothing";
   type OutputFlags = "outputs_nothing" | "outputs_something";
   type InputFlagsOf<T> = T extends Type<unknown, infer I, OutputFlags>
     ? I
@@ -229,7 +236,11 @@ abstract class Type<
     return f;
   }
 
-  parse(v: unknown, options?: Partial<ParseOptions>): Out {
+  parse<T extends Type>(
+    this: T,
+    v: unknown,
+    options?: Partial<ParseOptions>
+  ): Infer<T> {
     let mode: FuncMode = FuncMode.PASS;
     if (options && options.mode === "strict") {
       mode = FuncMode.STRICT;
@@ -239,9 +250,9 @@ abstract class Type<
 
     const r = this.func(v, mode);
     if (r === true) {
-      return v as Out;
+      return v as Infer<T>;
     } else if (r.code === "ok") {
-      return r.value as Out;
+      return r.value as Infer<T>;
     } else {
       throw new ValitaError(r);
     }
@@ -312,7 +323,11 @@ type ObjectOutput<
 class ObjectType<
   T extends ObjectShape = ObjectShape,
   Rest extends Type | undefined = Type | undefined
-> extends Type<ObjectOutput<T, Rest>, Type.NoFlags, "outputs_something"> {
+> extends Type<
+  ObjectOutput<T, Rest>,
+  "accepts_something",
+  "outputs_something"
+> {
   readonly name = "object";
 
   constructor(readonly shape: T, private readonly restType: Rest) {
@@ -416,7 +431,7 @@ class ObjectType<
 
 class ArrayType<T extends Type = Type> extends Type<
   Infer<T>[],
-  Type.NoFlags,
+  "accepts_something",
   "outputs_something"
 > {
   readonly name = "array";
@@ -772,7 +787,7 @@ class NothingType extends Type<never, "accepts_nothing", "outputs_nothing"> {
 }
 class UnknownType extends Type<
   unknown,
-  "accepts_undefined",
+  "accepts_undefined" | "accepts_something",
   "outputs_something"
 > {
   readonly name = "unknown";
@@ -783,7 +798,11 @@ class UnknownType extends Type<
     into.push(this);
   }
 }
-class NumberType extends Type<number, Type.NoFlags, "outputs_something"> {
+class NumberType extends Type<
+  number,
+  "accepts_something",
+  "outputs_something"
+> {
   readonly name = "number";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["number"] };
@@ -793,7 +812,11 @@ class NumberType extends Type<number, Type.NoFlags, "outputs_something"> {
     into.push(this);
   }
 }
-class StringType extends Type<string, Type.NoFlags, "outputs_something"> {
+class StringType extends Type<
+  string,
+  "accepts_something",
+  "outputs_something"
+> {
   readonly name = "string";
   genFunc(): Func<string> {
     const issue: Issue = { code: "invalid_type", expected: ["string"] };
@@ -803,7 +826,11 @@ class StringType extends Type<string, Type.NoFlags, "outputs_something"> {
     into.push(this);
   }
 }
-class BigIntType extends Type<bigint, Type.NoFlags, "outputs_something"> {
+class BigIntType extends Type<
+  bigint,
+  "accepts_something",
+  "outputs_something"
+> {
   readonly name = "bigint";
   genFunc(): Func<bigint> {
     const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
@@ -813,7 +840,11 @@ class BigIntType extends Type<bigint, Type.NoFlags, "outputs_something"> {
     into.push(this);
   }
 }
-class BooleanType extends Type<boolean, Type.NoFlags, "outputs_something"> {
+class BooleanType extends Type<
+  boolean,
+  "accepts_something",
+  "outputs_something"
+> {
   readonly name = "boolean";
   genFunc(): Func<boolean> {
     const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
@@ -825,7 +856,7 @@ class BooleanType extends Type<boolean, Type.NoFlags, "outputs_something"> {
 }
 class UndefinedType extends Type<
   undefined,
-  "accepts_undefined",
+  "accepts_undefined" | "accepts_something",
   "outputs_something"
 > {
   readonly name = "undefined";
@@ -837,7 +868,7 @@ class UndefinedType extends Type<
     into.push(this);
   }
 }
-class NullType extends Type<null, Type.NoFlags, "outputs_something"> {
+class NullType extends Type<null, "accepts_something", "outputs_something"> {
   readonly name = "null";
   genFunc(): Func<null> {
     const issue: Issue = { code: "invalid_type", expected: ["null"] };
@@ -849,7 +880,7 @@ class NullType extends Type<null, Type.NoFlags, "outputs_something"> {
 }
 class LiteralType<Out extends Literal = Literal> extends Type<
   Out,
-  Type.NoFlags,
+  "accepts_something",
   "outputs_something"
 > {
   readonly name = "literal";
@@ -869,7 +900,10 @@ class LiteralType<Out extends Literal = Literal> extends Type<
 class OptionalType<T extends Type> extends Type<
   | Infer<T>
   | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined),
-  "accepts_undefined" | "accepts_nothing" | Type.InputFlagsOf<T>,
+  | "accepts_something"
+  | "accepts_undefined"
+  | "accepts_nothing"
+  | Type.InputFlagsOf<T>,
   | ("accepts_nothing" extends Type.InputFlagsOf<T>
       ? Type.OutputFlagsOf<T>
       : "outputs_nothing")

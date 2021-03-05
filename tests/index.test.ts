@@ -176,14 +176,23 @@ describe("Type", () => {
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
+    it("doesn't add undefined to output if there's nothing overlapping nothing()", () => {
+      const t = v
+        .undefined()
+        .map(() => 2)
+        .optional();
+      expectType(t).toImply<number>(true);
+    });
     it("adds undefined to output if there's nothing overlapping undefined()", () => {
-      const t = v.object({
-        a: v
-          .nothing()
-          .map(() => 1)
-          .optional(),
-      });
-      expectType(t).toImply<{ a: number | undefined }>(true);
+      const t = v.string().optional();
+      expectType(t).toImply<string | undefined>(true);
+    });
+    it("makes the output undefined if there's nothing that can match", () => {
+      const t = v
+        .nothing()
+        .map(() => 1)
+        .optional();
+      expectType(t).toImply<undefined>(true);
     });
     it("makes the output type optional the wrapped type doesn't contain nothing()", () => {
       const t1 = v.object({ a: v.number().optional() });
@@ -439,6 +448,13 @@ describe("nothing()", () => {
     });
     t.parse({});
     expect(value).to.be.undefined;
+  });
+  it("gets ignored on output type when it can't produce output", () => {
+    const x = v.union(
+      v.nothing().map(() => 1),
+      v.unknown().map(() => "test")
+    );
+    expectType(x).toImply<string>(true);
   });
 });
 
