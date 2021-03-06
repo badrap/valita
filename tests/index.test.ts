@@ -628,9 +628,78 @@ describe("object()", () => {
 
   describe("rest", () => {
     it("adds an index signature to the inferred type", () => {
-      const t = v.object({ a: v.number() }).rest(v.number());
-      expectType(t).toImply<{ [K: string]: number; a: number }>(true);
-      expectType(t).toImply<{ a: number }>(false);
+      const t = v.object({ a: v.literal(1) }).rest(v.number());
+      expectType(t).toImply<{ a: 1; [K: string]: number }>(true);
+      expectType(t).toImply<{ a: string }>(false);
+    });
+    it("accepts matching unexpected key values", () => {
+      const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
+      expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
+    });
+    it("rejects non-matching unexpected key values", () => {
+      const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
+      expect(() => t.parse({ a: "test", b: 2 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues")
+        .with.lengthOf(1)
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["b"],
+          expected: [1],
+        });
+    });
+    it("applies only to unexpected keys", () => {
+      const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
+      expect(() => t.parse({ a: 1 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues")
+        .with.lengthOf(1)
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["a"],
+          expected: ["test"],
+        });
+    });
+    it("takes precedence over mode=strict", () => {
+      const t = v.object({}).rest(v.literal(1));
+      expect(t.parse({ a: 1 }, { mode: "strict" })).to.deep.equal({ a: 1 });
+      expect(() => t.parse({ a: 2 }, { mode: "strict" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues")
+        .with.lengthOf(1)
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["a"],
+          expected: [1],
+        });
+    });
+    it("takes precedence over mode=strip", () => {
+      const t = v.object({}).rest(v.literal(1));
+      expect(t.parse({ a: 1 }, { mode: "strip" })).to.deep.equal({ a: 1 });
+      expect(() => t.parse({ a: 2 }, { mode: "strip" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues")
+        .with.lengthOf(1)
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["a"],
+          expected: [1],
+        });
+    });
+    it("takes precedence over mode=passthrough", () => {
+      const t = v.object({}).rest(v.literal(1));
+      expect(t.parse({ a: 1 }, { mode: "passthrough" })).to.deep.equal({
+        a: 1,
+      });
+      expect(() => t.parse({ a: 2 }, { mode: "passthrough" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues")
+        .with.lengthOf(1)
+        .that.deep.includes({
+          code: "invalid_literal",
+          path: ["a"],
+          expected: [1],
+        });
     });
   });
 
