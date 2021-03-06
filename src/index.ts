@@ -433,12 +433,7 @@ class ObjectType<
       if (strict || strip || rest) {
         for (const key in obj) {
           if (!knownKeys[key]) {
-            if (strict) {
-              return { code: "unrecognized_key", key };
-            } else if (strip) {
-              output = { ...shapeTemplate };
-              break;
-            } else if (rest) {
+            if (rest) {
               const r = rest(obj[key], mode);
               if (r !== true) {
                 if (r.code === "ok") {
@@ -450,6 +445,11 @@ class ObjectType<
                   issueTree = joinIssues(prependPath(key, r), issueTree);
                 }
               }
+            } else if (strict) {
+              return { code: "unrecognized_key", key };
+            } else if (strip) {
+              output = { ...shapeTemplate };
+              break;
             }
           }
         }
