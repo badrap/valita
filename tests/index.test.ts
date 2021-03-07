@@ -82,6 +82,26 @@ describe("Type", () => {
           path: ["test"],
         });
     });
+    it("runs multiple asserts in order", () => {
+      const t = v
+        .string()
+        .assert((s) => s !== "a", "a")
+        .assert(() => false, "b");
+      expect(() => t.parse("a"))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "a",
+        });
+      expect(() => t.parse("b"))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "custom_error",
+          error: "b",
+        });
+    });
   });
   describe("map", () => {
     it("changes the output type to the function's return type", () => {
@@ -97,6 +117,13 @@ describe("Type", () => {
     it("passes on the return value", () => {
       const t = v.number().map(() => "test");
       expect(t.parse(1000)).to.equal("test");
+    });
+    it("runs multiple maps in order", () => {
+      const t = v
+        .string()
+        .map((s) => s + "b")
+        .map((s) => s + "c");
+      expect(t.parse("a")).to.equal("abc");
     });
   });
   describe("chain", () => {
@@ -155,6 +182,13 @@ describe("Type", () => {
           code: "custom_error",
           path: ["test"],
         });
+    });
+    it("runs multiple chains in order", () => {
+      const t = v
+        .string()
+        .chain((s) => v.ok(s + "b"))
+        .chain((s) => v.ok(s + "c"));
+      expect(t.parse("a")).to.equal("abc");
     });
   });
   describe("optional()", () => {

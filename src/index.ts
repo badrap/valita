@@ -317,9 +317,9 @@ abstract class Type<
     error?: CustomError
   ): TransformType<This, T, OutputFlags> {
     const err = { code: "custom_error", error } as const;
-    const wrap = (v: unknown): Result<T> =>
-      func(v as SomethingOutput | NothingOutput) ? true : err;
-    return new TransformType(this, wrap);
+    return new TransformType(this, (v) =>
+      func(v as SomethingOutput | NothingOutput) ? true : err
+    );
   }
 
   map<T, This extends this>(
@@ -330,12 +330,10 @@ abstract class Type<
     T,
     Exclude<OutputFlags, "outputs_nothing"> | "outputs_something"
   > {
-    return new TransformType(this, (v) => {
-      return {
-        code: "ok",
-        value: func(v as SomethingOutput | NothingOutput),
-      } as const;
-    });
+    return new TransformType(this, (v) => ({
+      code: "ok",
+      value: func(v as SomethingOutput | NothingOutput),
+    }));
   }
 
   chain<T, This extends this>(
@@ -1039,22 +1037,41 @@ class TransformType<
 > extends Type<X, Y, Type.InputFlagsOf<T>, OutputFlags> {
   readonly name = "transform";
   constructor(
-    readonly transformed: T,
-    private readonly transformFunc: (v: unknown) => Result<Out>
+    protected readonly transformed: Type,
+    protected readonly transform: Func<unknown>
   ) {
     super();
   }
+
   genFunc(): Func<X | Y> {
-    const f = this.transformed.func;
-    const t = this.transformFunc;
+    const chain: Func<unknown>[] = [];
+
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let next: Type = this;
+    while (next instanceof TransformType) {
+      chain.push(next.transform);
+      next = next.transformed;
+    }
+    chain.reverse();
+
+    const func = next.func;
     return (v, mode) => {
-      const r = f(v, mode);
+      let r = func(v, mode);
       if (r !== true && r.code !== "ok") {
         return r;
       }
-      return t(
-        r === true ? (v === Nothing ? undefined : v) : r.value
-      ) as Result<X | Y>;
+
+      let current = r === true ? (v === Nothing ? undefined : v) : r.value;
+      for (let i = 0; i < chain.length; i++) {
+        r = chain[i](current, mode);
+        if (r !== true) {
+          if (r.code !== "ok") {
+            return r;
+          }
+          current = r.value;
+        }
+      }
+      return r as Result<X | Y>;
     };
   }
   toTerminals(into: TerminalType[]): void {
