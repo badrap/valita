@@ -414,9 +414,13 @@ class ObjectType<
     for (const key in shape) {
       keys.push(key);
       funcs.push(shape[key].func);
-      required.push(!hasTerminal(shape[key], "nothing"));
       knownKeys[key] = true;
-      shapeTemplate[key] = undefined;
+
+      const isRequired = !hasTerminal(shape[key], "nothing");
+      required.push(isRequired);
+      if (isRequired) {
+        shapeTemplate[key] = undefined;
+      }
     }
 
     return (obj, mode) => {
@@ -473,7 +477,7 @@ class ObjectType<
           } else {
             issueTree = joinIssues(prependPath(key, r), issueTree);
           }
-        } else if (strip && output !== obj) {
+        } else if (strip && output !== obj && value !== Nothing) {
           output[key] = value;
         }
       }

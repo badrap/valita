@@ -660,6 +660,11 @@ describe("object()", () => {
         "issues[0].key": "b",
       });
   });
+  it("keeps missing optionals missing when mode=strip", () => {
+    const t = v.object({ a: v.number().optional() });
+    const o = t.parse({ b: 2 }, { mode: "strip" });
+    expect(o).to.deep.equal({});
+  });
   it("forwards parsing mode to nested types", () => {
     const t = v.object({ nested: v.object({ a: v.number() }) });
     const i = { nested: { a: 1, b: 2 } };
