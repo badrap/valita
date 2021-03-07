@@ -1056,22 +1056,24 @@ class TransformType<
 
     const func = next.func;
     return (v, mode) => {
-      let r = func(v, mode);
-      if (r !== true && r.code !== "ok") {
-        return r;
+      let result = func(v, mode);
+      if (result !== true && result.code !== "ok") {
+        return result;
       }
 
-      let current = r === true ? (v === Nothing ? undefined : v) : r.value;
+      let current =
+        result === true ? (v === Nothing ? undefined : v) : result.value;
       for (let i = 0; i < chain.length; i++) {
-        r = chain[i](current, mode);
+        const r = chain[i](current, mode);
         if (r !== true) {
           if (r.code !== "ok") {
             return r;
           }
           current = r.value;
+          result = r;
         }
       }
-      return r as Result<X | Y>;
+      return result as Result<X | Y>;
     };
   }
   toTerminals(into: TerminalType[]): void {

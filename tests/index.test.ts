@@ -102,6 +102,15 @@ describe("Type", () => {
           error: "b",
         });
     });
+    it("always gets the value transformed by previous maps and chains", () => {
+      const x = {};
+      const t = v
+        .string()
+        .assert((s) => s === "a")
+        .map(() => x)
+        .assert((s) => s === x);
+      expect(t.parse("a")).to.equal(x);
+    });
   });
   describe("map", () => {
     it("changes the output type to the function's return type", () => {
