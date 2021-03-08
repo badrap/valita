@@ -239,7 +239,7 @@ abstract class Type<
   InputFlags extends Type.InputFlags = Type.InputFlags,
   OutputFlags extends Type.OutputFlags = Type.OutputFlags
 > {
-  private declare _types: {
+  protected declare _types: {
     somethingOutput: SomethingOutput;
     nothingOutput: NothingOutput;
     inputFlags: InputFlags;
