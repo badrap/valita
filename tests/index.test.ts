@@ -32,6 +32,10 @@ describe("Type", () => {
       expectType(t).toImply<Branded>(true);
       expectType(t).toImply<number>(false);
     });
+    it("accepts type parameters", () => {
+      const t = v.number().assert<1>((n) => n === 1);
+      expectType(t).toImply<1>(true);
+    });
     it("passes in the parsed value", () => {
       let value: unknown;
       const t = v.number().assert((v) => {

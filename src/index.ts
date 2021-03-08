@@ -301,17 +301,17 @@ abstract class Type<
     ) as unknown) as DefaultOutput<This, T>;
   }
 
-  assert<T extends SomethingOutput | NothingOutput, This extends this>(
+  assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
     this: This,
     func: (v: SomethingOutput | NothingOutput) => v is T,
     error?: CustomError
   ): TransformType<This, T, OutputFlags>;
-  assert<T extends SomethingOutput | NothingOutput, This extends this>(
+  assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
     this: This,
     func: (v: SomethingOutput | NothingOutput) => boolean,
     error?: CustomError
   ): TransformType<This, T, OutputFlags>;
-  assert<T extends SomethingOutput | NothingOutput, This extends this>(
+  assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
     this: This,
     func: (v: SomethingOutput | NothingOutput) => boolean,
     error?: CustomError
