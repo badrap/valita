@@ -438,6 +438,45 @@ describe("Type", () => {
   });
 });
 
+describe("never()", () => {
+  it("rejects everything", () => {
+    const t = v.never();
+    for (const val of ["1", 1, 1n, true, null, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+  it("has output type 'never'", () => {
+    const t = v.never();
+    expectType(t).toImply<never>(true);
+  });
+  it("never propagates to assert()", () => {
+    let called = false;
+    const t = v.never().assert((input) => {
+      called = true;
+      return true;
+    });
+    expect(() => t.parse(null)).to.throw(v.ValitaError);
+    expect(called).to.be.false;
+  });
+  it("never propagates to map()", () => {
+    let called = false;
+    const t = v.never().map((input) => {
+      called = true;
+    });
+    expect(() => t.parse(null)).to.throw(v.ValitaError);
+    expect(called).to.be.false;
+  });
+  it("never propagates to chain()", () => {
+    let called = false;
+    const t = v.never().chain((input) => {
+      called = true;
+      return v.ok(true);
+    });
+    expect(() => t.parse(null)).to.throw(v.ValitaError);
+    expect(called).to.be.false;
+  });
+});
+
 describe("string()", () => {
   it("accepts strings", () => {
     const t = v.string();
@@ -868,6 +907,12 @@ describe("union()", () => {
     expect(t.parse(1)).to.equal(1);
     expect(() => t.parse({})).to.throw(v.ValitaError);
   });
+  it("ignores never()", () => {
+    const t = v.union(v.string(), v.never());
+    expect(t.parse("test")).to.equal("test");
+    expect(() => t.parse(1)).to.throw(v.ValitaError);
+    expectType(t).toImply<string>(true);
+  });
   it("picks the first successful parse", () => {
     const t = v.union(
       v
@@ -962,7 +1007,20 @@ describe("union()", () => {
         error: "test",
       });
   });
-  it("considers unknown() to overlap with everything except nothing()", () => {
+  it("considers never() to not overlap with anything", () => {
+    const t = v.union(
+      v.never(),
+      v.unknown().assert(() => false, "unknown")
+    );
+    expect(() => t.parse(2))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "custom_error",
+        error: "unknown",
+      });
+  });
+  it("considers unknown() to overlap with everything except nothing() and never()", () => {
     const t = v.union(
       v.literal(1),
       v.literal(2).assert(() => false),

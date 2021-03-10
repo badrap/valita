@@ -617,7 +617,9 @@ function createObjectMatchers(
       const terminals = toTerminals(shape[key]);
       for (let j = 0; j < terminals.length; j++) {
         const terminal = terminals[j];
-        if (terminal.name === "unknown") {
+        if (terminal.name === "never") {
+          // skip
+        } else if (terminal.name === "unknown") {
           unknowns.push(i);
         } else if (terminal.name === "nothing") {
           nothings.push(i);
@@ -701,7 +703,9 @@ function createUnionMatcher(
   let unknowns = [] as Type[];
   let nothings = [] as Type[];
   t.forEach(({ root, terminal }) => {
-    if (terminal.name === "nothing") {
+    if (terminal.name === "never") {
+      // skip
+    } else if (terminal.name === "nothing") {
       nothings.push(root);
     } else if (terminal.name === "unknown") {
       unknowns.push(root);
@@ -849,6 +853,16 @@ class UnionType<T extends Type[] = Type[]> extends Type<
   }
 }
 
+class NeverType extends Type<never, never, never, never> {
+  readonly name = "never";
+  genFunc(): Func<never> {
+    const issue: Issue = { code: "invalid_type", expected: [] };
+    return (v, _mode) => (v === Nothing ? true : issue);
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+}
 class NothingType extends Type<
   never,
   never,
@@ -1085,6 +1099,9 @@ class TransformType<
   }
 }
 
+function never(): NeverType {
+  return new NeverType();
+}
 function nothing(): NothingType {
   return new NothingType();
 }
@@ -1125,6 +1142,7 @@ function union<T extends Type[]>(...options: T): UnionType<T> {
 }
 
 type TerminalType =
+  | NeverType
   | NothingType
   | UnknownType
   | StringType
@@ -1138,6 +1156,7 @@ type TerminalType =
   | LiteralType;
 
 export {
+  never,
   nothing,
   unknown,
   number,
