@@ -451,7 +451,7 @@ describe("never()", () => {
   });
   it("never propagates to assert()", () => {
     let called = false;
-    const t = v.never().assert((input) => {
+    const t = v.never().assert(() => {
       called = true;
       return true;
     });
@@ -460,7 +460,7 @@ describe("never()", () => {
   });
   it("never propagates to map()", () => {
     let called = false;
-    const t = v.never().map((input) => {
+    const t = v.never().map(() => {
       called = true;
     });
     expect(() => t.parse(null)).to.throw(v.ValitaError);
@@ -468,7 +468,7 @@ describe("never()", () => {
   });
   it("never propagates to chain()", () => {
     let called = false;
-    const t = v.never().chain((input) => {
+    const t = v.never().chain(() => {
       called = true;
       return v.ok(true);
     });
