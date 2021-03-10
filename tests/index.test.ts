@@ -619,6 +619,12 @@ describe("object()", () => {
     });
     expectType(t).toImply<{ a?: undefined }>(true);
   });
+  it("infers required keys for never()", () => {
+    const t = v.object({
+      a: v.never(),
+    });
+    expectType(t).toImply<{ a: never }>(true);
+  });
   it("infers never for nothing()", () => {
     const t = v.object({
       a: v.nothing(),
