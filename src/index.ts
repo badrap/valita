@@ -1131,6 +1131,16 @@ function object<T extends Record<string, Type>>(
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
 }
+function record<T extends Type>(
+  valueType: T
+): Type<
+  Record<string, Type.SomethingOutputOf<T>>,
+  never,
+  "accepts_something",
+  "outputs_something"
+> {
+  return new ObjectType({} as Record<string, never>, valueType);
+}
 function array<T extends Type>(item: T): ArrayType<T> {
   return new ArrayType(item);
 }
@@ -1164,6 +1174,7 @@ export {
   string,
   boolean,
   object,
+  record,
   array,
   literal,
   union,

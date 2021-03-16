@@ -832,6 +832,41 @@ describe("object()", () => {
   });
 });
 
+describe("record()", () => {
+  it("acceps empty objects", () => {
+    const t = v.record(v.unknown());
+    expect(t.parse({})).to.deep.equal({});
+    expectType(t).toImply<{ [K: string]: unknown }>(true);
+  });
+  it("does not accept arrays", () => {
+    const t = v.record(v.unknown());
+    expect(() => t.parse([])).to.throw(v.ValitaError);
+  });
+  it("acceps the defined types of values", () => {
+    const t = v.record(v.number());
+    expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+    expectType(t).toImply<{ [K: string]: number }>(true);
+  });
+  it("rejects values other than the defined type", () => {
+    const t = v.record(v.number());
+    expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
+  });
+  it("does not react to parsing modes", () => {
+    const t = v.record(v.number());
+    expect(t.parse({ a: 1 }, { mode: "strict" })).to.deep.equal({ a: 1 });
+    expect(() => t.parse({ a: 1, b: "test" }, { mode: "strict" })).to.throw(
+      v.ValitaError
+    );
+    expect(t.parse({ a: 1 }, { mode: "strip" })).to.deep.equal({ a: 1 });
+    expect(() => t.parse({ a: 1, b: "test" }, { mode: "strip" })).to.throw(
+      v.ValitaError
+    );
+    expect(() =>
+      t.parse({ a: 1, b: "test" }, { mode: "passthrough" })
+    ).to.throw(v.ValitaError);
+  });
+});
+
 describe("literal()", () => {
   it("accepts string literals", () => {
     const t = v.literal("test");
