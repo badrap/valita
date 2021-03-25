@@ -941,6 +941,30 @@ describe("array()", () => {
   });
 });
 
+describe("tuple()", () => {
+  it("accepts tuples", () => {
+    const t = v.tuple([v.number(), v.number()]);
+    expect(t.parse([1, 1])).to.deep.equal([1, 1]);
+  });
+  it("accepts tuples different types", () => {
+    const t = v.tuple([v.number(), v.string()]);
+    expect(t.parse([1, "string"])).to.deep.equal([1, "string"]);
+  });
+  it("throws on item mismatch", () => {
+    const t = v.tuple([v.number(), v.string()]);
+    expect(() => t.parse([1, 1])).to.throw(v.ValitaError);
+  });
+
+  it("throws on items length mismatch", () => {
+    const t = v.tuple([v.number()]);
+    expect(() => t.parse([1, 1])).to.throw(v.ValitaError);
+  });
+  it("infers tuple", () => {
+    const t = v.tuple([v.number(), v.string()]);
+    expectType(t).toImply<[number, string]>(true);
+  });
+});
+
 describe("union()", () => {
   it("accepts two subvalidators", () => {
     const t = v.union(v.string(), v.number());
