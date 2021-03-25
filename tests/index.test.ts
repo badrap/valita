@@ -223,25 +223,11 @@ describe("Type", () => {
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
-    it("doesn't add undefined to output if there's nothing overlapping nothing()", () => {
-      const t = v
-        .undefined()
-        .map(() => 2)
-        .optional();
-      expectType(t).toImply<number>(true);
-    });
     it("adds undefined to output if there's nothing overlapping undefined()", () => {
       const t = v.string().optional();
       expectType(t).toImply<string | undefined>(true);
     });
-    it("makes the output undefined if there's nothing that can match", () => {
-      const t = v
-        .nothing()
-        .map(() => 1)
-        .optional();
-      expectType(t).toImply<undefined>(true);
-    });
-    it("makes the output type optional the wrapped type doesn't contain nothing()", () => {
+    it("makes the output type optional", () => {
       const t1 = v.object({ a: v.number().optional() });
       expectType(t1).toImply<{ a?: number | undefined }>(true);
 
@@ -271,11 +257,14 @@ describe("Type", () => {
       });
       expectType(t4).toImply<{ a?: number | undefined }>(true);
     });
-    it("keeps the output type if there's something overlapping nothing() and undefined()", () => {
+    it("keeps the output type if there's something overlapping undefined() and accepting missing values", () => {
       const t1 = v.object({
         a: v
           .union(
-            v.nothing().map(() => 1),
+            v
+              .string()
+              .optional()
+              .map(() => 1),
             v.undefined().map(() => 2)
           )
           .optional(),
@@ -285,7 +274,10 @@ describe("Type", () => {
       const t2 = v.object({
         a: v
           .union(
-            v.nothing().map(() => 1),
+            v
+              .string()
+              .optional()
+              .map(() => 1),
             v.unknown().map(() => 2)
           )
           .optional(),
@@ -295,7 +287,10 @@ describe("Type", () => {
       const t3 = v.object({
         a: v
           .union(
-            v.nothing().map(() => 1),
+            v
+              .string()
+              .optional()
+              .map(() => 1),
             v.undefined().map(() => 2),
             v.unknown().map(() => 3)
           )
@@ -333,10 +328,11 @@ describe("Type", () => {
           error: "test",
         });
     });
-    it("won't short-circuit nothing()", () => {
+    it("won't short-circuit optional()", () => {
       const t = v.object({
         missing: v
-          .nothing()
+          .string()
+          .optional()
           .assert(() => false, "test")
           .optional(),
       });
@@ -412,23 +408,15 @@ describe("Type", () => {
       const t = v.undefined().default(2);
       expectType(t).toImply<2>(true);
     });
-    it("considers nothing's output undefined", () => {
-      const t = v.nothing().default(2);
-      expectType(t).toImply<2>(true);
-    });
     it("removes undefined from the return type", () => {
       const t = v.union(v.string(), v.undefined()).default(2);
       expectType(t).toImply<string | 2>(true);
     });
-    it("considers nothing's output undefined", () => {
-      const t = v.nothing().default(2);
-      expectType(t).toImply<2>(true);
-    });
-    it("considers nothing's output undefined in object keys", () => {
+    it("considers missing values undefined in object keys", () => {
       const t = v.object({
         a: v
           .union(
-            v.nothing(),
+            v.string().optional(),
             v.undefined().map(() => "string")
           )
           .default(2),
@@ -538,67 +526,6 @@ describe("boolean()", () => {
   });
 });
 
-describe("nothing()", () => {
-  it("rejects everything", () => {
-    const t = v.nothing();
-    for (const val of ["1", 1, 1n, true, null, undefined, [], {}]) {
-      expect(() => t.parse(val)).to.throw(v.ValitaError);
-    }
-  });
-  it("has output type 'never'", () => {
-    const t = v.nothing();
-    expectType(t).toImply<never>(true);
-  });
-  it("passes undefined to assert()", () => {
-    let value: unknown = null;
-    const t = v.object({
-      missing: v.nothing().assert((input) => {
-        value = input;
-        return true;
-      }),
-    });
-    t.parse({});
-    expect(value).to.be.undefined;
-  });
-  it("passes undefined to map()", () => {
-    let value: unknown = null;
-    const t = v.object({
-      missing: v.nothing().map((input) => {
-        value = input;
-      }),
-    });
-    t.parse({});
-    expect(value).to.be.undefined;
-  });
-  it("passes undefined to chain()", () => {
-    let value: unknown = null;
-    const t = v.object({
-      missing: v.nothing().chain((input) => {
-        value = input;
-        return v.ok(true);
-      }),
-    });
-    t.parse({});
-    expect(value).to.be.undefined;
-  });
-  it("gets ignored on output type when it can't produce output", () => {
-    const x = v.union(
-      v.nothing().map(() => 1),
-      v.unknown().map(() => "test")
-    );
-    expectType(x).toImply<string>(true);
-  });
-  it("won't get ignored as object values", () => {
-    const x = v.object({
-      a: v.union(
-        v.nothing().map(() => 1),
-        v.unknown().map(() => "test")
-      ),
-    });
-    expectType(x).toImply<{ a: number | string }>(true);
-  });
-});
-
 describe("object()", () => {
   it("acceps empty objects", () => {
     const t = v.object({});
@@ -625,19 +552,6 @@ describe("object()", () => {
     });
     expectType(t).toImply<{ a: never }>(true);
   });
-  it("infers never for nothing()", () => {
-    const t = v.object({
-      a: v.nothing(),
-    });
-    expectType(t).toImply<{ a: never }>(true);
-  });
-
-  it("infers optional undefined for nothing().optional()", () => {
-    const t = v.object({
-      a: v.nothing().optional(),
-    });
-    expectType(t).toImply<{ a?: undefined }>(true);
-  });
   it("infers required keys for undefined()", () => {
     const t = v.object({
       a: v.undefined(),
@@ -649,12 +563,6 @@ describe("object()", () => {
       a: v.unknown(),
     });
     expectType(t).toImply<{ a: unknown }>(true);
-  });
-  it("infers optional keys for union of nothing() and base type", () => {
-    const t = v.object({
-      a: v.union(v.nothing(), v.string()),
-    });
-    expectType(t).toImply<{ a?: string }>(true);
   });
   it("throws on missing required keys", () => {
     const t = v.object({ a: v.string() });
@@ -1124,7 +1032,7 @@ describe("union()", () => {
         error: "unknown",
       });
   });
-  it("considers unknown() to overlap with everything except nothing() and never()", () => {
+  it("considers unknown() to overlap with everything except never()", () => {
     const t = v.union(
       v.literal(1),
       v.literal(2).assert(() => false),
@@ -1144,32 +1052,6 @@ describe("union()", () => {
       v.object({ type: v.literal("b") })
     );
     expect(t.parse({ type: "c" })).to.deep.equal({ type: "c" });
-  });
-  it("considers unknown() and nothing() to not overlap", () => {
-    const t = v.union(
-      v.nothing().assert(() => false, "nothing"),
-      v.unknown().assert(() => false, "unknown")
-    );
-    expect(() => t.parse(2))
-      .to.throw(v.ValitaError)
-      .with.nested.property("issues[0]")
-      .that.deep.includes({
-        code: "custom_error",
-        error: "unknown",
-      });
-  });
-  it("considers nothing() to not overlap with base types", () => {
-    const t = v.union(
-      v.nothing().assert(() => false, "nothing"),
-      v.number().assert(() => false, "number")
-    );
-    expect(() => t.parse(2))
-      .to.throw(v.ValitaError)
-      .with.nested.property("issues[0]")
-      .that.deep.includes({
-        code: "custom_error",
-        error: "number",
-      });
   });
   it("considers array() and tuple() to overlap", () => {
     const t = v.union(v.array(v.number()), v.tuple([v.string()]));
@@ -1266,7 +1148,7 @@ describe("union()", () => {
           expected: ["number", "string"],
         });
     });
-    it("considers unknown() to overlap with everything except nothing()", () => {
+    it("considers unknown() to overlap with everything except never()", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
         v.object({ type: v.unknown().assert(() => false) })
@@ -1275,49 +1157,6 @@ describe("union()", () => {
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
         .that.deep.includes({ code: "invalid_union" });
-    });
-    it("considers unknown() to not overlap with nothing()", () => {
-      const t = v.union(
-        v.object({ type: v.nothing() }),
-        v.object({ type: v.unknown().assert(() => false, "test") })
-      );
-      expect(() => t.parse({ type: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({ code: "custom_error", error: "test" });
-    });
-    it("considers nothing() to overlap with nothing()", () => {
-      const t = v.union(
-        v.object({ type: v.nothing() }),
-        v.object({ type: v.nothing() })
-      );
-      expect(() => t.parse({ type: 1 }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({ code: "invalid_union" });
-    });
-    it("considers nothing() to overlap with optional()", () => {
-      const t = v.union(
-        v.object({ type: v.nothing() }),
-        v.object({ type: v.string().optional() })
-      );
-      expect(() => t.parse({ type: 1 }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({ code: "invalid_union" });
-    });
-    it("considers nothing() to not overlap with base types", () => {
-      const t = v.union(
-        v.object({ type: v.nothing() }),
-        v.object({ type: v.string().assert(() => false, "string") })
-      );
-      expect(() => t.parse({ type: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          error: "string",
-        });
     });
     it("considers literals to overlap with their base types", () => {
       const t = v.union(

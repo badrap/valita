@@ -1202,7 +1202,6 @@ type TerminalType =
 
 export {
   never,
-  nothing,
   unknown,
   number,
   bigint,
