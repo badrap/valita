@@ -6,6 +6,7 @@ type Key = string | number;
 type BaseType =
   | "object"
   | "array"
+  | "tuple"
   | "null"
   | "undefined"
   | "string"
@@ -528,6 +529,67 @@ class ArrayType<T extends Type = Type> extends Type<
               output = arr.slice();
             }
             output[i] = r.value as Type.SomethingOutputOf<T>;
+          } else {
+            issueTree = joinIssues(prependPath(i, r), issueTree);
+          }
+        }
+      }
+      if (issueTree) {
+        return issueTree;
+      } else if (arr === output) {
+        return true;
+      } else {
+        return { code: "ok", value: output };
+      }
+    };
+  }
+}
+
+type TypeOfTuple<T extends [Type, ...Type[]] | []> = {
+  [k in keyof T]: T[k] extends Type<infer U> ? U : never;
+};
+
+class TupleType<
+  T extends [Type, ...Type[]] | [] = [Type, ...Type[]]
+> extends Type<
+  TypeOfTuple<T>,
+  never,
+  "accepts_something",
+  "outputs_something"
+> {
+  readonly name = "tuple";
+
+  constructor(readonly items: T) {
+    super();
+  }
+
+  toTerminals(into: TerminalType[]): void {
+    this.items.forEach((i) => i.toTerminals(into));
+  }
+
+  genFunc(): Func<TypeOfTuple<T>> {
+    const items = this.items;
+    return (arr, mode) => {
+      if (!Array.isArray(arr)) {
+        return { code: "invalid_type", expected: ["tuple"] };
+      }
+      if (arr.length !== items.length) {
+        return { code: "invalid_type", expected: ["tuple"] };
+      }
+
+      let issueTree: IssueTree | undefined = undefined;
+      // Around here my TypeFu ended. Open to suggestions :)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let output: any = arr;
+      for (let i = 0; i < arr.length; i++) {
+        const func = items[i].func;
+        const r = func(arr[i], mode);
+        if (r !== true) {
+          if (r.code === "ok") {
+            if (output === arr) {
+              output = arr.slice();
+            }
+            output[i] = r.value;
           } else {
             issueTree = joinIssues(prependPath(i, r), issueTree);
           }
@@ -1144,6 +1206,9 @@ function record<T extends Type>(
 function array<T extends Type>(item: T): ArrayType<T> {
   return new ArrayType(item);
 }
+function tuple<T extends [Type, ...Type[]] | []>(items: T): TupleType<T> {
+  return new TupleType(items);
+}
 function literal<T extends Literal>(value: T): LiteralType<T> {
   return new LiteralType(value);
 }
@@ -1163,6 +1228,7 @@ type TerminalType =
   | NullType
   | ObjectType
   | ArrayType
+  | TupleType
   | LiteralType;
 
 export {
@@ -1176,6 +1242,7 @@ export {
   object,
   record,
   array,
+  tuple,
   literal,
   union,
   null_ as null,
