@@ -276,10 +276,10 @@ abstract class Type<
     return f;
   }
 
-  parse(
+  parse<This extends this>(
     v: unknown,
     options?: Partial<ParseOptions>
-  ): SomethingOutput | NothingOutput {
+  ): Type.SomethingOutputOf<This> {
     let mode: FuncMode = FuncMode.PASS;
     if (options && options.mode === "strict") {
       mode = FuncMode.STRICT;
@@ -289,9 +289,9 @@ abstract class Type<
 
     const r = this.func(v, mode);
     if (r === true) {
-      return v as SomethingOutput | NothingOutput;
+      return v as Type.SomethingOutputOf<This>;
     } else if (r.code === "ok") {
-      return r.value as SomethingOutput | NothingOutput;
+      return r.value as Type.SomethingOutputOf<This>;
     } else {
       throw new ValitaError(r);
     }

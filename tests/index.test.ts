@@ -21,6 +21,13 @@ function expectType<T extends v.Type>(
 }
 
 describe("Type", () => {
+  describe("parse", () => {
+    it("returns type v.Infer<...>", () => {
+      function _<T extends v.Type>(type: T, value: unknown): v.Infer<T> {
+        return type.parse(value);
+      }
+    });
+  });
   describe("assert", () => {
     it("passes the type through by default", () => {
       const t = v.number().assert(() => true);
