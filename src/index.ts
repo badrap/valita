@@ -119,6 +119,22 @@ export class ValitaError extends Error {
       message = `missing key ${formatLiteral(issue.key)}`;
     } else if (issue.code === "unrecognized_key") {
       message = `unrecognized key ${formatLiteral(issue.key)}`;
+    } else if (issue.code === "invalid_length") {
+      const min = issue.minLength;
+      const max = issue.maxLength;
+      message = `expected an array with `;
+      if (min > 0) {
+        if (max === min) {
+          message += `${min}`;
+        } else if (max < Infinity) {
+          message += `between ${min} and ${max}`;
+        } else {
+          message += `at least ${min}`;
+        }
+      } else {
+        message += `at most ${max}`;
+      }
+      message += ` item(s)`;
     } else if (issue.code === "custom_error") {
       const error = issue.error;
       if (typeof error === "string") {
