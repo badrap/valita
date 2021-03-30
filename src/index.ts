@@ -402,7 +402,14 @@ class ObjectType<
 > {
   readonly name = "object";
 
-  constructor(readonly shape: Shape, private readonly restType: Rest) {
+  constructor(
+    readonly shape: Shape,
+    private readonly restType: Rest,
+    private readonly checks?: {
+      func: (v: unknown) => boolean;
+      issue: Issue;
+    }[]
+  ) {
     super();
   }
 
@@ -410,10 +417,25 @@ class ObjectType<
     into.push(this);
   }
 
+  check(
+    func: (v: ObjectOutput<Shape, Rest>) => boolean,
+    error?: CustomError
+  ): ObjectType<Shape, Rest> {
+    const issue = { code: "custom_error", error } as const;
+    return new ObjectType(this.shape, this.restType, [
+      ...(this.checks ?? []),
+      {
+        func: func as (v: unknown) => boolean,
+        issue,
+      },
+    ]);
+  }
+
   genFunc(): Func<ObjectOutput<Shape, Rest>> {
     const shape = this.shape;
     const rest = this.restType ? this.restType.func : undefined;
     const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
+    const checks = this.checks;
 
     const keys: string[] = [];
     const funcs: Func<unknown>[] = [];
@@ -493,7 +515,17 @@ class ObjectType<
 
       if (issueTree) {
         return issueTree;
-      } else if (obj === output) {
+      }
+
+      if (checks) {
+        for (let i = 0; i < checks.length; i++) {
+          if (!checks[i].func(output)) {
+            return checks[i].issue;
+          }
+        }
+      }
+
+      if (obj === output) {
         return true;
       } else {
         return { code: "ok", value: output as ObjectOutput<Shape, Rest> };
