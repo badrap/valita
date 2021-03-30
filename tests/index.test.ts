@@ -745,6 +745,19 @@ describe("object()", () => {
         expected: ["test"],
       });
   });
+  describe("extend()", () => {
+    it("extends the base shape", () => {
+      const t = v.object({ a: v.string() }).extend({ b: v.number() });
+      expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
+      expectType(t).toImply<{ a: string; b: number }>(true);
+    });
+    it("overwrites already existing keys", () => {
+      const t = v.object({ a: v.string() }).extend({ a: v.number() });
+      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+      expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
+      expectType(t).toImply<{ a: number }>(true);
+    });
+  });
 });
 
 describe("record()", () => {

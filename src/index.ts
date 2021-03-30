@@ -392,17 +392,17 @@ type ObjectOutput<
 >;
 
 class ObjectType<
-  T extends ObjectShape = ObjectShape,
+  Shape extends ObjectShape = ObjectShape,
   Rest extends Type | undefined = Type | undefined
 > extends Type<
-  ObjectOutput<T, Rest>,
+  ObjectOutput<Shape, Rest>,
   never,
   "accepts_something",
   "outputs_something"
 > {
   readonly name = "object";
 
-  constructor(readonly shape: T, private readonly restType: Rest) {
+  constructor(readonly shape: Shape, private readonly restType: Rest) {
     super();
   }
 
@@ -410,7 +410,7 @@ class ObjectType<
     into.push(this);
   }
 
-  genFunc(): Func<ObjectOutput<T, Rest>> {
+  genFunc(): Func<ObjectOutput<Shape, Rest>> {
     const shape = this.shape;
     const rest = this.restType ? this.restType.func : undefined;
     const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
@@ -496,12 +496,20 @@ class ObjectType<
       } else if (obj === output) {
         return true;
       } else {
-        return { code: "ok", value: output as ObjectOutput<T, Rest> };
+        return { code: "ok", value: output as ObjectOutput<Shape, Rest> };
       }
     };
   }
-  rest<R extends Type>(restType: R): ObjectType<T, R> {
+  rest<R extends Type>(restType: R): ObjectType<Shape, R> {
     return new ObjectType(this.shape, restType);
+  }
+  extend<S extends ObjectShape>(
+    shape: S
+  ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
+    return new ObjectType(
+      { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
+      this.restType
+    );
   }
 }
 
