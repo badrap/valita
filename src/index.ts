@@ -320,17 +320,9 @@ abstract class Type<
 
   assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
     this: This,
-    func: (v: SomethingOutput | NothingOutput) => v is T,
-    error?: CustomError
-  ): TransformType<This, T, OutputFlags>;
-  assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
-    this: This,
-    func: (v: SomethingOutput | NothingOutput) => boolean,
-    error?: CustomError
-  ): TransformType<This, T, OutputFlags>;
-  assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
-    this: This,
-    func: (v: SomethingOutput | NothingOutput) => boolean,
+    func:
+      | ((v: SomethingOutput | NothingOutput) => v is T)
+      | ((v: SomethingOutput | NothingOutput) => boolean),
     error?: CustomError
   ): TransformType<This, T, OutputFlags> {
     const err = { code: "custom_error", error } as const;
