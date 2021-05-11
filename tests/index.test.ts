@@ -1355,45 +1355,99 @@ describe("ValitaError", () => {
   it("has a name", () => {
     expect(error.name).to.equal("ValitaError");
   });
-  it("lists issues", () => {
-    expect(error.issues).to.deep.equal([
-      {
-        path: [],
-        code: "invalid_type",
-        expected: ["bigint"],
-      },
-    ]);
-  });
-  it("supports multiple issues", () => {
-    const error = new v.ValitaError({
-      code: "join",
-      left: {
-        code: "invalid_type",
-        expected: ["bigint"],
-      },
-      right: {
-        code: "prepend",
-        key: "first",
-        tree: {
+  describe("issues", () => {
+    it("lists issues", () => {
+      expect(error.issues).to.deep.equal([
+        {
+          path: [],
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+      ]);
+    });
+    it("supports multiple issues", () => {
+      const error = new v.ValitaError({
+        code: "join",
+        left: {
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+        right: {
+          code: "prepend",
+          key: "first",
+          tree: {
+            code: "invalid_type",
+            expected: ["string"],
+          },
+        },
+      });
+      expect(error.issues).to.deep.equal([
+        {
+          path: [],
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+        {
+          path: ["first"],
           code: "invalid_type",
           expected: ["string"],
         },
-      },
+      ]);
     });
-    expect(error.issues).to.deep.equal([
-      {
-        path: [],
-        code: "invalid_type",
-        expected: ["bigint"],
-      },
-      {
-        path: ["first"],
-        code: "invalid_type",
-        expected: ["string"],
-      },
-    ]);
+    it("caches the issues list", () => {
+      expect(error.issues).to.equal(error.issues);
+    });
   });
-  it("caches the issues list", () => {
-    expect(error.issues).to.equal(error.issues);
+  describe("message", () => {
+    it("describes the issue when there's only one issue", () => {
+      expect(error.message).to.equal("invalid_type at . (expected bigint)");
+    });
+    it("describes the leftmost issue when there are two issues", () => {
+      const error = new v.ValitaError({
+        code: "join",
+        left: {
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+        right: {
+          code: "prepend",
+          key: "first",
+          tree: {
+            code: "invalid_type",
+            expected: ["string"],
+          },
+        },
+      });
+      expect(error.message).to.equal(
+        "invalid_type at . (expected bigint) (+ 1 other issue)"
+      );
+    });
+    it("describes the leftmost issue when there are more than two issues", () => {
+      const error = new v.ValitaError({
+        code: "join",
+        left: {
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+        right: {
+          code: "join",
+          left: {
+            code: "invalid_type",
+            expected: ["bigint"],
+          },
+          right: {
+            code: "prepend",
+            key: "first",
+            tree: {
+              code: "invalid_type",
+              expected: ["string"],
+            },
+          },
+        },
+      });
+      expect(error.message).to.equal(
+        "invalid_type at . (expected bigint) (+ 2 other issues)"
+      );
+    });
   });
 });

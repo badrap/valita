@@ -90,9 +90,89 @@ function formatLiteral(value: Literal): string {
   return typeof value === "bigint" ? `${value}n` : JSON.stringify(value);
 }
 
+function findOneIssue(tree: IssueTree, path: Key[] = []): Issue {
+  if (tree.code === "join") {
+    return findOneIssue(tree.left, path);
+  } else if (tree.code === "prepend") {
+    path.push(tree.key);
+    return findOneIssue(tree.tree, path);
+  } else {
+    if (tree.path) {
+      path.push(...tree.path);
+    }
+    if (
+      tree.code === "custom_error" &&
+      typeof tree.error !== "string" &&
+      tree.error?.path
+    ) {
+      path.push(...tree.error.path);
+    }
+    return { ...tree, path };
+  }
+}
+
+function countIssues(tree: IssueTree): number {
+  if (tree.code === "join") {
+    return countIssues(tree.left) + countIssues(tree.right);
+  } else if (tree.code === "prepend") {
+    return countIssues(tree.tree);
+  } else {
+    return 1;
+  }
+}
+
+function formatIssueTree(issueTree: IssueTree): string {
+  const count = countIssues(issueTree);
+  const issue = findOneIssue(issueTree);
+
+  const path = issue.path || [];
+
+  let message = "validation failed";
+  if (issue.code === "invalid_type") {
+    message = `expected ${orList(issue.expected)}`;
+  } else if (issue.code === "invalid_literal") {
+    message = `expected ${orList(issue.expected.map(formatLiteral))}`;
+  } else if (issue.code === "missing_key") {
+    message = `missing key ${formatLiteral(issue.key)}`;
+  } else if (issue.code === "unrecognized_key") {
+    message = `unrecognized key ${formatLiteral(issue.key)}`;
+  } else if (issue.code === "invalid_length") {
+    const min = issue.minLength;
+    const max = issue.maxLength;
+    message = `expected an array with `;
+    if (min > 0) {
+      if (max === min) {
+        message += `${min}`;
+      } else if (max < Infinity) {
+        message += `between ${min} and ${max}`;
+      } else {
+        message += `at least ${min}`;
+      }
+    } else {
+      message += `at most ${max}`;
+    }
+    message += ` item(s)`;
+  } else if (issue.code === "custom_error") {
+    const error = issue.error;
+    if (typeof error === "string") {
+      message = error;
+    } else if (error && error.message === "string") {
+      message = error.message;
+    }
+  }
+
+  let msg = `${issue.code} at .${path.join(".")} (${message})`;
+  if (count === 2) {
+    msg += ` (+ 1 other issue)`;
+  } else if (count > 2) {
+    msg += ` (+ ${count - 1} other issues)`;
+  }
+  return msg;
+}
+
 export class ValitaError extends Error {
   constructor(private readonly issueTree: IssueTree) {
-    super();
+    super(formatIssueTree(issueTree));
     Object.setPrototypeOf(this, new.target.prototype);
     this.name = new.target.name;
   }
@@ -104,47 +184,6 @@ export class ValitaError extends Error {
       writable: false,
     });
     return issues;
-  }
-
-  get message(): string {
-    const issue = this.issues[0];
-    const path = issue.path || [];
-
-    let message = "validation failed";
-    if (issue.code === "invalid_type") {
-      message = `expected ${orList(issue.expected)}`;
-    } else if (issue.code === "invalid_literal") {
-      message = `expected ${orList(issue.expected.map(formatLiteral))}`;
-    } else if (issue.code === "missing_key") {
-      message = `missing key ${formatLiteral(issue.key)}`;
-    } else if (issue.code === "unrecognized_key") {
-      message = `unrecognized key ${formatLiteral(issue.key)}`;
-    } else if (issue.code === "invalid_length") {
-      const min = issue.minLength;
-      const max = issue.maxLength;
-      message = `expected an array with `;
-      if (min > 0) {
-        if (max === min) {
-          message += `${min}`;
-        } else if (max < Infinity) {
-          message += `between ${min} and ${max}`;
-        } else {
-          message += `at least ${min}`;
-        }
-      } else {
-        message += `at most ${max}`;
-      }
-      message += ` item(s)`;
-    } else if (issue.code === "custom_error") {
-      const error = issue.error;
-      if (typeof error === "string") {
-        message = error;
-      } else if (error && error.message === "string") {
-        message = error.message;
-      }
-    }
-
-    return `${issue.code} at .${path.join(".")} (${message})`;
   }
 }
 
