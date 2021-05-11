@@ -1,7 +1,7 @@
 FROM node:14-buster-slim
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends git ripgrep
+    && apt-get -y install --no-install-recommends git ripgrep openssh-client
 
 RUN mkdir -p /workspace && chown node:node /workspace
 USER node
