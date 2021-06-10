@@ -70,6 +70,18 @@ You can use `Infer<T>` to get your mitts on the inferred type in your code:
 type PersonType = v.Infer<typeof Person>;
 ```
 
+### Custom validation functions
+
+The `.assert()`-method can be used for custom validation logic like verifying that a number is inside a certain range for example.
+
+```js
+import * as v from "@badrap/valita";
+
+const schema = v
+  .number()
+  .assert((v) => v >= 0 && v <= 255, "Must be in between 0 or 255");
+```
+
 ## License
 
 This library is licensed under the MIT license. See [LICENSE](./LICENSE).
