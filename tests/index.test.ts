@@ -973,6 +973,12 @@ describe("union()", () => {
     expect(() => t.parse(1)).to.throw(v.ValitaError);
     expectType(t).toImply<string>(true);
   });
+  it("is optional if any argument is optional", () => {
+    const t = v.object({
+      a: v.union(v.string().optional(), v.number()),
+    });
+    expectType(t).toImply<{ a?: string | number | undefined }>(true);
+  });
   it("picks the first successful parse", () => {
     const t = v.union(
       v
