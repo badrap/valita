@@ -315,10 +315,11 @@ abstract class Type<
     return f;
   }
 
-  parse<This extends this>(
+  parse<T extends Type>(
+    this: T,
     v: unknown,
     options?: Partial<ParseOptions>
-  ): Type.SomethingOutputOf<This> {
+  ): Infer<T> {
     let mode: FuncMode = FuncMode.PASS;
     if (options && options.mode === "strict") {
       mode = FuncMode.STRICT;
@@ -328,9 +329,9 @@ abstract class Type<
 
     const r = this.func(v, mode);
     if (r === true) {
-      return v as Type.SomethingOutputOf<This>;
+      return v as Infer<T>;
     } else if (r.code === "ok") {
-      return r.value as Type.SomethingOutputOf<This>;
+      return r.value as Infer<T>;
     } else {
       throw new ValitaError(r);
     }
