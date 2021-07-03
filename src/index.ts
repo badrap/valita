@@ -299,7 +299,7 @@ abstract class Type<Output = unknown> {
   }
 
   optional(): Type<Output | undefined> & Optional {
-    return new OptionalType(this) as any;
+    return new OptionalType(this) as OptionalType<Output> & Optional;
   }
 
   default<T extends Literal>(defaultValue: T): DefaultOutput<Output, T>;
@@ -308,9 +308,9 @@ abstract class Type<Output = unknown> {
     this: This,
     defaultValue: T
   ): DefaultOutput<Output, T> {
-    return (this.optional().map((v) =>
+    return this.optional().map((v) =>
       v === undefined ? defaultValue : v
-    ) as unknown) as DefaultOutput<Output, T>;
+    ) as unknown as DefaultOutput<Output, T>;
   }
 
   assert<T extends Output>(
@@ -627,9 +627,7 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
   return result;
 }
 
-function createObjectMatchers(
-  t: { root: Type; terminal: TerminalType }[]
-): {
+function createObjectMatchers(t: { root: Type; terminal: TerminalType }[]): {
   key: string;
   optional?: Type;
   matcher: (
@@ -1083,7 +1081,7 @@ function object<T extends Record<string, Type>>(
   return new ObjectType(obj, undefined);
 }
 function record<T extends Type>(valueType: T): Type<Record<string, Infer<T>>> {
-  return new ObjectType({} as Record<string, never>, valueType) as any;
+  return new ObjectType({} as Record<string, never>, valueType);
 }
 function array<T extends Type>(item: T): ArrayType<[], T> {
   return new ArrayType([], item);
