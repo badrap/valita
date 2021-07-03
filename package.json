@@ -30,6 +30,9 @@
     "build:node-cjs": "tsc -p ./tsconfig.build.json --target es2019 --module commonjs --outDir ./dist/node-cjs && echo '{\"type\": \"commonjs\"}' > ./dist/node-cjs/package.json",
     "prepack": "npm run build"
   },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
   "devDependencies": {
     "@types/chai": "^4.2.19",
     "@types/mocha": "^8.2.2",
