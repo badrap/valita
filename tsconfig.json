@@ -5,7 +5,8 @@
     "strict": true,
     "noImplicitReturns": true,
     "moduleResolution": "node",
-    "outDir": "./dist/main"
+    "outDir": "./dist/main",
+    "isolatedModules": true
   },
   "include": ["src/**/*", "tests/**/*"]
 }
