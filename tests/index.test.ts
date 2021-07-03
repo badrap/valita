@@ -22,6 +22,11 @@ function expectType<T extends v.Type>(
 
 describe("Type", () => {
   describe("parse", () => {
+    it("returns T when called for v.Type<T>", () => {
+      function _<T>(type: v.Type<T>, value: unknown): T {
+        return type.parse(value);
+      }
+    });
     it("returns type v.Infer<...>", () => {
       function _<T extends v.Type>(type: T, value: unknown): v.Infer<T> {
         return type.parse(value);
