@@ -140,8 +140,12 @@ describe("Type", () => {
   });
   describe("map", () => {
     it("changes the output type to the function's return type", () => {
-      const t = v.number().map(() => "test");
+      const t = v.number().map(String);
       expectType(t).toImply<string>(true);
+    });
+    it("infers literals when possible", () => {
+      const t = v.number().map(() => "test");
+      expectType(t).toImply<"test">(true);
     });
     it("passes in the parsed value", () => {
       let value: unknown;
@@ -163,8 +167,12 @@ describe("Type", () => {
   });
   describe("chain", () => {
     it("changes the output type to the function's return type", () => {
-      const t = v.number().chain(() => v.ok("test"));
+      const t = v.number().chain((n) => v.ok(String(n)));
       expectType(t).toImply<string>(true);
+    });
+    it("infers literals when possible", () => {
+      const t = v.number().chain(() => ({ ok: true, value: "test" }));
+      expectType(t).toImply<"test">(true);
     });
     it("passes in the parsed value", () => {
       let value: unknown;
@@ -262,7 +270,7 @@ describe("Type", () => {
           .optional(),
       });
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
-      expectType(t).toImply<{ a?: number | undefined }>(true);
+      expectType(t).toImply<{ a?: 1 | undefined }>(true);
     });
     it("short-circuits undefined()", () => {
       const t = v.object({
@@ -272,7 +280,7 @@ describe("Type", () => {
           .optional(),
       });
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
-      expectType(t).toImply<{ a?: number | undefined }>(true);
+      expectType(t).toImply<{ a?: 1 | undefined }>(true);
     });
     it("passes undefined to assert() for missing values", () => {
       let value: unknown = null;
@@ -1264,6 +1272,13 @@ describe("union()", () => {
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0].code", "invalid_union");
     });
+  });
+});
+
+describe("ok()", () => {
+  it("infers literals when possible", () => {
+    const t = v.number().chain(() => v.ok("test"));
+    expectType(t).toImply<"test">(true);
   });
 });
 

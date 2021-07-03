@@ -240,6 +240,8 @@ type ChainResult<T> =
       error?: CustomError;
     };
 
+function ok<T extends Literal>(value: T): { ok: true; value: T };
+function ok<T>(value: T): { ok: true; value: T };
 function ok<T>(value: T): { ok: true; value: T } {
   return { ok: true, value };
 }
@@ -316,6 +318,8 @@ abstract class Type<Output = unknown, Optional extends boolean = boolean> {
     return new TransformType(this, (v) => (func(v as Output) ? true : err));
   }
 
+  map<T extends Literal>(func: (v: Output) => T): Type<T, false>;
+  map<T>(func: (v: Output) => T): Type<T, false>;
   map<T>(func: (v: Output) => T): Type<T, false> {
     return new TransformType(this, (v) => ({
       code: "ok",
@@ -323,6 +327,8 @@ abstract class Type<Output = unknown, Optional extends boolean = boolean> {
     }));
   }
 
+  chain<T extends Literal>(func: (v: Output) => ChainResult<T>): Type<T, false>;
+  chain<T>(func: (v: Output) => ChainResult<T>): Type<T, false>;
   chain<T>(func: (v: Output) => ChainResult<T>): Type<T, false> {
     return new TransformType(this, (v) => {
       const r = func(v as Output);
