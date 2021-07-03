@@ -253,13 +253,16 @@ function err<E extends CustomError>(
 }
 
 type DefaultOutput<Output, DefaultValue> = Type<
-  Exclude<Output, undefined> | DefaultValue,
-  false
+  Exclude<Output, undefined> | DefaultValue
 >;
 
-abstract class Type<Output = unknown, Optional extends boolean = boolean> {
-  protected declare _type: { output: Output; optional: Optional };
+declare const isOptional: unique symbol;
+declare class Optional {
+  protected readonly [isOptional]: true;
+}
+type IfOptional<T extends Type, Then, Else> = T extends Optional ? Then : Else;
 
+abstract class Type<Output = unknown> {
   abstract readonly name: string;
   abstract genFunc(): Func<Output>;
   abstract toTerminals(into: TerminalType[]): void;
@@ -295,8 +298,8 @@ abstract class Type<Output = unknown, Optional extends boolean = boolean> {
     }
   }
 
-  optional(): Type<Output | undefined, true> {
-    return new OptionalType(this);
+  optional(): Type<Output | undefined> & Optional {
+    return new OptionalType(this) as any;
   }
 
   default<T extends Literal>(defaultValue: T): DefaultOutput<Output, T>;
@@ -313,23 +316,23 @@ abstract class Type<Output = unknown, Optional extends boolean = boolean> {
   assert<T extends Output>(
     func: ((v: Output) => v is T) | ((v: Output) => boolean),
     error?: CustomError
-  ): Type<T, false> {
+  ): Type<T> {
     const err: Issue = { code: "custom_error", error };
     return new TransformType(this, (v) => (func(v as Output) ? true : err));
   }
 
-  map<T extends Literal>(func: (v: Output) => T): Type<T, false>;
-  map<T>(func: (v: Output) => T): Type<T, false>;
-  map<T>(func: (v: Output) => T): Type<T, false> {
+  map<T extends Literal>(func: (v: Output) => T): Type<T>;
+  map<T>(func: (v: Output) => T): Type<T>;
+  map<T>(func: (v: Output) => T): Type<T> {
     return new TransformType(this, (v) => ({
       code: "ok",
       value: func(v as Output),
     }));
   }
 
-  chain<T extends Literal>(func: (v: Output) => ChainResult<T>): Type<T, false>;
-  chain<T>(func: (v: Output) => ChainResult<T>): Type<T, false>;
-  chain<T>(func: (v: Output) => ChainResult<T>): Type<T, false> {
+  chain<T extends Literal>(func: (v: Output) => ChainResult<T>): Type<T>;
+  chain<T>(func: (v: Output) => ChainResult<T>): Type<T>;
+  chain<T>(func: (v: Output) => ChainResult<T>): Type<T> {
     return new TransformType(this, (v) => {
       const r = func(v as Output);
       if (r.ok) {
@@ -346,7 +349,7 @@ export type Infer<T extends Type> = T extends Type<infer I> ? I : never;
 type ObjectShape = Record<string, Type>;
 
 type Optionals<T extends ObjectShape> = {
-  [K in keyof T]: Type<never, true> extends T[K] ? K : never;
+  [K in keyof T]: IfOptional<T[K], K, never>;
 }[keyof T];
 
 type ObjectOutput<
@@ -365,7 +368,7 @@ type ObjectOutput<
 class ObjectType<
   Shape extends ObjectShape = ObjectShape,
   Rest extends Type | undefined = Type | undefined
-> extends Type<ObjectOutput<Shape, Rest>, false> {
+> extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
   constructor(
@@ -523,7 +526,7 @@ type ArrayOutput<Head extends Type[], Rest extends Type | undefined> = [
 class ArrayType<
   Head extends Type[] = Type[],
   Rest extends Type | undefined = Type | undefined
-> extends Type<ArrayOutput<Head, Rest>, false> {
+> extends Type<ArrayOutput<Head, Rest>> {
   readonly name = "array";
 
   constructor(readonly head: Head, readonly rest?: Rest) {
@@ -848,14 +851,7 @@ function flatten(
   return result;
 }
 
-class UnionType<T extends Type[] = Type[]> extends Type<
-  Infer<T[number]>,
-  true extends {
-    [K in keyof T]: T extends Type<never, infer I> ? I : never;
-  }[number]
-    ? true
-    : false
-> {
+class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
 
   constructor(readonly options: T) {
@@ -892,7 +888,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<
   }
 }
 
-class NeverType extends Type<never, false> {
+class NeverType extends Type<never> {
   readonly name = "never";
   genFunc(): Func<never> {
     const issue: Issue = { code: "invalid_type", expected: [] };
@@ -902,7 +898,7 @@ class NeverType extends Type<never, false> {
     into.push(this);
   }
 }
-class UnknownType extends Type<unknown, false> {
+class UnknownType extends Type<unknown> {
   readonly name = "unknown";
   genFunc(): Func<unknown> {
     return (_v, _mode) => true;
@@ -911,7 +907,7 @@ class UnknownType extends Type<unknown, false> {
     into.push(this);
   }
 }
-class NumberType extends Type<number, false> {
+class NumberType extends Type<number> {
   readonly name = "number";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["number"] };
@@ -921,7 +917,7 @@ class NumberType extends Type<number, false> {
     into.push(this);
   }
 }
-class StringType extends Type<string, false> {
+class StringType extends Type<string> {
   readonly name = "string";
   genFunc(): Func<string> {
     const issue: Issue = { code: "invalid_type", expected: ["string"] };
@@ -931,7 +927,7 @@ class StringType extends Type<string, false> {
     into.push(this);
   }
 }
-class BigIntType extends Type<bigint, false> {
+class BigIntType extends Type<bigint> {
   readonly name = "bigint";
   genFunc(): Func<bigint> {
     const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
@@ -941,7 +937,7 @@ class BigIntType extends Type<bigint, false> {
     into.push(this);
   }
 }
-class BooleanType extends Type<boolean, false> {
+class BooleanType extends Type<boolean> {
   readonly name = "boolean";
   genFunc(): Func<boolean> {
     const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
@@ -951,7 +947,7 @@ class BooleanType extends Type<boolean, false> {
     into.push(this);
   }
 }
-class UndefinedType extends Type<undefined, false> {
+class UndefinedType extends Type<undefined> {
   readonly name = "undefined";
   genFunc(): Func<undefined> {
     const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
@@ -961,7 +957,7 @@ class UndefinedType extends Type<undefined, false> {
     into.push(this);
   }
 }
-class NullType extends Type<null, false> {
+class NullType extends Type<null> {
   readonly name = "null";
   genFunc(): Func<null> {
     const issue: Issue = { code: "invalid_type", expected: ["null"] };
@@ -971,7 +967,7 @@ class NullType extends Type<null, false> {
     into.push(this);
   }
 }
-class LiteralType<Out extends Literal = Literal> extends Type<Out, false> {
+class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
   constructor(readonly value: Out) {
     super();
@@ -985,7 +981,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out, false> {
     into.push(this);
   }
 }
-class OptionalType<Output = unknown> extends Type<Output | undefined, true> {
+class OptionalType<Output = unknown> extends Type<Output | undefined> {
   readonly name = "optional";
   constructor(private readonly type: Type<Output>) {
     super();
@@ -1002,7 +998,7 @@ class OptionalType<Output = unknown> extends Type<Output | undefined, true> {
     this.type.toTerminals(into);
   }
 }
-class TransformType<Output> extends Type<Output, false> {
+class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
   constructor(
     protected readonly transformed: Type,
@@ -1086,10 +1082,8 @@ function object<T extends Record<string, Type>>(
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
 }
-function record<T extends Type>(
-  valueType: T
-): Type<Record<string, Infer<T>>, false> {
-  return new ObjectType({} as Record<string, never>, valueType);
+function record<T extends Type>(valueType: T): Type<Record<string, Infer<T>>> {
+  return new ObjectType({} as Record<string, never>, valueType) as any;
 }
 function array<T extends Type>(item: T): ArrayType<[], T> {
   return new ArrayType([], item);
@@ -1102,8 +1096,11 @@ function tuple<T extends [] | [Type, ...Type[]]>(
 function literal<T extends Literal>(value: T): LiteralType<T> {
   return new LiteralType(value);
 }
-function union<T extends Type[]>(...options: T): UnionType<T> {
-  return new UnionType(options);
+function union<T extends Type[]>(
+  ...options: T
+): UnionType<T> &
+  (true extends IfOptional<T[number], true, false> ? Optional : unknown) {
+  return new UnionType(options) as UnionType<T> & Optional;
 }
 
 type TerminalType =
