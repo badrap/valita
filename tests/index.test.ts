@@ -38,6 +38,16 @@ describe("Type", () => {
       const t = v.number().assert(() => true);
       expectType(t).toImply<number>(true);
     });
+    it("turns optional input into non-optional output", () => {
+      const t = v.object({
+        a: v
+          .number()
+          .optional()
+          .assert(() => true),
+      });
+      expect(t.parse({})).to.deep.equal({ a: undefined });
+      expectType(t).toImply<{ a: number | undefined }>(true);
+    });
     it("accepts type predicates", () => {
       type Branded = number & { readonly brand: unique symbol };
       const t = v.number().assert((n): n is Branded => true);

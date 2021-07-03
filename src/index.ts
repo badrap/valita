@@ -1016,14 +1016,23 @@ class TransformType<Output> extends Type<Output, false> {
     chain.reverse();
 
     const func = next.func;
+    const undef = { code: "ok", value: undefined } as Result<unknown>;
     return (v, mode) => {
       let result = func(v, mode);
       if (result !== true && result.code !== "ok") {
         return result;
       }
 
-      let current =
-        result === true ? (v === Nothing ? undefined : v) : result.value;
+      let current: unknown;
+      if (result !== true) {
+        current = result.value;
+      } else if (v === Nothing) {
+        current = undefined;
+        result = undef;
+      } else {
+        current = v;
+      }
+
       for (let i = 0; i < chain.length; i++) {
         const r = chain[i](current, mode);
         if (r !== true) {
