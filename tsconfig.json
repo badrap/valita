@@ -6,7 +6,8 @@
     "noImplicitReturns": true,
     "moduleResolution": "node",
     "outDir": "./dist/main",
-    "isolatedModules": true
+    "isolatedModules": true,
+    "sourceMap": true
   },
   "include": ["src/**/*", "tests/**/*"]
 }
