@@ -235,126 +235,34 @@ describe("Type", () => {
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
-    it("adds undefined to output if there's nothing overlapping undefined()", () => {
+    it("adds undefined to output", () => {
       const t = v.string().optional();
       expectType(t).toImply<string | undefined>(true);
     });
     it("makes the output type optional", () => {
       const t1 = v.object({ a: v.number().optional() });
       expectType(t1).toImply<{ a?: number | undefined }>(true);
-
-      const t2 = v.object({
-        a: v
-          .undefined()
-          .map(() => 1)
-          .optional(),
-      });
-      expectType(t2).toImply<{ a?: number | undefined }>(true);
-
-      const t3 = v.object({
-        a: v
-          .unknown()
-          .map(() => 1)
-          .optional(),
-      });
-      expectType(t3).toImply<{ a?: number | undefined }>(true);
-
-      const t4 = v.object({
-        a: v
-          .union(
-            v.unknown().map(() => 1),
-            v.undefined().map(() => 2)
-          )
-          .optional(),
-      });
-      expectType(t4).toImply<{ a?: number | undefined }>(true);
     });
-    it("keeps the output type if there's something overlapping undefined() and accepting missing values", () => {
-      const t1 = v.object({
-        a: v
-          .union(
-            v
-              .string()
-              .optional()
-              .map(() => 1),
-            v.undefined().map(() => 2)
-          )
-          .optional(),
-      });
-      expectType(t1).toImply<{ a: number }>(true);
-
-      const t2 = v.object({
-        a: v
-          .union(
-            v
-              .string()
-              .optional()
-              .map(() => 1),
-            v.unknown().map(() => 2)
-          )
-          .optional(),
-      });
-      expectType(t2).toImply<{ a: number }>(true);
-
-      const t3 = v.object({
-        a: v
-          .union(
-            v
-              .string()
-              .optional()
-              .map(() => 1),
-            v.undefined().map(() => 2),
-            v.unknown().map(() => 3)
-          )
-          .optional(),
-      });
-      expectType(t3).toImply<{ a: number }>(true);
-    });
-    it("won't short-circuit unknown()", () => {
+    it("short-circuits previous optionals", () => {
       const t = v.object({
-        missing: v
-          .undefined()
-          .assert(() => false, "test")
-          .optional(),
-      });
-      expect(() => t.parse({ missing: undefined }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          error: "test",
-        });
-    });
-    it("won't short-circuit undefined()", () => {
-      const t = v.object({
-        missing: v
-          .undefined()
-          .assert(() => false, "test")
-          .optional(),
-      });
-      expect(() => t.parse({ missing: undefined }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          error: "test",
-        });
-    });
-    it("won't short-circuit optional()", () => {
-      const t = v.object({
-        missing: v
+        a: v
           .string()
           .optional()
-          .assert(() => false, "test")
+          .map(() => 1)
           .optional(),
       });
-      expect(() => t.parse({}))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          error: "test",
-        });
+      expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
+      expectType(t).toImply<{ a?: number | undefined }>(true);
+    });
+    it("short-circuits undefined()", () => {
+      const t = v.object({
+        a: v
+          .undefined()
+          .map(() => 1)
+          .optional(),
+      });
+      expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
+      expectType(t).toImply<{ a?: number | undefined }>(true);
     });
     it("passes undefined to assert() for missing values", () => {
       let value: unknown = null;

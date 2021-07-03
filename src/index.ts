@@ -250,63 +250,19 @@ function err<E extends CustomError>(
   return { ok: false, error };
 }
 
-declare namespace Type {
-  type InputFlags =
-    | "accepts_something"
-    | "accepts_undefined"
-    | "accepts_nothing";
-  type OutputFlags = "outputs_something" | "outputs_nothing";
-  type InputFlagsOf<T> = T extends Type<unknown, unknown, infer I, OutputFlags>
-    ? I
-    : never;
-  type OutputFlagsOf<T> = T extends Type<unknown, unknown, InputFlags, infer I>
-    ? I
-    : never;
-  type SomethingOutputOf<T extends Type> = T extends Type<infer I, unknown>
-    ? I
-    : never;
-  type NothingOutputOf<T extends Type> = T extends Type<unknown, infer I>
-    ? I
-    : never;
-}
-
-type DefaultOutput<T extends Type, DefaultValue> = Type<
-  undefined extends
-    | Type.SomethingOutputOf<T>
-    | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined)
-    ? DefaultValue | Exclude<Type.SomethingOutputOf<T>, undefined>
-    : Type.SomethingOutputOf<T>,
-  undefined extends
-    | Type.NothingOutputOf<T>
-    | ("accepts_nothing" extends Type.InputFlagsOf<T> ? never : undefined)
-    | ("outputs_nothing" extends Type.OutputFlagsOf<T> ? undefined : never)
-    ? DefaultValue | Exclude<Type.NothingOutputOf<T>, undefined>
-    : Type.NothingOutputOf<T>,
-  | "accepts_nothing"
-  | "accepts_undefined"
-  | "accepts_something"
-  | Type.InputFlagsOf<T>,
-  Exclude<Type.OutputFlagsOf<T>, "outputs_nothing"> | "outputs_something"
+type DefaultOutput<Output, DefaultValue> = Type<
+  Exclude<Output, undefined> | DefaultValue,
+  false
 >;
 
-abstract class Type<
-  SomethingOutput = unknown,
-  NothingOutput = unknown,
-  InputFlags extends Type.InputFlags = Type.InputFlags,
-  OutputFlags extends Type.OutputFlags = Type.OutputFlags
-> {
-  protected declare _types: {
-    somethingOutput: SomethingOutput;
-    nothingOutput: NothingOutput;
-    inputFlags: InputFlags;
-    outputFlags: OutputFlags;
-  };
+abstract class Type<Output = unknown, Optional extends boolean = boolean> {
+  protected declare _type: { output: Output; optional: Optional };
 
   abstract readonly name: string;
-  abstract genFunc(): Func<SomethingOutput | NothingOutput>;
+  abstract genFunc(): Func<Output>;
   abstract toTerminals(into: TerminalType[]): void;
 
-  get func(): Func<SomethingOutput | NothingOutput> {
+  get func(): Func<Output> {
     const f = this.genFunc();
     Object.defineProperty(this, "func", {
       value: f,
@@ -337,64 +293,39 @@ abstract class Type<
     }
   }
 
-  optional<This extends this>(this: This): OptionalType<This> {
+  optional(): Type<Output | undefined, true> {
     return new OptionalType(this);
   }
 
-  default<T extends Literal, This extends this>(
-    this: This,
-    defaultValue: T
-  ): DefaultOutput<This, T>;
+  default<T extends Literal>(defaultValue: T): DefaultOutput<Output, T>;
+  default<T>(defaultValue: T): DefaultOutput<Output, T>;
   default<T, This extends this>(
     this: This,
     defaultValue: T
-  ): DefaultOutput<This, T>;
-  default<T, This extends this>(
-    this: This,
-    defaultValue: T
-  ): DefaultOutput<This, T> {
+  ): DefaultOutput<Output, T> {
     return (this.optional().map((v) =>
       v === undefined ? defaultValue : v
-    ) as unknown) as DefaultOutput<This, T>;
+    ) as unknown) as DefaultOutput<Output, T>;
   }
 
-  assert<T extends SomethingOutput | NothingOutput, This extends this = this>(
-    this: This,
-    func:
-      | ((v: SomethingOutput | NothingOutput) => v is T)
-      | ((v: SomethingOutput | NothingOutput) => boolean),
+  assert<T extends Output>(
+    func: ((v: Output) => v is T) | ((v: Output) => boolean),
     error?: CustomError
-  ): TransformType<This, T, OutputFlags> {
-    const err = { code: "custom_error", error } as const;
-    return new TransformType(this, (v) =>
-      func(v as SomethingOutput | NothingOutput) ? true : err
-    );
+  ): Type<T, false> {
+    const err: Issue = { code: "custom_error", error };
+    return new TransformType(this, (v) => (func(v as Output) ? true : err));
   }
 
-  map<T, This extends this>(
-    this: This,
-    func: (v: SomethingOutput | NothingOutput) => T
-  ): TransformType<
-    This,
-    T,
-    Exclude<OutputFlags, "outputs_nothing"> | "outputs_something"
-  > {
+  map<T>(func: (v: Output) => T): Type<T, false> {
     return new TransformType(this, (v) => ({
       code: "ok",
-      value: func(v as SomethingOutput | NothingOutput),
+      value: func(v as Output),
     }));
   }
 
-  chain<T, This extends this>(
-    this: This,
-    func: (v: SomethingOutput | NothingOutput) => ChainResult<T>
-  ): TransformType<
-    This,
-    T,
-    Exclude<OutputFlags, "outputs_nothing"> | "outputs_something"
-  > {
+  chain<T>(func: (v: Output) => ChainResult<T>): Type<T, false> {
     return new TransformType(this, (v) => {
-      const r = func(v as SomethingOutput | NothingOutput);
+      const r = func(v as Output);
       if (r.ok) {
         return { code: "ok", value: r.value };
       } else {
@@ -404,42 +335,31 @@ abstract class Type<
   }
 }
 
-type Optionals<T extends Record<string, Type>> = {
-  [K in keyof T]:
-    | "outputs_nothing"
-    | "outputs_something" extends Type.OutputFlagsOf<T[K]>
-    ? K
-    : never;
-}[keyof T];
+export type Infer<T extends Type> = T extends Type<infer I> ? I : never;
 
 type ObjectShape = Record<string, Type>;
+
+type Optionals<T extends ObjectShape> = {
+  [K in keyof T]: Type<never, true> extends T[K] ? K : never;
+}[keyof T];
 
 type ObjectOutput<
   T extends ObjectShape,
   R extends Type | undefined
 > = PrettyIntersection<
   {
-    [K in Optionals<T>]?:
-      | Type.SomethingOutputOf<T[K]>
-      | Type.NothingOutputOf<T[K]>;
+    [K in Optionals<T>]?: Infer<T[K]>;
   } &
     {
-      [K in Exclude<keyof T, Optionals<T>>]:
-        | Type.SomethingOutputOf<T[K]>
-        | Type.NothingOutputOf<T[K]>;
+      [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]>;
     } &
-    (R extends Type ? { [K: string]: Type.SomethingOutputOf<R> } : unknown)
+    (R extends Type<infer I> ? { [K: string]: I } : unknown)
 >;
 
 class ObjectType<
   Shape extends ObjectShape = ObjectShape,
   Rest extends Type | undefined = Type | undefined
-> extends Type<
-  ObjectOutput<Shape, Rest>,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+> extends Type<ObjectOutput<Shape, Rest>, false> {
   readonly name = "object";
 
   constructor(
@@ -454,7 +374,7 @@ class ObjectType<
   }
 
   toTerminals(into: TerminalType[]): void {
-    into.push(this);
+    into.push(this as ObjectType);
   }
 
   check(
@@ -487,7 +407,7 @@ class ObjectType<
       funcs.push(shape[key].func);
       knownKeys[key] = true;
 
-      const isRequired = !hasTerminal(shape[key], "nothing");
+      const isRequired = !hasTerminal(shape[key], "optional");
       required.push(isRequired);
       if (isRequired) {
         shapeTemplate[key] = undefined;
@@ -591,18 +511,13 @@ type TupleOutput<T extends Type[]> = {
 
 type ArrayOutput<Head extends Type[], Rest extends Type | undefined> = [
   ...TupleOutput<Head>,
-  ...(Rest extends Type ? Type.SomethingOutputOf<Rest>[] : [])
+  ...(Rest extends Type ? Infer<Rest>[] : [])
 ];
 
 class ArrayType<
   Head extends Type[] = Type[],
   Rest extends Type | undefined = Type | undefined
-> extends Type<
-  ArrayOutput<Head, Rest>,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+> extends Type<ArrayOutput<Head, Rest>, false> {
   readonly name = "array";
 
   constructor(readonly head: Head, readonly rest?: Rest) {
@@ -707,7 +622,7 @@ function createObjectMatchers(
   t: { root: Type; terminal: TerminalType }[]
 ): {
   key: string;
-  nothing?: Type;
+  optional?: Type;
   matcher: (
     rootValue: unknown,
     value: unknown,
@@ -728,7 +643,7 @@ function createObjectMatchers(
   const discriminants = common.filter((key) => {
     const types = new Map<BaseType, number[]>();
     const literals = new Map<unknown, number[]>();
-    let nothings = [] as number[];
+    let optionals = [] as number[];
     let unknowns = [] as number[];
     for (let i = 0; i < shapes.length; i++) {
       const shape = shapes[i];
@@ -739,8 +654,8 @@ function createObjectMatchers(
           // skip
         } else if (terminal.name === "unknown") {
           unknowns.push(i);
-        } else if (terminal.name === "nothing") {
-          nothings.push(i);
+        } else if (terminal.name === "optional") {
+          optionals.push(i);
         } else if (terminal.name === "literal") {
           const options = literals.get(terminal.value) || [];
           options.push(i);
@@ -752,8 +667,8 @@ function createObjectMatchers(
         }
       }
     }
-    nothings = dedup(nothings);
-    if (nothings.length > 1) {
+    optionals = dedup(optionals);
+    if (optionals.length > 1) {
       return false;
     }
     unknowns = dedup(unknowns);
@@ -787,17 +702,17 @@ function createObjectMatchers(
         type: terminal.shape[key],
       }))
     );
-    let nothing: Type | undefined = undefined;
+    let optional: Type | undefined = undefined;
     for (let i = 0; i < flattened.length; i++) {
       const { root, terminal } = flattened[i];
-      if (terminal.name === "nothing") {
-        nothing = root;
+      if (terminal.name === "optional") {
+        optional = root;
         break;
       }
     }
     return {
       key,
-      nothing,
+      optional,
       matcher: createUnionMatcher(flattened, [key]),
     };
   });
@@ -819,12 +734,12 @@ function createUnionMatcher(
   const literals = new Map<unknown, Type[]>();
   const types = new Map<BaseType, Type[]>();
   let unknowns = [] as Type[];
-  let nothings = [] as Type[];
+  let optionals = [] as Type[];
   t.forEach(({ root, terminal }) => {
     if (terminal.name === "never") {
       // skip
-    } else if (terminal.name === "nothing") {
-      nothings.push(root);
+    } else if (terminal.name === "optional") {
+      optionals.push(root);
     } else if (terminal.name === "unknown") {
       unknowns.push(root);
     } else if (terminal.name === "literal") {
@@ -849,7 +764,7 @@ function createUnionMatcher(
   });
 
   unknowns = dedup(unknowns).sort(byOrder);
-  nothings = dedup(nothings).sort(byOrder);
+  optionals = dedup(optionals).sort(byOrder);
   types.forEach((roots, type) =>
     types.set(type, dedup(roots.concat(unknowns).sort(byOrder)))
   );
@@ -878,8 +793,8 @@ function createUnionMatcher(
     let issueTree: IssueTree | undefined;
 
     if (value === Nothing) {
-      for (let i = 0; i < nothings.length; i++) {
-        const r = nothings[i].func(rootValue, mode);
+      for (let i = 0; i < optionals.length; i++) {
+        const r = optionals[i].func(rootValue, mode);
         if (r === true || r.code === "ok") {
           return r;
         }
@@ -928,10 +843,12 @@ function flatten(
 }
 
 class UnionType<T extends Type[] = Type[]> extends Type<
-  Type.SomethingOutputOf<T[number]>,
-  Type.NothingOutputOf<T[number]>,
-  Type.InputFlagsOf<T[number]>,
-  Type.OutputFlagsOf<T[number]>
+  Infer<T[number]>,
+  true extends {
+    [K in keyof T]: T extends Type<never, infer I> ? I : never;
+  }[number]
+    ? true
+    : false
 > {
   readonly name = "union";
 
@@ -943,7 +860,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<
     this.options.forEach((o) => o.toTerminals(into));
   }
 
-  genFunc(): Func<Type.SomethingOutputOf<T[number]>> {
+  genFunc(): Func<Infer<T[number]>> {
     const flattened = flatten(
       this.options.map((root) => ({ root, type: root }))
     );
@@ -955,23 +872,21 @@ class UnionType<T extends Type[] = Type[]> extends Type<
         const item = objects[0];
         const value = v[item.key];
         if (value === undefined && !(item.key in v)) {
-          if (item.nothing) {
-            return item.nothing.func(Nothing, mode) as Result<
-              Type.SomethingOutputOf<T[number]>
+          if (item.optional) {
+            return item.optional.func(Nothing, mode) as Result<
+              Infer<T[number]>
             >;
           }
           return { code: "missing_key", key: item.key };
         }
-        return item.matcher(v, value, mode) as Result<
-          Type.SomethingOutputOf<T[number]>
-        >;
+        return item.matcher(v, value, mode) as Result<Infer<T[number]>>;
       }
-      return base(v, v, mode) as Result<Type.SomethingOutputOf<T[number]>>;
+      return base(v, v, mode) as Result<Infer<T[number]>>;
     };
   }
 }
 
-class NeverType extends Type<never, never, never, never> {
+class NeverType extends Type<never, false> {
   readonly name = "never";
   genFunc(): Func<never> {
     const issue: Issue = { code: "invalid_type", expected: [] };
@@ -981,27 +896,7 @@ class NeverType extends Type<never, never, never, never> {
     into.push(this);
   }
 }
-class NothingType extends Type<
-  never,
-  never,
-  "accepts_nothing",
-  "outputs_nothing"
-> {
-  readonly name = "nothing";
-  genFunc(): Func<never> {
-    const issue: Issue = { code: "invalid_type", expected: [] };
-    return (v, _mode) => (v === Nothing ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class UnknownType extends Type<
-  unknown,
-  never,
-  "accepts_undefined" | "accepts_something",
-  "outputs_something"
-> {
+class UnknownType extends Type<unknown, false> {
   readonly name = "unknown";
   genFunc(): Func<unknown> {
     return (_v, _mode) => true;
@@ -1010,12 +905,7 @@ class UnknownType extends Type<
     into.push(this);
   }
 }
-class NumberType extends Type<
-  number,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+class NumberType extends Type<number, false> {
   readonly name = "number";
   genFunc(): Func<number> {
     const issue: Issue = { code: "invalid_type", expected: ["number"] };
@@ -1025,12 +915,7 @@ class NumberType extends Type<
     into.push(this);
   }
 }
-class StringType extends Type<
-  string,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+class StringType extends Type<string, false> {
   readonly name = "string";
   genFunc(): Func<string> {
     const issue: Issue = { code: "invalid_type", expected: ["string"] };
@@ -1040,12 +925,7 @@ class StringType extends Type<
     into.push(this);
   }
 }
-class BigIntType extends Type<
-  bigint,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+class BigIntType extends Type<bigint, false> {
   readonly name = "bigint";
   genFunc(): Func<bigint> {
     const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
@@ -1055,12 +935,7 @@ class BigIntType extends Type<
     into.push(this);
   }
 }
-class BooleanType extends Type<
-  boolean,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+class BooleanType extends Type<boolean, false> {
   readonly name = "boolean";
   genFunc(): Func<boolean> {
     const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
@@ -1070,12 +945,7 @@ class BooleanType extends Type<
     into.push(this);
   }
 }
-class UndefinedType extends Type<
-  undefined,
-  never,
-  "accepts_undefined" | "accepts_something",
-  "outputs_something"
-> {
+class UndefinedType extends Type<undefined, false> {
   readonly name = "undefined";
   genFunc(): Func<undefined> {
     const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
@@ -1085,12 +955,7 @@ class UndefinedType extends Type<
     into.push(this);
   }
 }
-class NullType extends Type<
-  null,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+class NullType extends Type<null, false> {
   readonly name = "null";
   genFunc(): Func<null> {
     const issue: Issue = { code: "invalid_type", expected: ["null"] };
@@ -1100,12 +965,7 @@ class NullType extends Type<
     into.push(this);
   }
 }
-class LiteralType<Out extends Literal = Literal> extends Type<
-  Out,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+class LiteralType<Out extends Literal = Literal> extends Type<Out, false> {
   readonly name = "literal";
   constructor(readonly value: Out) {
     super();
@@ -1119,58 +979,24 @@ class LiteralType<Out extends Literal = Literal> extends Type<
     into.push(this);
   }
 }
-
-class OptionalType<T extends Type> extends Type<
-  | Type.SomethingOutputOf<T>
-  | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined),
-  | Type.NothingOutputOf<T>
-  | ("accepts_nothing" extends Type.InputFlagsOf<T> ? never : undefined),
-  | "accepts_something"
-  | "accepts_undefined"
-  | "accepts_nothing"
-  | Type.InputFlagsOf<T>,
-  | ("accepts_nothing" extends Type.InputFlagsOf<T>
-      ? Type.OutputFlagsOf<T>
-      : "outputs_nothing")
-  | ("accepts_undefined" extends Type.InputFlagsOf<T>
-      ? Type.OutputFlagsOf<T>
-      : "outputs_something")
-> {
+class OptionalType<Output = unknown> extends Type<Output | undefined, true> {
   readonly name = "optional";
-  constructor(private readonly type: T) {
+  constructor(private readonly type: Type<Output>) {
     super();
   }
-  genFunc(): Func<
-    | Type.SomethingOutputOf<T>
-    | ("accepts_undefined" extends Type.InputFlagsOf<T> ? never : undefined)
-  > {
+  genFunc(): Func<Output> {
     const func = this.type.func;
-    const hasNothing = hasTerminal(this.type, "nothing");
-    const hasUndefined = hasTerminal(this.type, "undefined");
     return (v, mode) => {
-      if (v === Nothing && !hasNothing) {
-        return true;
-      } else if (v === undefined && !hasUndefined) {
-        return true;
-      } else {
-        return func(v, mode) as Result<Type.SomethingOutputOf<T>>;
-      }
+      return v === undefined || v === Nothing ? true : func(v, mode);
     };
   }
   toTerminals(into: TerminalType[]): void {
-    into.push(nothing());
+    into.push(this);
     into.push(undefined_());
     this.type.toTerminals(into);
   }
 }
-
-class TransformType<
-  T extends Type,
-  Out,
-  OutputFlags extends Type.OutputFlags,
-  X = "accepts_something" extends Type.InputFlagsOf<T> ? Out : never,
-  Y = "accepts_nothing" extends Type.InputFlagsOf<T> ? Out : never
-> extends Type<X, Y, Type.InputFlagsOf<T>, OutputFlags> {
+class TransformType<Output> extends Type<Output, false> {
   readonly name = "transform";
   constructor(
     protected readonly transformed: Type,
@@ -1178,8 +1004,7 @@ class TransformType<
   ) {
     super();
   }
-
-  genFunc(): Func<X | Y> {
+  genFunc(): Func<Output> {
     const chain: Func<unknown>[] = [];
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -1209,7 +1034,7 @@ class TransformType<
           result = r;
         }
       }
-      return result as Result<X | Y>;
+      return result as Result<Output>;
     };
   }
   toTerminals(into: TerminalType[]): void {
@@ -1219,9 +1044,6 @@ class TransformType<
 
 function never(): NeverType {
   return new NeverType();
-}
-function nothing(): NothingType {
-  return new NothingType();
 }
 function unknown(): UnknownType {
   return new UnknownType();
@@ -1251,12 +1073,7 @@ function object<T extends Record<string, Type>>(
 }
 function record<T extends Type>(
   valueType: T
-): Type<
-  Record<string, Type.SomethingOutputOf<T>>,
-  never,
-  "accepts_something",
-  "outputs_something"
-> {
+): Type<Record<string, Infer<T>>, false> {
   return new ObjectType({} as Record<string, never>, valueType);
 }
 function array<T extends Type>(item: T): ArrayType<[], T> {
@@ -1276,7 +1093,6 @@ function union<T extends Type[]>(...options: T): UnionType<T> {
 
 type TerminalType =
   | NeverType
-  | NothingType
   | UnknownType
   | StringType
   | NumberType
@@ -1286,7 +1102,8 @@ type TerminalType =
   | NullType
   | ObjectType
   | ArrayType
-  | LiteralType;
+  | LiteralType
+  | OptionalType;
 
 export {
   never,
@@ -1307,5 +1124,4 @@ export {
   err,
 };
 
-type Infer<T extends Type> = Type.SomethingOutputOf<T>;
-export type { Infer, Type };
+export type { Type };
