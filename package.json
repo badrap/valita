@@ -2,11 +2,17 @@
   "name": "@badrap/valita",
   "version": "0.0.14",
   "description": "A validation & parsing library for TypeScript",
-  "main": "./dist/main/index.js",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/mjs/index.js",
   "types": "./dist/types/index.d.ts",
   "exports": {
-    "node": "./dist/node/index.js",
-    "default": "./dist/main/index.js"
+    "node": {
+      "module": "./dist/node-mjs/index.js",
+      "import": "./dist/node-mjs/index.js",
+      "require": "./dist/node-cjs/index.js"
+    },
+    "default": "./dist/mjs/index.js"
   },
   "sideEffects": false,
   "repository": "badrap/valita",
@@ -16,10 +22,12 @@
     "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
     "typecheck": "tsc --skipLibCheck --noEmit",
     "test": "mocha --require ts-node/register tests/**/*.test.ts",
-    "build": "rm -rf dist/* && npm run build:types && npm run build:main && npm run build:node",
+    "build": "rm -rf dist/* && npm run build:types && npm run build:cjs && npm run build:mjs && npm run build:node-mjs && npm run build:node-cjs",
     "build:types": "tsc -p ./tsconfig.build.json --emitDeclarationOnly --declaration --declarationMap --declarationDir ./dist/types",
-    "build:main": "tsc -p ./tsconfig.build.json --target es5 --outDir ./dist/main",
-    "build:node": "tsc -p ./tsconfig.build.json --target es2019 --outDir ./dist/node",
+    "build:cjs": "tsc -p ./tsconfig.build.json --target es5 --module commonjs --outDir ./dist/cjs",
+    "build:mjs": "tsc -p ./tsconfig.build.json --target es5 --module es2015 --outDir ./dist/mjs",
+    "build:node-mjs": "tsc -p ./tsconfig.build.json --target es2019 --module es2015 --outDir ./dist/node-mjs",
+    "build:node-cjs": "tsc -p ./tsconfig.build.json --target es2019 --module commonjs --outDir ./dist/node-cjs && echo '{\"type\": \"commonjs\"}' > ./dist/node-cjs/package.json",
     "prepack": "npm run build"
   },
   "devDependencies": {
