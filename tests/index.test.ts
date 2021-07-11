@@ -530,7 +530,38 @@ describe("object()", () => {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
   });
-
+  it("checks non-enumerable required keys", () => {
+    const t = v.object({ a: v.string() });
+    const o = {};
+    Object.defineProperty(o, "a", {
+      value: 1,
+      enumerable: false,
+    });
+    expect(() => t.parse(o))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_type",
+        path: ["a"],
+        expected: ["string"],
+      });
+  });
+  it("checks non-enumerable optional keys", () => {
+    const t = v.object({ a: v.string().optional() });
+    const o = {};
+    Object.defineProperty(o, "a", {
+      value: 1,
+      enumerable: false,
+    });
+    expect(() => t.parse(o))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_type",
+        path: ["a"],
+        expected: ["string"],
+      });
+  });
   it("passes through unrecognized keys by default", () => {
     const t = v.object({ a: v.number() });
     const o = t.parse({ a: 1, b: 2 });
@@ -689,6 +720,15 @@ describe("object()", () => {
     it("accepts matching unexpected key values", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
       expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
+    });
+    it("ignores non-enumerable keys", () => {
+      const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
+      const o = { a: "test" };
+      Object.defineProperty(o, "b", {
+        value: "string",
+        enumerable: false,
+      });
+      expect(t.parse(o)).to.deep.equal({ a: "test" });
     });
     it("rejects non-matching unexpected key values", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
