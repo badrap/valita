@@ -512,6 +512,24 @@ class ObjectType<
       this.restType
     );
   }
+  pick<K extends (keyof Shape)[]>(
+    ...keys: K
+  ): ObjectType<Pick<Shape, K[number]>, undefined> {
+    const shape = {} as Pick<Shape, K[number]>;
+    keys.forEach((key) => {
+      shape[key] = this.shape[key];
+    });
+    return new ObjectType(shape, undefined);
+  }
+  omit<K extends (keyof Shape)[]>(
+    ...keys: K
+  ): ObjectType<Omit<Shape, K[number]>, Rest> {
+    const shape = { ...this.shape };
+    keys.forEach((key) => {
+      delete shape[key];
+    });
+    return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
+  }
 }
 
 type TupleOutput<T extends Type[]> = {

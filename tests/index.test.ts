@@ -569,6 +569,81 @@ describe("object()", () => {
     expect(() => t.parse(i, { mode: "strict" })).to.throw(v.ValitaError);
   });
 
+  describe("omit", () => {
+    it("omits given keys", () => {
+      const t = v.object({ a: v.literal(1), b: v.literal(2) }).omit("b");
+      expectType(t).toImply<{ a: 1 }>(true);
+      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+    });
+    it("allows zero arguments", () => {
+      const t = v.object({ a: v.literal(1), b: v.literal(2) }).omit();
+      expectType(t).toImply<{ a: 1; b: 2 }>(true);
+      expect(t.parse({ a: 1, b: 2 })).to.deep.equal({ a: 1, b: 2 });
+    });
+    it("allows multiple", () => {
+      const t = v
+        .object({ a: v.literal(1), b: v.literal(2), c: v.literal(3) })
+        .omit("a", "b");
+      expectType(t).toImply<{ c: 3 }>(true);
+      expect(t.parse({ c: 3 })).to.deep.equal({ c: 3 });
+    });
+    it("keeps rest", () => {
+      const t = v
+        .object({ a: v.literal(1), b: v.literal(2) })
+        .rest(v.number())
+        .omit("b");
+      expectType(t).toImply<{ a: 1; [K: string]: number }>(true);
+      expect(t.parse({ a: 1, b: 1000 })).to.deep.equal({ a: 1, b: 1000 });
+    });
+    it("removes checks", () => {
+      const t = v
+        .object({ a: v.literal(1), b: v.literal(2) })
+        .check(() => false)
+        .omit("b");
+      expectType(t).toImply<{ a: 1 }>(true);
+      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+    });
+  });
+
+  describe("pick", () => {
+    it("omits given keys", () => {
+      const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick("a");
+      expectType(t).toImply<{ a: 1 }>(true);
+      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+    });
+    it("allows zero arguments", () => {
+      const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick();
+      // eslint-disable-next-line @typescript-eslint/ban-types
+      expectType(t).toImply<{}>(true);
+      expect(t.parse({})).to.deep.equal({});
+    });
+    it("allows multiple", () => {
+      const t = v
+        .object({ a: v.literal(1), b: v.literal(2), c: v.literal(3) })
+        .pick("a", "b");
+      expectType(t).toImply<{ a: 1; b: 2 }>(true);
+      expect(t.parse({ a: 1, b: 2 })).to.deep.equal({ a: 1, b: 2 });
+    });
+    it("removes rest", () => {
+      const t = v
+        .object({ a: v.literal(1), b: v.literal(2) })
+        .rest(v.string())
+        .pick("a");
+      expectType(t).toImply<{ a: 1 }>(true);
+      expect(() => t.parse({ a: 1, b: "test" }, { mode: "strict" })).to.throw(
+        v.ValitaError
+      );
+    });
+    it("removes checks", () => {
+      const t = v
+        .object({ a: v.literal(1), b: v.literal(2) })
+        .check(() => false)
+        .pick("a");
+      expectType(t).toImply<{ a: 1 }>(true);
+      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+    });
+  });
+
   describe("rest", () => {
     it("adds an index signature to the inferred type", () => {
       const t = v.object({ a: v.literal(1) }).rest(v.number());
