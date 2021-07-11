@@ -869,6 +869,15 @@ describe("object()", () => {
       const t = v.object({ a: v.string() }).check((v): boolean => Boolean(v));
       expectType(t).toImply<{ a: string }>(true);
     });
+    it("skips all checks if any property fails to parse", () => {
+      let didRun = false;
+      const t = v.object({ a: v.string(), b: v.number() }).check(() => {
+        didRun = true;
+        return true;
+      });
+      expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
+      expect(didRun).to.be.false;
+    });
     it("runs multiple checks in order", () => {
       const t = v
         .object({ a: v.string() })
