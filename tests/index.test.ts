@@ -577,6 +577,11 @@ describe("object()", () => {
     const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({ a: 1 });
   });
+  it("strips unrecognized keys when mode=strip and there are transformed values", () => {
+    const t = v.object({ a: v.number().map((x) => x + 1) });
+    const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
+    expect(o).to.deep.equal({ a: 2 });
+  });
   it("fails on unrecognized keys when mode=strict", () => {
     const t = v.object({ a: v.number() });
     expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
@@ -721,6 +726,21 @@ describe("object()", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
       expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
     });
+    it("returns the original object instance if possible", () => {
+      const t = v.object({ a: v.number() }).rest(v.number());
+      const o = { a: 1, b: 2 };
+      expect(t.parse(o)).to.equal(o);
+    });
+    it("returns a new object instance if the fields change", () => {
+      const t = v
+        .object({
+          a: v.number(),
+        })
+        .rest(v.number().map((x) => x));
+      const o = { a: 1, b: 2 };
+      expect(t.parse(o)).to.not.equal(o);
+    });
+
     it("ignores non-enumerable keys", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
       const o = { a: "test" };
