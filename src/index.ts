@@ -406,22 +406,21 @@ class ObjectType<
     const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
     const checks = this.checks;
 
-    const keys: string[] = [];
-    const funcs: Func<unknown>[] = [];
-    const required: boolean[] = [];
+    const required: string[] = [];
+    const optional: string[] = [];
     const knownKeys = Object.create(null);
-    const shapeTemplate = {} as Record<string, unknown>;
     for (const key in shape) {
-      keys.push(key);
-      funcs.push(shape[key].func);
-      knownKeys[key] = true;
-
-      const isRequired = !hasTerminal(shape[key], "optional");
-      required.push(isRequired);
-      if (isRequired) {
-        shapeTemplate[key] = undefined;
+      if (hasTerminal(shape[key], "optional")) {
+        optional.push(key);
+      } else {
+        required.push(key);
       }
+      knownKeys[key] = true;
     }
+
+    const keys = [...required, ...optional];
+    const funcs = keys.map((key) => shape[key].func);
+    const requiredCount = required.length;
 
     return (obj, mode) => {
       if (!isObject(obj)) {
@@ -432,25 +431,30 @@ class ObjectType<
 
       let issueTree: IssueTree | undefined = undefined;
       let output: Record<string, unknown> = obj;
+      let setKeys = false;
+      let copied = false;
       if (strict || strip || rest) {
         for (const key in obj) {
-          if (!knownKeys[key]) {
+          if (!Object.prototype.hasOwnProperty.call(knownKeys, key)) {
             if (rest) {
               const r = rest(obj[key], mode);
               if (r !== true) {
-                if (r.code === "ok") {
-                  if (output === obj) {
+                if (r.code !== "ok") {
+                  issueTree = joinIssues(prependPath(key, r), issueTree);
+                } else if (!issueTree) {
+                  if (!copied) {
                     output = { ...obj };
+                    copied = true;
                   }
                   output[key] = r.value;
-                } else {
-                  issueTree = joinIssues(prependPath(key, r), issueTree);
                 }
               }
             } else if (strict) {
               return { code: "unrecognized_key", key };
             } else if (strip) {
-              output = { ...shapeTemplate };
+              output = {};
+              setKeys = true;
+              copied = true;
               break;
             }
           }
@@ -461,44 +465,44 @@ class ObjectType<
         const key = keys[i];
 
         let value = obj[key];
+        let found = true;
         if (value === undefined && !(key in obj)) {
-          if (required[i]) {
+          if (i < requiredCount) {
             return { code: "missing_key", key };
           }
           value = Nothing;
+          found = false;
         }
+
         const r = funcs[i](value, mode);
-        if (r !== true) {
-          if (r.code === "ok") {
-            if (output === obj) {
-              output = { ...obj };
-            }
-            output[key] = r.value;
-          } else {
-            issueTree = joinIssues(prependPath(key, r), issueTree);
+        if (r === true) {
+          if (setKeys && found) {
+            output[key] = value;
           }
-        } else if (strip && output !== obj && value !== Nothing) {
-          output[key] = value;
+        } else if (r.code !== "ok") {
+          issueTree = joinIssues(prependPath(key, r), issueTree);
+        } else if (!issueTree) {
+          if (!copied) {
+            output = { ...obj };
+            copied = true;
+          }
+          output[key] = r.value;
         }
       }
 
-      if (issueTree) {
-        return issueTree;
-      }
-
-      if (checks) {
+      if (checks && !issueTree) {
         for (let i = 0; i < checks.length; i++) {
           if (!checks[i].func(output)) {
             return checks[i].issue;
           }
         }
       }
-
-      if (obj === output) {
-        return true;
-      } else {
-        return { code: "ok", value: output as ObjectOutput<Shape, Rest> };
-      }
+      return (
+        issueTree ||
+        (copied
+          ? { code: "ok", value: output as ObjectOutput<Shape, Rest> }
+          : true)
+      );
     };
   }
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
