@@ -530,6 +530,22 @@ class ObjectType<
     });
     return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
   }
+  partial(): ObjectType<
+    { [K in keyof Shape]: OptionalType<Infer<Shape[K]>> & Optional },
+    Rest extends Type<infer I> ? OptionalType<I> & Optional : undefined
+  > {
+    const shape = {} as Record<string, unknown>;
+    const rest = this.restType && this.restType.optional();
+    Object.keys(this.shape).forEach((key) => {
+      shape[key] = this.shape[key].optional();
+    });
+    return new ObjectType(
+      shape as { [K in keyof Shape]: OptionalType<Infer<Shape[K]>> & Optional },
+      rest as Rest extends Type<infer I>
+        ? OptionalType<I> & Optional
+        : undefined
+    );
+  }
 }
 
 type TupleOutput<T extends Type[]> = {
