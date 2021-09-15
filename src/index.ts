@@ -298,6 +298,10 @@ abstract class Type<Output = unknown> {
     }
   }
 
+  pass<T extends Type>(this: T, v: unknown): boolean {
+    return this.func(v, FuncMode.PASS) === true;
+  }
+
   optional(): Type<Output | undefined> & Optional {
     return new OptionalType(this) as OptionalType<Output> & Optional;
   }
