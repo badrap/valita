@@ -1088,6 +1088,26 @@ class TransformType<Output> extends Type<Output> {
     this.transformed.toTerminals(into);
   }
 }
+class LazyType<T> extends Type<T> {
+  readonly name = "lazy";
+  constructor(private readonly definer: () => Type<T>) {
+    super();
+  }
+  private get type(): Type<T> {
+    const type = this.definer();
+    Object.defineProperty(this, "type", {
+      value: type,
+      writable: false,
+    });
+    return type;
+  }
+  genFunc(): Func<T> {
+    return this.type.genFunc();
+  }
+  toTerminals(into: TerminalType[]): void {
+    this.type.toTerminals(into);
+  }
+}
 
 function never(): NeverType {
   return new NeverType();
@@ -1138,6 +1158,9 @@ function union<T extends Type[]>(
   (true extends IfOptional<T[number], true, false> ? Optional : unknown) {
   return new UnionType(options) as UnionType<T> & Optional;
 }
+function lazy<T>(definer: () => Type<T>): Type<T> {
+  return new LazyType(definer);
+}
 
 type TerminalType =
   | NeverType
@@ -1168,6 +1191,7 @@ export {
   union,
   null_ as null,
   undefined_ as undefined,
+  lazy,
   ok,
   err,
 };

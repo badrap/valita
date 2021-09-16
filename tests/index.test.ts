@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { TypeEqual } from "ts-expect";
+import { TypeEqual, TypeOf } from "ts-expect";
 import * as v from "../src";
 
 // A helper for checking whether the given validator's
@@ -16,8 +16,9 @@ function expectType<T extends v.Type>(
   _type: T
 ): {
   toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
+  toBeAssignableTo<M>(_truth: TypeOf<T, M>): void;
 } {
-  return { toImply: () => void {} };
+  return { toImply: () => void {}, toBeAssignableTo: () => void {} };
 }
 
 describe("Type", () => {
@@ -1458,6 +1459,55 @@ describe("union()", () => {
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0].code", "invalid_union");
     });
+  });
+});
+
+describe("lazy()", () => {
+  it("allows recursive type definitions", () => {
+    type T =
+      | undefined
+      | {
+          t: T;
+        };
+    const t: v.Type<T> = v.lazy(() => v.union(v.undefined(), v.object({ t })));
+    expectType(t).toImply<T>(true);
+  });
+  it("allows mutually recursive type definitions", () => {
+    type A =
+      | undefined
+      | {
+          b: B;
+        };
+    type B = undefined | A[];
+    const a: v.Type<A> = v.lazy(() => v.union(v.undefined(), v.object({ b })));
+    const b: v.Type<B> = v.lazy(() => v.union(v.undefined(), v.array(a)));
+    expectType(a).toImply<A>(true);
+    expectType(b).toImply<B>(true);
+  });
+  it("fail typecheck on conflicting return type", () => {
+    type T =
+      | undefined
+      | {
+          t: T;
+        };
+    expectType(
+      v.lazy(() => v.union(v.undefined(), v.object({ t: v.number() })))
+    ).toBeAssignableTo<v.Type<T>>(false);
+  });
+  it("parses recursively", () => {
+    type T =
+      | undefined
+      | {
+          t: T;
+        };
+    const t: v.Type<T> = v.lazy(() => v.union(v.undefined(), v.object({ t })));
+    expect(t.parse({ t: { t: { t: undefined } } })).to.deep.equal({
+      t: { t: { t: undefined } },
+    });
+    expect(() => t.parse({ t: { t: { t: 1 } } })).to.throw(
+      v.ValitaError,
+      "invalid_type at .t.t.t (expected undefined or object)"
+    );
   });
 });
 
