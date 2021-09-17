@@ -34,6 +34,18 @@ describe("Type", () => {
       }
     });
   });
+
+  describe("pass", () => {
+    it("returns true when T passes", () => {
+      const t = v.number();
+      expect(t.pass(2)).to.eq(true);
+    });
+
+    it("returns false when T fails", () => {
+      const t = v.number();
+      expect(t.pass("a")).to.eq(false);
+    });
+  });
   describe("assert", () => {
     it("passes the type through by default", () => {
       const t = v.number().assert(() => true);
