@@ -170,6 +170,46 @@ function formatIssueTree(issueTree: IssueTree): string {
   return msg;
 }
 
+export type ValitaResult<V> =
+  | Readonly<{
+      ok: true;
+      value: V;
+    }>
+  | Readonly<{
+      ok: false;
+      message: string;
+      issues: readonly Issue[];
+      throw(): never;
+    }>;
+
+class ValitaFailure {
+  readonly ok = false;
+
+  constructor(private readonly issueTree: IssueTree) {}
+
+  get issues(): readonly Issue[] {
+    const issues = collectIssues(this.issueTree);
+    Object.defineProperty(this, "issues", {
+      value: issues,
+      writable: false,
+    });
+    return issues;
+  }
+
+  get message(): string {
+    const message = formatIssueTree(this.issueTree);
+    Object.defineProperty(this, "message", {
+      value: message,
+      writable: false,
+    });
+    return message;
+  }
+
+  throw(): never {
+    throw new ValitaError(this.issueTree);
+  }
+}
+
 export class ValitaError extends Error {
   constructor(private readonly issueTree: IssueTree) {
     super(formatIssueTree(issueTree));
@@ -187,21 +227,15 @@ export class ValitaError extends Error {
   }
 }
 
-function joinIssues(left: IssueTree, right: IssueTree | undefined): IssueTree {
-  return right ? { code: "join", left, right } : left;
+function joinIssues(left: IssueTree | undefined, right: IssueTree): IssueTree {
+  return left ? { code: "join", left, right } : right;
 }
 
 function prependPath(key: Key, tree: IssueTree): IssueTree {
   return { code: "prepend", key, tree };
 }
 
-type Ok<T> =
-  | true
-  | Readonly<{
-      code: "ok";
-      value: T;
-    }>;
-type Result<T> = Ok<T> | IssueTree;
+type RawResult<T> = true | Readonly<{ code: "ok"; value: T }> | IssueTree;
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -224,7 +258,7 @@ const enum FuncMode {
   STRICT = 1,
   STRIP = 2,
 }
-type Func<T> = (v: unknown, mode: FuncMode) => Result<T>;
+type Func<T> = (v: unknown, mode: FuncMode) => RawResult<T>;
 
 type ParseOptions = {
   mode: "passthrough" | "strict" | "strip";
@@ -292,8 +326,26 @@ abstract class AbstractType<Output = unknown> {
     }
   }
 
-  pass<T extends Type>(this: T, v: unknown): boolean {
-    return this.func(v, FuncMode.PASS) === true;
+  try<T extends AbstractType>(
+    this: T,
+    v: unknown,
+    options?: Partial<ParseOptions>
+  ): ValitaResult<Infer<T>> {
+    let mode: FuncMode = FuncMode.PASS;
+    if (options && options.mode === "strict") {
+      mode = FuncMode.STRICT;
+    } else if (options && options.mode === "strip") {
+      mode = FuncMode.STRIP;
+    }
+
+    const r = this.func(v, mode);
+    if (r === true) {
+      return { ok: true, value: v as Infer<T> };
+    } else if (r.code === "ok") {
+      return { ok: true, value: r.value as Infer<T> };
+    } else {
+      return new ValitaFailure(r);
+    }
   }
 
   optional(): Optional<Output> {
@@ -378,11 +430,11 @@ class Default<Output, DefaultValue> extends Type<
   }
   genFunc(): Func<Exclude<Output, undefined> | DefaultValue> {
     const func = this.type.func;
-    const undefinedOutput: Result<DefaultValue> =
+    const undefinedOutput: RawResult<DefaultValue> =
       this.defaultValue === undefined
         ? true
         : { code: "ok", value: this.defaultValue };
-    const nothingOutput: Result<DefaultValue> = {
+    const nothingOutput: RawResult<DefaultValue> = {
       code: "ok",
       value: this.defaultValue,
     };
@@ -400,7 +452,7 @@ class Default<Output, DefaultValue> extends Type<
         ) {
           return nothingOutput;
         }
-        return result as Result<Exclude<Output, undefined>>;
+        return result as RawResult<Exclude<Output, undefined>>;
       }
     };
   }
@@ -508,7 +560,7 @@ class ObjectType<
               const r = rest(obj[key], mode);
               if (r !== true) {
                 if (r.code !== "ok") {
-                  issueTree = joinIssues(prependPath(key, r), issueTree);
+                  issueTree = joinIssues(issueTree, prependPath(key, r));
                 } else if (!issueTree) {
                   if (!copied) {
                     output = { ...obj };
@@ -548,7 +600,7 @@ class ObjectType<
             output[key] = value;
           }
         } else if (r.code !== "ok") {
-          issueTree = joinIssues(prependPath(key, r), issueTree);
+          issueTree = joinIssues(issueTree, prependPath(key, r));
         } else if (!issueTree) {
           if (!copied) {
             output = { ...obj };
@@ -675,7 +727,7 @@ class ArrayType<
             }
             output[i] = r.value;
           } else {
-            issueTree = joinIssues(prependPath(i, r), issueTree);
+            issueTree = joinIssues(issueTree, prependPath(i, r));
           }
         }
       }
@@ -740,7 +792,7 @@ function createObjectMatchers(
     rootValue: unknown,
     value: unknown,
     mode: FuncMode
-  ) => Result<unknown>;
+  ) => RawResult<unknown>;
 }[] {
   const objects: {
     root: AbstractType;
@@ -834,7 +886,7 @@ function createObjectMatchers(
 function createUnionMatcher(
   t: { root: AbstractType; terminal: TerminalType }[],
   path?: Key[]
-): (rootValue: unknown, value: unknown, mode: FuncMode) => Result<unknown> {
+): (rootValue: unknown, value: unknown, mode: FuncMode) => RawResult<unknown> {
   const order = new Map<AbstractType, number>();
   t.forEach(({ root }, i) => {
     order.set(root, order.get(root) ?? i);
@@ -911,7 +963,7 @@ function createUnionMatcher(
         if (r === true || r.code === "ok") {
           return r;
         }
-        issueTree = joinIssues(r, issueTree);
+        issueTree = joinIssues(issueTree, r);
         count++;
       }
       if (!issueTree) {
@@ -930,7 +982,7 @@ function createUnionMatcher(
       if (r === true || r.code === "ok") {
         return r;
       }
-      issueTree = joinIssues(r, issueTree);
+      issueTree = joinIssues(issueTree, r);
       count++;
     }
     if (!issueTree) {
@@ -979,15 +1031,15 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
         const value = v[item.key];
         if (value === undefined && !(item.key in v)) {
           if (item.optional) {
-            return item.optional.func(Nothing, mode) as Result<
+            return item.optional.func(Nothing, mode) as RawResult<
               Infer<T[number]>
             >;
           }
           return { code: "missing_key", key: item.key };
         }
-        return item.matcher(v, value, mode) as Result<Infer<T[number]>>;
+        return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
       }
-      return base(v, v, mode) as Result<Infer<T[number]>>;
+      return base(v, v, mode) as RawResult<Infer<T[number]>>;
     };
   }
 
@@ -1109,7 +1161,7 @@ class TransformType<Output> extends Type<Output> {
     chain.reverse();
 
     const func = next.func;
-    const undef = { code: "ok", value: undefined } as Result<unknown>;
+    const undef = { code: "ok", value: undefined } as RawResult<unknown>;
     return (v, mode) => {
       let result = func(v, mode);
       if (result !== true && result.code !== "ok") {
@@ -1136,7 +1188,7 @@ class TransformType<Output> extends Type<Output> {
           result = r;
         }
       }
-      return result as Result<Output>;
+      return result as RawResult<Output>;
     };
   }
   toTerminals(into: TerminalType[]): void {

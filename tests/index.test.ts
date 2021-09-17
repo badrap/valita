@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { TypeEqual, TypeOf } from "ts-expect";
+import { expectType as _expectType, TypeEqual, TypeOf } from "ts-expect";
 import * as v from "../src";
 
 // A helper for checking whether the given validator's
@@ -22,6 +22,53 @@ function expectType<T extends v.Type | v.Optional>(
 }
 
 describe("Type", () => {
+  describe("try", () => {
+    it("returns ValitaResult<T> when called for v.Type<T>", () => {
+      function _<T>(type: v.Type<T>, value: unknown): v.ValitaResult<T> {
+        return type.try(value);
+      }
+    });
+    it("returns type v.ValitaResult<v.Infer<...>>", () => {
+      function _<T extends v.Type>(
+        type: T,
+        value: unknown
+      ): v.ValitaResult<v.Infer<T>> {
+        return type.try(value);
+      }
+    });
+    it("returns type discriminated by .ok", () => {
+      const result = v.number().try(1);
+      if (result.ok) {
+        _expectType<TypeOf<{ value: number }, typeof result>>(true);
+        _expectType<TypeOf<{ message: string }, typeof result>>(false);
+      } else {
+        _expectType<TypeOf<{ value: number }, typeof result>>(false);
+        _expectType<TypeOf<{ message: string }, typeof result>>(true);
+      }
+    });
+    it("returns { ok: true, value: ... } on success", () => {
+      const result = v.number().try(1);
+      expect(result.ok).to.equal(true);
+      expect(result.ok && result.value).to.equal(1);
+    });
+    it("keeps the original instance for .value when possible", () => {
+      const o = {};
+      const t = v.object({});
+      const result = t.try(o);
+      expect(result.ok && result.value).to.equal(o);
+    });
+    it("creates a new instance for .value when necessary", () => {
+      const o = { a: 1 };
+      const t = v.object({});
+      const result = t.try(o, { mode: "strip" });
+      expect(result.ok && result.value).to.not.equal(o);
+    });
+    it("returns { ok: false, ... } on failure", () => {
+      const t = v.number();
+      const result = t.try("test");
+      expect(result.ok).to.equal(false);
+    });
+  });
   describe("parse", () => {
     it("returns T when called for v.Type<T>", () => {
       function _<T>(type: v.Type<T>, value: unknown): T {
@@ -32,18 +79,6 @@ describe("Type", () => {
       function _<T extends v.Type>(type: T, value: unknown): v.Infer<T> {
         return type.parse(value);
       }
-    });
-  });
-
-  describe("pass", () => {
-    it("returns true when T passes", () => {
-      const t = v.number();
-      expect(t.pass(2)).to.eq(true);
-    });
-
-    it("returns false when T fails", () => {
-      const t = v.number();
-      expect(t.pass("a")).to.eq(false);
     });
   });
   describe("assert", () => {
@@ -1510,6 +1545,72 @@ describe("ok()", () => {
   it("infers literals when possible", () => {
     const t = v.number().chain(() => v.ok("test"));
     expectType(t).toImply<"test">(true);
+  });
+});
+
+describe("ValitaResult", () => {
+  describe("issues", () => {
+    it("lists issues", () => {
+      const result = v.bigint().try("test");
+      expect(!result.ok && result.issues).to.deep.equal([
+        {
+          path: [],
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+      ]);
+    });
+    it("supports multiple issues", () => {
+      const result = v
+        .object({ a: v.bigint(), b: v.string() })
+        .try({ a: "test", b: 1 });
+      expect(!result.ok && result.issues).to.deep.equal([
+        {
+          path: ["a"],
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+        {
+          path: ["b"],
+          code: "invalid_type",
+          expected: ["string"],
+        },
+      ]);
+    });
+    it("caches the issues list", () => {
+      const result = v.bigint().try("test");
+      expect(!result.ok && result.issues).to.equal(!result.ok && result.issues);
+    });
+  });
+  describe("message", () => {
+    it("describes the issue when there's only one issue", () => {
+      const result = v.bigint().try("test");
+      expect(!result.ok && result.message).to.equal(
+        "invalid_type at . (expected bigint)"
+      );
+    });
+    it("describes the leftmost issue when there are two issues", () => {
+      const result = v.tuple([v.bigint(), v.string()]).try(["test", 1]);
+      expect(!result.ok && result.message).to.equal(
+        "invalid_type at .0 (expected bigint) (+ 1 other issue)"
+      );
+    });
+    it("describes the leftmost issue when there are more than two issues", () => {
+      const result = v
+        .tuple([v.bigint(), v.string(), v.number()])
+        .try(["test", 1, "other"]);
+      expect(!result.ok && result.message).to.equal(
+        "invalid_type at .0 (expected bigint) (+ 2 other issues)"
+      );
+    });
+  });
+  describe("throw", () => {
+    it("throws a corresponding ValitaError", () => {
+      const result = v.bigint().try("test");
+      expect(() => !result.ok && result.throw())
+        .to.throw(v.ValitaError)
+        .with.deep.property("issues", !result.ok && result.issues);
+    });
   });
 });
 
