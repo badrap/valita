@@ -12,7 +12,7 @@ import * as v from "../src";
 //  expectType(v.number()).toImply<unknown>(false);
 //  expectType(v.number()).toImply<any>(false);
 //  expectType(v.number()).toImply<never>(false);
-function expectType<T extends v.Type | v.Optional>(
+function expectType<T extends v.Type>(
   _type: T
 ): {
   toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
@@ -350,6 +350,17 @@ describe("Type", () => {
     it("removes undefined from the return type", () => {
       const t = v.union(v.string(), v.undefined()).default(2);
       expectType(t).toImply<string | 2>(true);
+    });
+    it("considers missing values undefined in object keys", () => {
+      const t = v.object({
+        a: v
+          .union(
+            v.string().optional(),
+            v.undefined().map(() => "string")
+          )
+          .default(2),
+      });
+      expectType(t).toImply<{ a: 2 | string }>(true);
     });
   });
 });
@@ -1143,6 +1154,12 @@ describe("union()", () => {
     expect(() => t.parse(1)).to.throw(v.ValitaError);
     expectType(t).toImply<string>(true);
   });
+  it("is optional if any argument is optional", () => {
+    const t = v.object({
+      a: v.union(v.string().optional(), v.number()),
+    });
+    expectType(t).toImply<{ a?: string | number | undefined }>(true);
+  });
   it("picks the first successful parse", () => {
     const t = v.union(
       v
@@ -1402,7 +1419,7 @@ describe("union()", () => {
           type: v.union(v.string(), v.union(v.string(), v.literal("test"))),
         }),
         v.object({
-          type: v.union(v.literal(2), v.undefined()),
+          type: v.union(v.literal(2).optional().optional(), v.undefined()),
           other: v.literal("test"),
         })
       );

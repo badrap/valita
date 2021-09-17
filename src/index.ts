@@ -207,13 +207,13 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function toTerminals(type: AbstractType): TerminalType[] {
+function toTerminals(type: Type): TerminalType[] {
   const result: TerminalType[] = [];
   type.toTerminals(result);
   return result;
 }
 
-function hasTerminal(type: AbstractType, name: TerminalType["name"]): boolean {
+function hasTerminal(type: Type, name: TerminalType["name"]): boolean {
   return toTerminals(type).some((t) => t.name === name);
 }
 
@@ -252,11 +252,17 @@ function err<E extends CustomError>(
   return { ok: false, error };
 }
 
-export type Infer<T extends AbstractType> = T extends AbstractType<infer I>
-  ? I
-  : never;
+type DefaultOutput<Output, DefaultValue> = Type<
+  Exclude<Output, undefined> | DefaultValue
+>;
 
-abstract class AbstractType<Output = unknown> {
+declare const isOptional: unique symbol;
+declare class Optional {
+  protected readonly [isOptional]: true;
+}
+type IfOptional<T extends Type, Then, Else> = T extends Optional ? Then : Else;
+
+abstract class Type<Output = unknown> {
   abstract readonly name: string;
   abstract genFunc(): Func<Output>;
   abstract toTerminals(into: TerminalType[]): void;
@@ -270,7 +276,7 @@ abstract class AbstractType<Output = unknown> {
     return f;
   }
 
-  parse<T extends AbstractType>(
+  parse<T extends Type>(
     this: T,
     v: unknown,
     options?: Partial<ParseOptions>
@@ -292,14 +298,19 @@ abstract class AbstractType<Output = unknown> {
     }
   }
 
-  optional(): Optional<Output> {
-    return new Optional(this);
+  optional(): Type<Output | undefined> & Optional {
+    return new OptionalType(this) as OptionalType<Output> & Optional;
   }
 
-  default<T extends Literal>(defaultValue: T): Default<Output, T>;
-  default<T>(defaultValue: T): Default<Output, T>;
-  default<T>(defaultValue: T): Default<Output, T> {
-    return new Default(this, defaultValue);
+  default<T extends Literal>(defaultValue: T): DefaultOutput<Output, T>;
+  default<T>(defaultValue: T): DefaultOutput<Output, T>;
+  default<T, This extends this>(
+    this: This,
+    defaultValue: T
+  ): DefaultOutput<Output, T> {
+    return this.optional().map((v) =>
+      v === undefined ? defaultValue : v
+    ) as unknown as DefaultOutput<Output, T>;
   }
 
   assert<T extends Output>(
@@ -333,80 +344,9 @@ abstract class AbstractType<Output = unknown> {
   }
 }
 
-declare const isOptional: unique symbol;
-type IfOptional<T extends AbstractType, Then, Else> = T extends Optional
-  ? Then
-  : Else;
+export type Infer<T extends Type> = T extends Type<infer I> ? I : never;
 
-abstract class Type<Output = unknown> extends AbstractType<Output> {
-  protected declare readonly [isOptional] = false;
-}
-
-class Optional<Output = unknown> extends AbstractType<Output | undefined> {
-  protected declare readonly [isOptional] = true;
-
-  readonly name = "optional";
-  constructor(private readonly type: AbstractType<Output>) {
-    super();
-  }
-  genFunc(): Func<Output | undefined> {
-    const func = this.type.func;
-    return (v, mode) => {
-      return v === undefined || v === Nothing ? true : func(v, mode);
-    };
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-    into.push(undefined_());
-    this.type.toTerminals(into);
-  }
-}
-
-class Default<Output, DefaultValue> extends Type<
-  Exclude<Output, undefined> | DefaultValue
-> {
-  readonly name = "default";
-  constructor(
-    private readonly type: AbstractType<Output>,
-    private readonly defaultValue: DefaultValue
-  ) {
-    super();
-  }
-  genFunc(): Func<Exclude<Output, undefined> | DefaultValue> {
-    const func = this.type.func;
-    const undefinedOutput: Result<DefaultValue> =
-      this.defaultValue === undefined
-        ? true
-        : { code: "ok", value: this.defaultValue };
-    const nothingOutput: Result<DefaultValue> = {
-      code: "ok",
-      value: this.defaultValue,
-    };
-    return (v, mode) => {
-      if (v === undefined) {
-        return undefinedOutput;
-      } else if (v === Nothing) {
-        return nothingOutput;
-      } else {
-        const result = func(v, mode);
-        if (
-          result !== true &&
-          result.code === "ok" &&
-          result.value === undefined
-        ) {
-          return nothingOutput;
-        }
-        return result as Result<Exclude<Output, undefined>>;
-      }
-    };
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this.type.optional());
-    this.type.toTerminals(into);
-  }
-}
-
-type ObjectShape = Record<string, AbstractType>;
+type ObjectShape = Record<string, Type>;
 
 type Optionals<T extends ObjectShape> = {
   [K in keyof T]: IfOptional<T[K], K, never>;
@@ -414,7 +354,7 @@ type Optionals<T extends ObjectShape> = {
 
 type ObjectOutput<
   T extends ObjectShape,
-  R extends AbstractType | undefined
+  R extends Type | undefined
 > = PrettyIntersection<
   {
     [K in Optionals<T>]?: Infer<T[K]>;
@@ -422,16 +362,12 @@ type ObjectOutput<
     {
       [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]>;
     } &
-    (R extends Type<infer I>
-      ? { [K: string]: I }
-      : R extends Optional<infer J>
-      ? Partial<{ [K: string]: J }>
-      : unknown)
+    (R extends Type<infer I> ? { [K: string]: I } : unknown)
 >;
 
 class ObjectType<
   Shape extends ObjectShape = ObjectShape,
-  Rest extends AbstractType | undefined = AbstractType | undefined
+  Rest extends Type | undefined = Type | undefined
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
@@ -599,17 +535,19 @@ class ObjectType<
     return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
   }
   partial(): ObjectType<
-    { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-    Rest extends AbstractType<infer I> ? Optional<I> : undefined
+    { [K in keyof Shape]: OptionalType<Infer<Shape[K]>> & Optional },
+    Rest extends Type<infer I> ? OptionalType<I> & Optional : undefined
   > {
     const shape = {} as Record<string, unknown>;
+    const rest = this.restType && this.restType.optional();
     Object.keys(this.shape).forEach((key) => {
       shape[key] = this.shape[key].optional();
     });
-    const rest = this.restType?.optional();
     return new ObjectType(
-      shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-      rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined
+      shape as { [K in keyof Shape]: OptionalType<Infer<Shape[K]>> & Optional },
+      rest as Rest extends Type<infer I>
+        ? OptionalType<I> & Optional
+        : undefined
     );
   }
 }
@@ -727,11 +665,9 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
   return result;
 }
 
-function createObjectMatchers(
-  t: { root: AbstractType; terminal: TerminalType }[]
-): {
+function createObjectMatchers(t: { root: Type; terminal: TerminalType }[]): {
   key: string;
-  optional?: AbstractType;
+  optional?: Type;
   matcher: (
     rootValue: unknown,
     value: unknown,
@@ -739,7 +675,7 @@ function createObjectMatchers(
   ) => Result<unknown>;
 }[] {
   const objects: {
-    root: AbstractType;
+    root: Type;
     terminal: TerminalType & { name: "object" };
   }[] = [];
   t.forEach(({ root, terminal }) => {
@@ -811,7 +747,7 @@ function createObjectMatchers(
         type: terminal.shape[key],
       }))
     );
-    let optional: AbstractType | undefined = undefined;
+    let optional: Type | undefined = undefined;
     for (let i = 0; i < flattened.length; i++) {
       const { root, terminal } = flattened[i];
       if (terminal.name === "optional") {
@@ -828,22 +764,22 @@ function createObjectMatchers(
 }
 
 function createUnionMatcher(
-  t: { root: AbstractType; terminal: TerminalType }[],
+  t: { root: Type; terminal: TerminalType }[],
   path?: Key[]
 ): (rootValue: unknown, value: unknown, mode: FuncMode) => Result<unknown> {
-  const order = new Map<AbstractType, number>();
+  const order = new Map<Type, number>();
   t.forEach(({ root }, i) => {
     order.set(root, order.get(root) ?? i);
   });
-  const byOrder = (a: AbstractType, b: AbstractType): number => {
+  const byOrder = (a: Type, b: Type): number => {
     return (order.get(a) ?? 0) - (order.get(b) ?? 0);
   };
 
   const expectedTypes = [] as BaseType[];
-  const literals = new Map<unknown, AbstractType[]>();
-  const types = new Map<BaseType, AbstractType[]>();
-  let unknowns = [] as AbstractType[];
-  let optionals = [] as AbstractType[];
+  const literals = new Map<unknown, Type[]>();
+  const types = new Map<BaseType, Type[]>();
+  let unknowns = [] as Type[];
+  let optionals = [] as Type[];
   t.forEach(({ root, terminal }) => {
     if (terminal.name === "never") {
       // skip
@@ -940,9 +876,9 @@ function createUnionMatcher(
 }
 
 function flatten(
-  t: { root: AbstractType; type: AbstractType }[]
-): { root: AbstractType; terminal: TerminalType }[] {
-  const result: { root: AbstractType; terminal: TerminalType }[] = [];
+  t: { root: Type; type: Type }[]
+): { root: Type; terminal: TerminalType }[] {
+  const result: { root: Type; terminal: TerminalType }[] = [];
   t.forEach(({ root, type }) =>
     toTerminals(type).forEach((terminal) => {
       result.push({ root, terminal });
@@ -985,10 +921,6 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
       }
       return base(v, v, mode) as Result<Infer<T[number]>>;
     };
-  }
-
-  optional(): Optional<Infer<T[number]>> {
-    return new Optional(this);
   }
 }
 
@@ -1085,10 +1017,27 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
     into.push(this);
   }
 }
+class OptionalType<Output = unknown> extends Type<Output | undefined> {
+  readonly name = "optional";
+  constructor(private readonly type: Type<Output>) {
+    super();
+  }
+  genFunc(): Func<Output> {
+    const func = this.type.func;
+    return (v, mode) => {
+      return v === undefined || v === Nothing ? true : func(v, mode);
+    };
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+    into.push(undefined_());
+    this.type.toTerminals(into);
+  }
+}
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
   constructor(
-    protected readonly transformed: AbstractType,
+    protected readonly transformed: Type,
     protected readonly transform: Func<unknown>
   ) {
     super();
@@ -1097,7 +1046,7 @@ class TransformType<Output> extends Type<Output> {
     const chain: Func<unknown>[] = [];
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
-    let next: AbstractType = this;
+    let next: Type = this;
     while (next instanceof TransformType) {
       chain.push(next.transform);
       next = next.transformed;
@@ -1184,7 +1133,7 @@ function undefined_(): UndefinedType {
 function null_(): NullType {
   return new NullType();
 }
-function object<T extends Record<string, Type | Optional>>(
+function object<T extends Record<string, Type>>(
   obj: T
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
@@ -1203,8 +1152,11 @@ function tuple<T extends [] | [Type, ...Type[]]>(
 function literal<T extends Literal>(value: T): LiteralType<T> {
   return new LiteralType(value);
 }
-function union<T extends Type[]>(...options: T): Type<Infer<T[number]>> {
-  return new UnionType(options);
+function union<T extends Type[]>(
+  ...options: T
+): UnionType<T> &
+  (true extends IfOptional<T[number], true, false> ? Optional : unknown) {
+  return new UnionType(options) as UnionType<T> & Optional;
 }
 function lazy<T>(definer: () => Type<T>): Type<T> {
   return new LazyType(definer);
@@ -1222,7 +1174,7 @@ type TerminalType =
   | ObjectType
   | ArrayType
   | LiteralType
-  | Optional;
+  | OptionalType;
 
 export {
   never,
@@ -1244,4 +1196,4 @@ export {
   err,
 };
 
-export type { Type, Optional };
+export type { Type };
