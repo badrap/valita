@@ -352,10 +352,12 @@ abstract class AbstractType<Output = unknown> {
     return new Optional(this);
   }
 
-  default<T extends Literal>(defaultValue: T): Default<Output, T>;
-  default<T>(defaultValue: T): Default<Output, T>;
-  default<T>(defaultValue: T): Default<Output, T> {
-    return new Default(this, defaultValue);
+  default<T extends Literal>(
+    defaultValue: T
+  ): Type<Exclude<Output, undefined> | T>;
+  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
+  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
+    return new DefaultType(this, defaultValue);
   }
 
   assert<T extends Output>(
@@ -413,12 +415,12 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
-    into.push(undefined_());
+    into.push(new UndefinedType());
     this.type.toTerminals(into);
   }
 }
 
-class Default<Output, DefaultValue> extends Type<
+class DefaultType<Output, DefaultValue> extends Type<
   Exclude<Output, undefined> | DefaultValue
 > {
   readonly name = "default";
@@ -1216,29 +1218,32 @@ class LazyType<T> extends Type<T> {
   }
 }
 
-function never(): NeverType {
+function never(): Type<never> {
   return new NeverType();
 }
-function unknown(): UnknownType {
+function unknown(): Type<unknown> {
   return new UnknownType();
 }
-function number(): NumberType {
+function number(): Type<number> {
   return new NumberType();
 }
-function bigint(): BigIntType {
+function bigint(): Type<bigint> {
   return new BigIntType();
 }
-function string(): StringType {
+function string(): Type<string> {
   return new StringType();
 }
-function boolean(): BooleanType {
+function boolean(): Type<boolean> {
   return new BooleanType();
 }
-function undefined_(): UndefinedType {
+function undefined_(): Type<undefined> {
   return new UndefinedType();
 }
-function null_(): NullType {
+function null_(): Type<null> {
   return new NullType();
+}
+function literal<T extends Literal>(value: T): Type<T> {
+  return new LiteralType(value);
 }
 function object<T extends Record<string, Type | Optional>>(
   obj: T
@@ -1255,9 +1260,6 @@ function tuple<T extends [] | [Type, ...Type[]]>(
   items: T
 ): ArrayType<T, undefined> {
   return new ArrayType(items);
-}
-function literal<T extends Literal>(value: T): LiteralType<T> {
-  return new LiteralType(value);
 }
 function union<T extends Type[]>(...options: T): Type<Infer<T[number]>> {
   return new UnionType(options);
@@ -1301,3 +1303,4 @@ export {
 };
 
 export type { Type, Optional };
+export type { ObjectType, UnionType, ArrayType };
