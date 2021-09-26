@@ -11,7 +11,8 @@ type BaseType =
   | "string"
   | "number"
   | "bigint"
-  | "boolean";
+  | "boolean"
+  | "scalar";
 
 type I<Code, Extra = unknown> = Readonly<
   PrettyIntersection<
@@ -1089,6 +1090,17 @@ class StringType extends Type<string> {
     into.push(this);
   }
 }
+
+class Scalar<T> extends Type<T> {
+  readonly name = "scalar";
+  genFunc(): Func<T> {
+    return (_, _mode) => true;
+  }
+  toTerminals(into: TerminalType[]): void {
+    into.push(this);
+  }
+}
+
 class BigIntType extends Type<bigint> {
   readonly name = "bigint";
   genFunc(): Func<bigint> {
@@ -1233,6 +1245,11 @@ function bigint(): Type<bigint> {
 function string(): Type<string> {
   return new StringType();
 }
+
+function scalar<T = unknown>(): Type<T> {
+  return new Scalar<T>();
+}
+
 function boolean(): Type<boolean> {
   return new BooleanType();
 }
@@ -1280,7 +1297,8 @@ type TerminalType =
   | ObjectType
   | ArrayType
   | LiteralType
-  | Optional;
+  | Optional
+  | Scalar<unknown>;
 
 export {
   never,
@@ -1297,6 +1315,7 @@ export {
   union,
   null_ as null,
   undefined_ as undefined,
+  scalar,
   lazy,
   ok,
   err,

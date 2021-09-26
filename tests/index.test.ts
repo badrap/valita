@@ -453,6 +453,58 @@ describe("string()", () => {
   });
 });
 
+describe("scalar()", () => {
+
+  it("accepts generics", () => {
+    const aScalar = v.scalar<string & { __scalar: unknown }>();
+    const a = "a";
+
+    const scalarValue = aScalar.parse(a);
+
+    const assignValue: { __scalar: unknown } = scalarValue;
+    const inferedType: v.Infer<typeof aScalar> = scalarValue;
+
+    expect(inferedType).equal(assignValue);
+    expect(inferedType).equal(a);
+    expect(inferedType + assignValue).equal(a + a);
+  });
+
+  it("prevents compare different types", () => {
+    const aScalar = v.scalar<string & { __aScalar: unknown }>();
+    const bScalar = v.scalar<string & { __bScalar: unknown }>();
+
+    const a = "a";
+
+    const aValue: { __aScalar: unknown } = aScalar.parse(a);
+    const bValue: v.Infer<typeof bScalar> = bScalar.parse(a);
+
+    expect(aValue).equal(bValue);
+    // should be an error here
+    // expect(aValue === bValue).equal(bValue);
+  });
+
+  it("defaults to unknown", () => {
+    const scalar = v.scalar();
+    const a = "a";
+
+    // scalarValue - unknown
+    const scalarValue = scalar.parse(a);
+    expect(scalarValue).equal(a);
+  });
+
+  it("assert should validate the scalar", () => {
+    const scalar = v.scalar().assert(() => true);
+
+    expect(scalar.parse("v")).to.equal("v");
+  }); 
+
+  it("assert should throw an error", () => {
+    const scalar = v.scalar().assert(() => false, "error");
+
+    expect(() => scalar.parse("v")).to.throw("error");
+  });
+});
+
 describe("unknown()", () => {
   it("accepts anything", () => {
     const t = v.unknown();
