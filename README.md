@@ -105,7 +105,7 @@ const something = v.object({
 
 ### Optional Object Properties
 
-One common occurance when working with APIs is that some fields in an object are optional and therefore can be missing completely. Valita can
+One common occurrence when working with APIs is that some fields in an object are optional and therefore can be missing completely. Valita can skip validating those via the `.optional()` method:
 
 ```ts
 import * as v from "@badrap/valita";
@@ -174,7 +174,7 @@ const square = v.object({ type: "square" });
 const circle = v.object({ type: "circle" });
 
 // Validates either as "rectangle", "square" or "circle"
-const shape = v.union([rectangle, square, circle]);
+const shape = v.union(rectangle, square, circle);
 ```
 
 Note that although in this example all representations have a shared property `type`, it's not necessary at all. Each representation can be completely different:
@@ -182,7 +182,7 @@ Note that although in this example all representations have a shared property `t
 ```ts
 import * as v from "@badrap/valita";
 
-const primitive = v.union([v.number(), v.string(), v.boolean()]);
+const primitive = v.union(v.number(), v.string(), v.boolean());
 ```
 
 ### Literal Types
@@ -192,10 +192,10 @@ Sometimes knowing if a value is of a certain type is not enough. We can use the 
 ```js
 import * as v from "@badrap/valita";
 
-const rgb = v.union([v.literal("red"), v.literal("green"), v.literal("blue")]);
+const rgb = v.union(v.literal("red"), v.literal("green"), v.literal("blue"));
 ```
 
-We can also use this to check for concrete numbers or boolean values too:
+We can also use this to check for concrete numbers, bigint literals or boolean values too:
 
 ```ts
 import * as v from "@badrap/valita";
