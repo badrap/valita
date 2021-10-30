@@ -287,28 +287,6 @@ abstract class AbstractType<Output = unknown> {
     return f;
   }
 
-  parse<T extends AbstractType>(
-    this: T,
-    v: unknown,
-    options?: Partial<ParseOptions>
-  ): Infer<T> {
-    let mode: FuncMode = FuncMode.PASS;
-    if (options && options.mode === "strict") {
-      mode = FuncMode.STRICT;
-    } else if (options && options.mode === "strip") {
-      mode = FuncMode.STRIP;
-    }
-
-    const r = this.func(v, mode);
-    if (r === true) {
-      return v as Infer<T>;
-    } else if (r.code === "ok") {
-      return r.value as Infer<T>;
-    } else {
-      throw new ValitaError(r);
-    }
-  }
-
   try<T extends AbstractType>(
     this: T,
     v: unknown,
@@ -328,6 +306,19 @@ abstract class AbstractType<Output = unknown> {
       return { ok: true, value: r.value as Infer<T> };
     } else {
       return new Err(r);
+    }
+  }
+
+  parse<T extends AbstractType>(
+    this: T,
+    v: unknown,
+    options?: Partial<ParseOptions>
+  ): Infer<T> {
+    const r = this.try(v, options);
+    if (r.ok) {
+      return r.value;
+    } else {
+      return r.throw();
     }
   }
 
