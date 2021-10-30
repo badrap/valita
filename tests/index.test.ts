@@ -304,7 +304,7 @@ describe("Type", () => {
     });
     it("accepts the original type", () => {
       const t = v.object({
-        missing: v.string().optional(),
+        a: v.string().optional(),
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
@@ -606,10 +606,23 @@ describe("object()", () => {
         expected: ["string"],
       });
   });
-  it("passes through unrecognized keys by default", () => {
+  it("fails on unrecognized keys by default", () => {
     const t = v.object({ a: v.number() });
-    const o = t.parse({ a: 1, b: 2 });
-    expect(o).to.deep.equal({ a: 1, b: 2 });
+    expect(() => t.parse({ a: 1, b: 2 }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "unrecognized_key",
+        "issues[0].key": "b",
+      });
+  });
+  it("fails on unrecognized keys when mode=strict", () => {
+    const t = v.object({ a: v.number() });
+    expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "unrecognized_key",
+        "issues[0].key": "b",
+      });
   });
   it("passes through unrecognized keys when mode=passthrough", () => {
     const t = v.object({ a: v.number() });
@@ -625,15 +638,6 @@ describe("object()", () => {
     const t = v.object({ a: v.number().map((x) => x + 1) });
     const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({ a: 2 });
-  });
-  it("fails on unrecognized keys when mode=strict", () => {
-    const t = v.object({ a: v.number() });
-    expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
-      .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "unrecognized_key",
-        "issues[0].key": "b",
-      });
   });
   it("doesn't fail on unrecognized non-enumerable keys when mode=strict", () => {
     const o = { a: 1 };
@@ -652,10 +656,10 @@ describe("object()", () => {
   it("forwards parsing mode to nested types", () => {
     const t = v.object({ nested: v.object({ a: v.number() }) });
     const i = { nested: { a: 1, b: 2 } };
-    expect(t.parse(i)).to.equal(i);
+    expect(() => t.parse(i)).to.throw(v.ValitaError);
+    expect(() => t.parse(i, { mode: "strict" })).to.throw(v.ValitaError);
     expect(t.parse(i, { mode: "passthrough" })).to.equal(i);
     expect(t.parse(i, { mode: "strip" })).to.deep.equal({ nested: { a: 1 } });
-    expect(() => t.parse(i, { mode: "strict" })).to.throw(v.ValitaError);
   });
 
   describe("omit", () => {

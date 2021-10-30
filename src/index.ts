@@ -292,9 +292,9 @@ abstract class AbstractType<Output = unknown> {
     v: unknown,
     options?: Partial<ParseOptions>
   ): ValitaResult<Infer<T>> {
-    let mode: FuncMode = FuncMode.PASS;
-    if (options && options.mode === "strict") {
-      mode = FuncMode.STRICT;
+    let mode: FuncMode = FuncMode.STRICT;
+    if (options && options.mode === "passthrough") {
+      mode = FuncMode.PASS;
     } else if (options && options.mode === "strip") {
       mode = FuncMode.STRIP;
     }
