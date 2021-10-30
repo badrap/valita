@@ -281,6 +281,13 @@ describe("Type", () => {
         .chain((s) => v.ok(s + "c"));
       expect(t.parse("a")).to.equal("abc");
     });
+    it("works together with .try()", () => {
+      const s = v.string();
+      const t = v.unknown().chain((x) => s.try(x));
+      expectType(t).toImply<string>(true);
+      expect(t.parse("a")).to.equal("a");
+      expect(() => t.parse(1)).to.throw(v.ValitaError);
+    });
   });
   describe("optional()", () => {
     it("accepts missing values", () => {

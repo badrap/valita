@@ -44,6 +44,14 @@ type IssueTree =
   | Readonly<{ code: "join"; left: IssueTree; right: IssueTree }>
   | Issue;
 
+function joinIssues(left: IssueTree | undefined, right: IssueTree): IssueTree {
+  return left ? { code: "join", left, right } : right;
+}
+
+function prependPath(key: Key, tree: IssueTree): IssueTree {
+  return { code: "prepend", key, tree };
+}
+
 function _collectIssues(tree: IssueTree, path: Key[], issues: Issue[]): void {
   if (tree.code === "join") {
     _collectIssues(tree.left, path, issues);
@@ -170,19 +178,35 @@ function formatIssueTree(issueTree: IssueTree): string {
   return msg;
 }
 
-export type ValitaResult<V> =
-  | Readonly<{
-      ok: true;
-      value: V;
-    }>
-  | Readonly<{
-      ok: false;
-      message: string;
-      issues: readonly Issue[];
-      throw(): never;
-    }>;
+export class ValitaError extends Error {
+  constructor(private readonly issueTree: IssueTree) {
+    super(formatIssueTree(issueTree));
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = new.target.name;
+  }
 
-class ValitaFailure {
+  get issues(): readonly Issue[] {
+    const issues = collectIssues(this.issueTree);
+    Object.defineProperty(this, "issues", {
+      value: issues,
+      writable: false,
+    });
+    return issues;
+  }
+}
+
+type Ok<T> = Readonly<{
+  ok: true;
+  value: T;
+}>;
+
+function ok<T extends Literal>(value: T): Ok<T>;
+function ok<T>(value: T): Ok<T>;
+function ok<T>(value: T): Ok<T> {
+  return { ok: true, value };
+}
+
+class Err {
   readonly ok = false;
 
   constructor(private readonly issueTree: IssueTree) {}
@@ -210,30 +234,11 @@ class ValitaFailure {
   }
 }
 
-export class ValitaError extends Error {
-  constructor(private readonly issueTree: IssueTree) {
-    super(formatIssueTree(issueTree));
-    Object.setPrototypeOf(this, new.target.prototype);
-    this.name = new.target.name;
-  }
-
-  get issues(): readonly Issue[] {
-    const issues = collectIssues(this.issueTree);
-    Object.defineProperty(this, "issues", {
-      value: issues,
-      writable: false,
-    });
-    return issues;
-  }
+function err<E extends CustomError>(error?: E): Err {
+  return new Err({ code: "custom_error", error });
 }
 
-function joinIssues(left: IssueTree | undefined, right: IssueTree): IssueTree {
-  return left ? { code: "join", left, right } : right;
-}
-
-function prependPath(key: Key, tree: IssueTree): IssueTree {
-  return { code: "prepend", key, tree };
-}
+export type ValitaResult<V> = Ok<V> | Err;
 
 type RawResult<T> = true | Readonly<{ code: "ok"; value: T }> | IssueTree;
 
@@ -263,28 +268,6 @@ type Func<T> = (v: unknown, mode: FuncMode) => RawResult<T>;
 type ParseOptions = {
   mode: "passthrough" | "strict" | "strip";
 };
-
-type ChainResult<T> =
-  | {
-      ok: true;
-      value: T;
-    }
-  | {
-      ok: false;
-      error?: CustomError;
-    };
-
-function ok<T extends Literal>(value: T): { ok: true; value: T };
-function ok<T>(value: T): { ok: true; value: T };
-function ok<T>(value: T): { ok: true; value: T } {
-  return { ok: true, value };
-}
-
-function err<E extends CustomError>(
-  error?: E
-): { ok: false; error?: CustomError } {
-  return { ok: false, error };
-}
 
 export type Infer<T extends AbstractType> = T extends AbstractType<infer I>
   ? I
@@ -344,7 +327,7 @@ abstract class AbstractType<Output = unknown> {
     } else if (r.code === "ok") {
       return { ok: true, value: r.value as Infer<T> };
     } else {
-      return new ValitaFailure(r);
+      return new Err(r);
     }
   }
 
@@ -377,15 +360,15 @@ abstract class AbstractType<Output = unknown> {
     }));
   }
 
-  chain<T extends Literal>(func: (v: Output) => ChainResult<T>): Type<T>;
-  chain<T>(func: (v: Output) => ChainResult<T>): Type<T>;
-  chain<T>(func: (v: Output) => ChainResult<T>): Type<T> {
+  chain<T extends Literal>(func: (v: Output) => ValitaResult<T>): Type<T>;
+  chain<T>(func: (v: Output) => ValitaResult<T>): Type<T>;
+  chain<T>(func: (v: Output) => ValitaResult<T>): Type<T> {
     return new TransformType(this, (v) => {
       const r = func(v as Output);
       if (r.ok) {
         return { code: "ok", value: r.value };
       } else {
-        return { code: "custom_error", error: r.error };
+        return (r as unknown as { issueTree: IssueTree }).issueTree;
       }
     });
   }
