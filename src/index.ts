@@ -524,7 +524,6 @@ class ObjectType<
 
   genFunc(): Func<ObjectOutput<Shape, Rest>> {
     const shape = this.shape;
-    const rest = this.restType ? this.restType.func : undefined;
     const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
     const checks = this.checks;
 
@@ -544,42 +543,88 @@ class ObjectType<
     const funcs = keys.map((key) => shape[key].func);
     const requiredCount = required.length;
 
-    return (obj, mode) => {
-      if (!isObject(obj)) {
-        return invalidType;
-      }
-      const strict = mode === FuncMode.STRICT;
-      const strip = mode === FuncMode.STRIP;
+    if (this.restType) {
+      const rest = this.restType.func;
+      return (obj, mode) => {
+        if (!isObject(obj)) {
+          return invalidType;
+        }
 
+        let issueTree: IssueTree | undefined = undefined;
+        let output: Record<string, unknown> = obj;
+        let copied = false;
+        for (const key in obj) {
+          if (!Object.prototype.hasOwnProperty.call(knownKeys, key)) {
+            const r = rest(obj[key], mode);
+            if (r !== true) {
+              if (r.code !== "ok") {
+                issueTree = joinIssues(issueTree, prependPath(key, r));
+              } else if (!issueTree) {
+                if (!copied) {
+                  output = { ...obj };
+                  copied = true;
+                }
+                output[key] = r.value;
+              }
+            }
+          }
+        }
+
+        for (let i = 0; i < keys.length; i++) {
+          const key = keys[i];
+
+          let value = obj[key];
+          if (value === undefined && !(key in obj)) {
+            if (i < requiredCount) {
+              return { code: "missing_key", key };
+            }
+            value = Nothing;
+          }
+
+          const r = funcs[i](value, mode);
+          if (r !== true) {
+            if (r.code !== "ok") {
+              issueTree = joinIssues(issueTree, prependPath(key, r));
+            } else if (!issueTree) {
+              if (!copied) {
+                output = { ...obj };
+                copied = true;
+              }
+              output[key] = r.value;
+            }
+          }
+        }
+
+        if (checks && !issueTree) {
+          for (let i = 0; i < checks.length; i++) {
+            if (!checks[i].func(output)) {
+              return checks[i].issue;
+            }
+          }
+        }
+        return (
+          issueTree ||
+          (copied
+            ? { code: "ok", value: output as ObjectOutput<Shape, Rest> }
+            : true)
+        );
+      };
+    }
+
+    const strip = (
+      obj: Record<string, unknown>
+    ): RawResult<ObjectOutput<Shape, Rest>> => {
       let issueTree: IssueTree | undefined = undefined;
       let output: Record<string, unknown> = obj;
       let setKeys = false;
       let copied = false;
-      if (strict || strip || rest) {
-        for (const key in obj) {
-          if (!Object.prototype.hasOwnProperty.call(knownKeys, key)) {
-            if (rest) {
-              const r = rest(obj[key], mode);
-              if (r !== true) {
-                if (r.code !== "ok") {
-                  issueTree = joinIssues(issueTree, prependPath(key, r));
-                } else if (!issueTree) {
-                  if (!copied) {
-                    output = { ...obj };
-                    copied = true;
-                  }
-                  output[key] = r.value;
-                }
-              }
-            } else if (strict) {
-              return { code: "unrecognized_key", key };
-            } else if (strip) {
-              output = {};
-              setKeys = true;
-              copied = true;
-              break;
-            }
-          }
+
+      for (const key in obj) {
+        if (!Object.prototype.hasOwnProperty.call(knownKeys, key)) {
+          output = {};
+          setKeys = true;
+          copied = true;
+          break;
         }
       }
 
@@ -596,7 +641,7 @@ class ObjectType<
           found = false;
         }
 
-        const r = funcs[i](value, mode);
+        const r = funcs[i](value, FuncMode.STRIP);
         if (r === true) {
           if (setKeys && found) {
             output[key] = value;
@@ -612,19 +657,131 @@ class ObjectType<
         }
       }
 
-      if (checks && !issueTree) {
-        for (let i = 0; i < checks.length; i++) {
-          if (!checks[i].func(output)) {
-            return checks[i].issue;
-          }
-        }
-      }
       return (
         issueTree ||
         (copied
           ? { code: "ok", value: output as ObjectOutput<Shape, Rest> }
           : true)
       );
+    };
+
+    const strict = (
+      obj: Record<string, unknown>
+    ): RawResult<ObjectOutput<Shape, Rest>> => {
+      let count = 0;
+      for (const _ in obj) {
+        count++;
+      }
+
+      let issueTree: IssueTree | undefined = undefined;
+      let output: Record<string, unknown> = obj;
+      let copied = false;
+
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+
+        let value = obj[key];
+        if (value === undefined && !(key in obj)) {
+          if (i < requiredCount) {
+            return { code: "missing_key", key };
+          }
+          value = Nothing;
+        } else {
+          count--;
+        }
+
+        const r = funcs[i](value, FuncMode.STRICT);
+        if (r !== true) {
+          if (r.code !== "ok") {
+            issueTree = joinIssues(issueTree, prependPath(key, r));
+          } else if (!issueTree) {
+            if (!copied) {
+              output = { ...obj };
+              copied = true;
+            }
+            output[key] = r.value;
+          }
+        }
+      }
+
+      if (count > 0) {
+        for (const key in obj) {
+          if (!Object.prototype.hasOwnProperty.call(knownKeys, key)) {
+            return { code: "unrecognized_key", key };
+          }
+        }
+      }
+
+      return (
+        issueTree ||
+        (copied
+          ? { code: "ok", value: output as ObjectOutput<Shape, Rest> }
+          : true)
+      );
+    };
+
+    const pass = (
+      obj: Record<string, unknown>
+    ): RawResult<ObjectOutput<Shape, Rest>> => {
+      let issueTree: IssueTree | undefined = undefined;
+      let output: Record<string, unknown> = obj;
+      let copied = false;
+
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+
+        let value = obj[key];
+        if (value === undefined && !(key in obj)) {
+          if (i < requiredCount) {
+            return { code: "missing_key", key };
+          }
+          value = Nothing;
+        }
+
+        const r = funcs[i](value, FuncMode.PASS);
+        if (r !== true) {
+          if (r.code !== "ok") {
+            issueTree = joinIssues(issueTree, prependPath(key, r));
+          } else if (!issueTree) {
+            if (!copied) {
+              output = { ...obj };
+              copied = true;
+            }
+            output[key] = r.value;
+          }
+        }
+      }
+
+      return (
+        issueTree ||
+        (copied
+          ? { code: "ok", value: output as ObjectOutput<Shape, Rest> }
+          : true)
+      );
+    };
+    return (obj, mode) => {
+      if (!isObject(obj)) {
+        return invalidType;
+      }
+
+      let result: RawResult<ObjectOutput<Shape, Rest>>;
+      if (mode === FuncMode.STRICT) {
+        result = strict(obj);
+      } else if (mode === FuncMode.STRIP) {
+        result = strip(obj);
+      } else {
+        result = pass(obj);
+      }
+
+      if ((result === true || result.code === "ok") && checks) {
+        const value = result === true ? obj : result.value;
+        for (let i = 0; i < checks.length; i++) {
+          if (!checks[i].func(value)) {
+            return checks[i].issue;
+          }
+        }
+      }
+      return result;
     };
   }
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {

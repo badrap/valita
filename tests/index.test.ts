@@ -628,6 +628,15 @@ describe("object()", () => {
         "issues[0].key": "b",
       });
   });
+  it("doesn't fail on unrecognized non-enumerable keys when mode=strict", () => {
+    const o = { a: 1 };
+    Object.defineProperty(o, "b", {
+      value: 2,
+      enumerable: false,
+    });
+    const t = v.object({ a: v.number(), b: v.number() });
+    expect(t.parse(o, { mode: "strict" })).to.equal(o);
+  });
   it("keeps missing optionals missing when mode=strip", () => {
     const t = v.object({ a: v.number().optional() });
     const o = t.parse({ b: 2 }, { mode: "strip" });
