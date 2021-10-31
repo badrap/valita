@@ -450,11 +450,9 @@ type ObjectOutput<
 > = PrettyIntersection<
   {
     [K in Optionals<T>]?: Infer<T[K]>;
-  } &
-    {
-      [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]>;
-    } &
-    (R extends Type<infer I>
+  } & {
+    [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]>;
+  } & (R extends Type<infer I>
       ? { [K: string]: I }
       : R extends Optional<infer J>
       ? Partial<{ [K: string]: J }>
