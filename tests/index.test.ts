@@ -1559,6 +1559,19 @@ describe("lazy()", () => {
       "invalid_type at .t.t.t (expected undefined or object)"
     );
   });
+  it("parses recursively", () => {
+    type T = {
+      t?: T;
+    };
+    const t: v.Type<T> = v.lazy(() => v.object({ t: t.optional() }));
+    expect(t.parse({ t: { t: { t: undefined } } })).to.deep.equal({
+      t: { t: { t: undefined } },
+    });
+    expect(() => t.parse({ t: { t: { t: 1 } } })).to.throw(
+      v.ValitaError,
+      "invalid_type at .t.t.t (expected object)"
+    );
+  });
 });
 
 describe("ok()", () => {

@@ -1340,7 +1340,13 @@ class LazyType<T> extends Type<T> {
     return type;
   }
   genFunc(): Func<T> {
-    return this.type.genFunc();
+    let func: Func<T> | undefined = undefined;
+    return (v, mode) => {
+      if (!func) {
+        func = this.type.func;
+      }
+      return func(v, mode);
+    };
   }
   toTerminals(into: TerminalType[]): void {
     this.type.toTerminals(into);
