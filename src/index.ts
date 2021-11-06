@@ -1183,7 +1183,7 @@ class NeverType extends Type<never> {
   readonly name = "never";
   genFunc(): Func<never> {
     const issue: Issue = { code: "invalid_type", expected: [] };
-    return (v, _mode) => (v === Nothing ? true : issue);
+    return (_v, _mode) => issue;
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
