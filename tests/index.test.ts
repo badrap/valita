@@ -673,6 +673,33 @@ describe("object()", () => {
     const o = t.parse({ b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({});
   });
+  it("doesn't consider undefined() optional when mode=strict", () => {
+    const t = v.object({ a: v.undefined() });
+    expect(() => t.parse({}, { mode: "strict" }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "missing_key",
+        "issues[0].key": "a",
+      });
+  });
+  it("doesn't consider undefined() optional when mode=passthrough", () => {
+    const t = v.object({ a: v.undefined() });
+    expect(() => t.parse({}, { mode: "passthrough" }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "missing_key",
+        "issues[0].key": "a",
+      });
+  });
+  it("doesn't consider undefined() optional when mode=strip", () => {
+    const t = v.object({ a: v.undefined() });
+    expect(() => t.parse({}, { mode: "strip" }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "missing_key",
+        "issues[0].key": "a",
+      });
+  });
   it("forwards parsing mode to nested types", () => {
     const t = v.object({ nested: v.object({ a: v.number() }) });
     const i = { nested: { a: 1, b: 2 } };
