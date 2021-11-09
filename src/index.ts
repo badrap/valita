@@ -660,36 +660,18 @@ class ObjectType<
     ): RawResult<ObjectOutput<Shape, Rest>> => {
       let result: RawResult<Record<string, unknown>> = true;
 
-      let requiredSeen = 0;
-      let optionalSeen = 0;
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
 
-      for (const key in obj) {
-        const index = ~invertedIndexes[key];
-        if (index >= 0) {
-          if (index < requiredCount) {
-            requiredSeen++;
-          } else {
-            optionalSeen++;
+        let value: unknown = obj[key];
+        if (value === undefined && !(key in obj)) {
+          if (i < requiredCount) {
+            return { code: "missing_key", key };
           }
-
-          if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            result = addResult(
-              result,
-              funcs[index],
-              obj,
-              key,
-              obj[key],
-              FuncMode.PASS
-            );
-          }
+          value = Nothing;
         }
-      }
 
-      if (requiredSeen < requiredCount) {
-        result = checkRequired(result, obj, FuncMode.PASS);
-      }
-      if (optionalSeen < optionalCount) {
-        result = checkOptional(result, obj, FuncMode.PASS);
+        result = addResult(result, funcs[i], obj, key, value, FuncMode.PASS);
       }
       return result as RawResult<ObjectOutput<Shape, Rest>>;
     };
