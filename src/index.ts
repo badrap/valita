@@ -501,23 +501,20 @@ class ObjectType<
 
     const requiredKeys: string[] = [];
     const optionalKeys: string[] = [];
-    const requiredFuncs: Func<unknown>[] = [];
-    const optionalFuncs: Func<unknown>[] = [];
     for (const key in shape) {
       if (hasTerminal(shape[key], "optional")) {
         optionalKeys.push(key);
-        optionalFuncs.push(shape[key].func);
       } else {
         requiredKeys.push(key);
-        requiredFuncs.push(shape[key].func);
       }
     }
 
-    const requiredCount = requiredKeys.length;
-    const optionalCount = optionalKeys.length;
+    const requiredCount = requiredKeys.length | 0;
+    const optionalCount = optionalKeys.length | 0;
+    const totalCount = (requiredCount + optionalCount) | 0;
 
     const keys = [...requiredKeys, ...optionalKeys];
-    const funcs = [...requiredFuncs, ...optionalFuncs];
+    const funcs = keys.map((key) => shape[key].func);
     const invertedIndexes: Record<string, number> = Object.create(null);
     keys.forEach((key, index) => {
       invertedIndexes[key] = ~index;
@@ -570,74 +567,64 @@ class ObjectType<
       }
     };
 
-    const checkRequired = (
-      result: RawResult<Record<string, unknown>>,
+    const check = (
+      initialResult: RawResult<Record<string, unknown>>,
       obj: Record<string, unknown>,
-      mode: FuncMode
+      mode: FuncMode,
+      requiredSeen: number,
+      optionalSeen: number,
+      seenIndexes: number
     ): RawResult<Record<string, unknown>> => {
-      for (let i = 0; i < requiredKeys.length; i++) {
-        const key = requiredKeys[i];
-        if (!(key in obj)) {
-          return { code: "missing_key", key };
-        }
-        if (!Object.prototype.propertyIsEnumerable.call(obj, key)) {
-          result = addResult(
-            result,
-            requiredFuncs[i],
-            obj,
-            key,
-            obj[key],
-            mode
-          );
-        }
-      }
-      return result;
-    };
-
-    const checkOptional = (
-      result: RawResult<Record<string, unknown>>,
-      obj: Record<string, unknown>,
-      mode: FuncMode
-    ): RawResult<Record<string, unknown>> => {
-      for (let i = 0; i < optionalKeys.length; i++) {
-        const key = optionalKeys[i];
-
-        let value: unknown = Nothing;
-        if (key in obj) {
-          if (Object.prototype.propertyIsEnumerable.call(obj, key)) {
-            continue;
+      let result = initialResult;
+      const start = requiredSeen < requiredCount ? 0 : requiredCount;
+      const end = optionalSeen < optionalCount ? totalCount : requiredCount;
+      for (let i = start | 0; i < (end | 0); i = (i + 1) | 0) {
+        if (i >= 32 || !(seenIndexes & (1 << i))) {
+          const key = keys[i];
+          if (key in obj) {
+            if (
+              i < 32 ||
+              !Object.prototype.propertyIsEnumerable.call(obj, key)
+            ) {
+              result = addResult(result, funcs[i], obj, key, obj[key], mode);
+            }
+          } else if (i >= requiredCount) {
+            result = addResult(result, funcs[i], obj, key, Nothing, mode);
+          } else {
+            return { code: "missing_key", key };
           }
-          value = obj[key];
         }
-        result = addResult(result, optionalFuncs[i], obj, key, value, mode);
       }
       return result;
     };
 
     const strict = (
       obj: Record<string, unknown>
-    ): RawResult<ObjectOutput<Shape, Rest>> => {
+    ): RawResult<Record<string, unknown>> => {
       let result: RawResult<Record<string, unknown>> = true;
-
-      let requiredSeen = 0;
-      let optionalSeen = 0;
+      let requiredSeen = 0 | 0;
+      let optionalSeen = 0 | 0;
+      let seenIndexes = 0 | 0;
 
       for (const key in obj) {
-        const index = ~invertedIndexes[key];
+        const value = obj[key];
+        const index = ~invertedIndexes[key] | 0;
         if (index >= 0) {
           if (index < requiredCount) {
-            requiredSeen++;
+            requiredSeen = (requiredSeen + 1) | 0;
           } else {
-            optionalSeen++;
+            optionalSeen = (optionalSeen + 1) | 0;
           }
-
-          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          if (index < 32) {
+            seenIndexes = seenIndexes | (1 << index);
+          }
+          if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
             result = addResult(
               result,
               funcs[index],
               obj,
               key,
-              obj[key],
+              value,
               FuncMode.STRICT
             );
           }
@@ -646,18 +633,22 @@ class ObjectType<
         }
       }
 
-      if (requiredSeen < requiredCount) {
-        result = checkRequired(result, obj, FuncMode.STRICT);
+      if (requiredSeen + optionalSeen < totalCount) {
+        return check(
+          result,
+          obj,
+          FuncMode.STRICT,
+          requiredSeen,
+          optionalSeen,
+          seenIndexes
+        );
       }
-      if (optionalSeen < optionalCount) {
-        result = checkOptional(result, obj, FuncMode.STRICT);
-      }
-      return result as RawResult<ObjectOutput<Shape, Rest>>;
+      return result;
     };
 
     const pass = (
       obj: Record<string, unknown>
-    ): RawResult<ObjectOutput<Shape, Rest>> => {
+    ): RawResult<Record<string, unknown>> => {
       let result: RawResult<Record<string, unknown>> = true;
 
       for (let i = 0; i < keys.length; i++) {
@@ -673,49 +664,58 @@ class ObjectType<
 
         result = addResult(result, funcs[i], obj, key, value, FuncMode.PASS);
       }
-      return result as RawResult<ObjectOutput<Shape, Rest>>;
+
+      return result;
     };
 
     const strip = (
       obj: Record<string, unknown>
-    ): RawResult<ObjectOutput<Shape, Rest>> => {
+    ): RawResult<Record<string, unknown>> => {
       let result: RawResult<Record<string, unknown>> = {
         code: "ok",
         value: {},
       };
 
-      let requiredSeen = 0;
-      let optionalSeen = 0;
+      let requiredSeen = 0 | 0;
+      let optionalSeen = 0 | 0;
+      let seenIndexes = 0 | 0;
 
       for (const key in obj) {
-        const index = ~invertedIndexes[key];
+        const value = obj[key];
+        const index = ~invertedIndexes[key] | 0;
         if (index >= 0) {
           if (index < requiredCount) {
-            requiredSeen++;
+            requiredSeen = (requiredSeen + 1) | 0;
           } else {
-            optionalSeen++;
+            optionalSeen = (optionalSeen + 1) | 0;
           }
-
-          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          if (index < 32) {
+            seenIndexes = seenIndexes | (1 << index);
+          }
+          if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
             result = addResult(
               result,
               funcs[index],
               obj,
               key,
-              obj[key],
+              value,
               FuncMode.STRIP
             );
           }
         }
       }
 
-      if (requiredSeen < requiredCount) {
-        result = checkRequired(result, obj, FuncMode.STRIP);
+      if (requiredSeen + optionalSeen < totalCount) {
+        return check(
+          result,
+          obj,
+          FuncMode.STRIP,
+          requiredSeen,
+          optionalSeen,
+          seenIndexes
+        );
       }
-      if (optionalSeen < optionalCount) {
-        result = checkOptional(result, obj, FuncMode.STRIP);
-      }
-      return result as RawResult<ObjectOutput<Shape, Rest>>;
+      return result;
     };
 
     if (this.restType) {
@@ -726,38 +726,39 @@ class ObjectType<
         }
 
         let result: RawResult<Record<string, unknown>> = true;
-        let requiredSeen = 0;
-        let optionalSeen = 0;
+        let requiredSeen = 0 | 0;
+        let optionalSeen = 0 | 0;
+        let seenIndexes = 0 | 0;
 
         for (const key in obj) {
-          const index = ~invertedIndexes[key];
+          const value = obj[key];
+          const index = ~invertedIndexes[key] | 0;
           if (index >= 0) {
             if (index < requiredCount) {
-              requiredSeen++;
+              requiredSeen = (requiredSeen + 1) | 0;
             } else {
-              optionalSeen++;
+              optionalSeen = (optionalSeen + 1) | 0;
             }
-
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-              result = addResult(
-                result,
-                funcs[index],
-                obj,
-                key,
-                obj[key],
-                mode
-              );
+            if (index < 32) {
+              seenIndexes = seenIndexes | (1 << index);
+            }
+            if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
+              result = addResult(result, funcs[index], obj, key, value, mode);
             }
           } else {
-            result = addResult(result, rest, obj, key, obj[key], mode);
+            result = addResult(result, rest, obj, key, value, mode);
           }
         }
 
-        if (requiredSeen < requiredCount) {
-          result = checkRequired(result, obj, mode);
-        }
-        if (optionalSeen < optionalCount) {
-          result = checkOptional(result, obj, mode);
+        if (requiredSeen + optionalSeen < totalCount) {
+          result = check(
+            result,
+            obj,
+            mode,
+            requiredSeen,
+            optionalSeen,
+            seenIndexes
+          );
         }
 
         if ((result === true || result.code === "ok") && checks) {
@@ -777,7 +778,7 @@ class ObjectType<
         return invalidType;
       }
 
-      let result: RawResult<ObjectOutput<Shape, Rest>>;
+      let result: RawResult<Record<string, unknown>>;
       if (mode === FuncMode.STRICT) {
         result = strict(obj);
       } else if (mode === FuncMode.STRIP) {
@@ -794,7 +795,7 @@ class ObjectType<
           }
         }
       }
-      return result;
+      return result as RawResult<ObjectOutput<Shape, Rest>>;
     };
   }
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
