@@ -648,6 +648,26 @@ describe("object()", () => {
     const t = v.object({ a: v.number(), b: v.number() });
     expect(t.parse(o, { mode: "strict" })).to.equal(o);
   });
+  it("doesn't get confused by recognized non-enumerable keys when mode=strict", () => {
+    const o = { x: 1 };
+    Object.defineProperties(o, {
+      a: {
+        value: 1,
+        enumerable: false,
+      },
+      b: {
+        value: 2,
+        enumerable: false,
+      },
+    });
+    const t = v.object({ a: v.number(), b: v.number() });
+    expect(() => t.parse(o, { mode: "strict" }))
+      .to.throw(v.ValitaError)
+      .with.nested.include({
+        "issues[0].code": "unrecognized_key",
+        "issues[0].key": "x",
+      });
+  });
   it("keeps missing optionals missing when mode=strip", () => {
     const t = v.object({ a: v.number().optional() });
     const o = t.parse({ b: 2 }, { mode: "strip" });
