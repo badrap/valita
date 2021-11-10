@@ -23,10 +23,10 @@
     "test": "mocha --require ts-node/register tests/**/*.test.ts",
     "build": "rm -rf dist/* && npm run build:types && npm run build:cjs && npm run build:mjs && npm run build:node-mjs && npm run build:node-cjs",
     "build:types": "tsc -p ./tsconfig.build.json --emitDeclarationOnly --declaration --declarationMap --declarationDir ./dist/types",
-    "build:cjs": "tsc -p ./tsconfig.build.json --target es2015 --module commonjs --outDir ./dist/cjs",
-    "build:mjs": "tsc -p ./tsconfig.build.json --target es2015 --module es2015 --outDir ./dist/mjs && mv ./dist/mjs/index.js ./dist/mjs/index.mjs",
-    "build:node-mjs": "tsc -p ./tsconfig.build.json --target es2019 --module es2015 --outDir ./dist/node-mjs && mv ./dist/node-mjs/index.js ./dist/node-mjs/index.mjs",
-    "build:node-cjs": "tsc -p ./tsconfig.build.json --target es2019 --module commonjs --outDir ./dist/node-cjs",
+    "build:cjs": "tsc -p ./tsconfig.build.json --target es5 --lib es2015 --module commonjs --outDir ./dist/cjs",
+    "build:mjs": "tsc -p ./tsconfig.build.json --target es5 --lib es2015 --module es2015 --outDir ./dist/mjs && mv ./dist/mjs/index.js ./dist/mjs/index.mjs",
+    "build:node-mjs": "tsc -p ./tsconfig.build.json --target es5 --lib es2019 --module es2015 --outDir ./dist/node-mjs && mv ./dist/node-mjs/index.js ./dist/node-mjs/index.mjs",
+    "build:node-cjs": "tsc -p ./tsconfig.build.json --target es5 --lib es2019 --module commonjs --outDir ./dist/node-cjs",
     "prepack": "npm run build"
   },
   "devDependencies": {
