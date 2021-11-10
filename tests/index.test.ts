@@ -550,7 +550,20 @@ describe("object()", () => {
     const t = v.object({ a: v.string() });
     expect(() => t.parse({}))
       .to.throw(v.ValitaError)
-      .with.nested.property("issues[0].code", "missing_key");
+      .with.nested.property("issues[0].code", "missing_value");
+  });
+  it("reports multiple missing required keys", () => {
+    const result = v.object({ a: v.string(), b: v.number() }).try({});
+    expect(!result.ok && result.issues).to.have.deep.members([
+      {
+        path: ["a"],
+        code: "missing_value",
+      },
+      {
+        path: ["b"],
+        code: "missing_value",
+      },
+    ]);
   });
   it("does not throw on missing optional keys", () => {
     const t = v.object({ a: v.string().optional() });
@@ -610,18 +623,27 @@ describe("object()", () => {
     const t = v.object({ a: v.number() });
     expect(() => t.parse({ a: 1, b: 2 }))
       .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "unrecognized_key",
-        "issues[0].key": "b",
+      .with.deep.nested.include({
+        "issues[0].code": "unrecognized_keys",
+        "issues[0].keys": ["b"],
       });
   });
   it("fails on unrecognized keys when mode=strict", () => {
     const t = v.object({ a: v.number() });
     expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
       .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "unrecognized_key",
-        "issues[0].key": "b",
+      .with.deep.nested.include({
+        "issues[0].code": "unrecognized_keys",
+        "issues[0].keys": ["b"],
+      });
+  });
+  it("reports multiple unrecognized keys when mode=strict", () => {
+    const t = v.object({});
+    expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
+      .to.throw(v.ValitaError)
+      .with.deep.nested.include({
+        "issues[0].code": "unrecognized_keys",
+        "issues[0].keys": ["a", "b"],
       });
   });
   it("passes through unrecognized keys when mode=passthrough", () => {
@@ -663,9 +685,9 @@ describe("object()", () => {
     const t = v.object({ a: v.number(), b: v.number() });
     expect(() => t.parse(o, { mode: "strict" }))
       .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "unrecognized_key",
-        "issues[0].key": "x",
+      .with.deep.nested.include({
+        "issues[0].code": "unrecognized_keys",
+        "issues[0].keys": ["x"],
       });
   });
   it("keeps missing optionals missing when mode=strip", () => {
@@ -677,27 +699,27 @@ describe("object()", () => {
     const t = v.object({ a: v.undefined() });
     expect(() => t.parse({}, { mode: "strict" }))
       .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "missing_key",
-        "issues[0].key": "a",
+      .with.deep.nested.include({
+        "issues[0].code": "missing_value",
+        "issues[0].path": ["a"],
       });
   });
   it("doesn't consider undefined() optional when mode=passthrough", () => {
     const t = v.object({ a: v.undefined() });
     expect(() => t.parse({}, { mode: "passthrough" }))
       .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "missing_key",
-        "issues[0].key": "a",
+      .with.deep.nested.include({
+        "issues[0].code": "missing_value",
+        "issues[0].path": ["a"],
       });
   });
   it("doesn't consider undefined() optional when mode=strip", () => {
     const t = v.object({ a: v.undefined() });
     expect(() => t.parse({}, { mode: "strip" }))
       .to.throw(v.ValitaError)
-      .with.nested.include({
-        "issues[0].code": "missing_key",
-        "issues[0].key": "a",
+      .with.deep.nested.include({
+        "issues[0].code": "missing_value",
+        "issues[0].path": ["a"],
       });
   });
   it("forwards parsing mode to nested types", () => {
@@ -1644,7 +1666,7 @@ describe("ValitaResult", () => {
       const result = v
         .object({ a: v.bigint(), b: v.string() })
         .try({ a: "test", b: 1 });
-      expect(!result.ok && result.issues).to.deep.equal([
+      expect(!result.ok && result.issues).to.have.deep.members([
         {
           path: ["a"],
           code: "invalid_type",

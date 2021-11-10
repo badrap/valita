@@ -32,10 +32,10 @@ type CustomError =
 
 type Issue =
   | I<"invalid_type", { expected: BaseType[] }>
+  | I<"missing_value">
   | I<"invalid_literal", { expected: Literal[] }>
   | I<"invalid_length", { minLength: number; maxLength: number }>
-  | I<"missing_key", { key: Key }>
-  | I<"unrecognized_key", { key: Key }>
+  | I<"unrecognized_keys", { keys: Key[] }>
   | I<"invalid_union", { tree: IssueTree }>
   | I<"custom_error", { error: CustomError }>;
 
@@ -83,7 +83,7 @@ function collectIssues(tree: IssueTree): Issue[] {
   return issues;
 }
 
-function orList(list: string[]): string {
+function separatedList(list: string[], separator: "or" | "and"): string {
   if (list.length === 0) {
     return "nothing";
   }
@@ -91,7 +91,7 @@ function orList(list: string[]): string {
   if (list.length < 2) {
     return last;
   }
-  return `${list.slice(0, -1).join(", ")} or ${last}`;
+  return `${list.slice(0, -1).join(", ")} ${separator} ${last}`;
 }
 
 function formatLiteral(value: Literal): string {
@@ -137,13 +137,19 @@ function formatIssueTree(issueTree: IssueTree): string {
 
   let message = "validation failed";
   if (issue.code === "invalid_type") {
-    message = `expected ${orList(issue.expected)}`;
+    message = `expected ${separatedList(issue.expected, "or")}`;
   } else if (issue.code === "invalid_literal") {
-    message = `expected ${orList(issue.expected.map(formatLiteral))}`;
-  } else if (issue.code === "missing_key") {
-    message = `missing key ${formatLiteral(issue.key)}`;
-  } else if (issue.code === "unrecognized_key") {
-    message = `unrecognized key ${formatLiteral(issue.key)}`;
+    message = `expected ${separatedList(
+      issue.expected.map(formatLiteral),
+      "or"
+    )}`;
+  } else if (issue.code === "missing_value") {
+    message = `missing value`;
+  } else if (issue.code === "unrecognized_keys") {
+    const keys = issue.keys;
+    message = `unrecognized ${
+      keys.length === 1 ? "key" : "keys"
+    } ${separatedList(keys.map(formatLiteral), "and")}`;
   } else if (issue.code === "invalid_length") {
     const min = issue.minLength;
     const max = issue.maxLength;
@@ -497,7 +503,6 @@ class ObjectType<
   genFunc(): Func<ObjectOutput<Shape, Rest>> {
     const shape = this.shape;
     const checks = this.checks;
-    const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
 
     const requiredKeys: string[] = [];
     const optionalKeys: string[] = [];
@@ -519,6 +524,12 @@ class ObjectType<
     keys.forEach((key, index) => {
       invertedIndexes[key] = ~index;
     });
+
+    const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
+    const missingValues: Issue[] = requiredKeys.map((key) => ({
+      code: "missing_value",
+      path: [key],
+    }));
 
     const copyObj = (obj: Record<string, unknown>): Record<string, unknown> => {
       const result = {} as Record<string, unknown>;
@@ -560,14 +571,21 @@ class ObjectType<
         } else {
           return objResult;
         }
-      } else if (objResult === true || objResult.code === "ok") {
-        return prependPath(key, keyResult);
       } else {
-        return joinIssues(objResult, prependPath(key, keyResult));
+        return prependIssue(prependPath(key, keyResult), objResult);
       }
     };
 
-    const check = (
+    const prependIssue = (
+      issue: IssueTree,
+      result: RawResult<unknown>
+    ): IssueTree => {
+      return result === true || result.code === "ok"
+        ? issue
+        : joinIssues(issue, result);
+    };
+
+    const checkRemainingKeys = (
       initialResult: RawResult<Record<string, unknown>>,
       obj: Record<string, unknown>,
       mode: FuncMode,
@@ -591,7 +609,7 @@ class ObjectType<
           } else if (i >= requiredCount) {
             result = addResult(result, funcs[i], obj, key, Nothing, mode);
           } else {
-            return { code: "missing_key", key };
+            result = prependIssue(missingValues[i], result);
           }
         }
       }
@@ -599,12 +617,14 @@ class ObjectType<
     };
 
     const strict = (
-      obj: Record<string, unknown>
+      obj: Record<string, unknown>,
+      mode: FuncMode
     ): RawResult<Record<string, unknown>> => {
       let result: RawResult<Record<string, unknown>> = true;
       let requiredSeen = 0 | 0;
       let optionalSeen = 0 | 0;
       let seenIndexes = 0 | 0;
+      let unrecognized: Key[] | undefined = undefined;
 
       for (const key in obj) {
         const value = obj[key];
@@ -619,31 +639,38 @@ class ObjectType<
             seenIndexes = seenIndexes | (1 << index);
           }
           if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
-            result = addResult(
-              result,
-              funcs[index],
-              obj,
-              key,
-              value,
-              FuncMode.STRICT
-            );
+            result = addResult(result, funcs[index], obj, key, value, mode);
           }
+        } else if (mode === FuncMode.STRIP) {
+          result =
+            result === true ? { code: "ok", value: copyObj(obj) } : result;
+        } else if (unrecognized === undefined) {
+          unrecognized = [key];
         } else {
-          return { code: "unrecognized_key", key };
+          unrecognized.push(key);
         }
       }
 
       if (requiredSeen + optionalSeen < totalCount) {
-        return check(
+        result = checkRemainingKeys(
           result,
           obj,
-          FuncMode.STRICT,
+          mode,
           requiredSeen,
           optionalSeen,
           seenIndexes
         );
       }
-      return result;
+
+      return unrecognized === undefined
+        ? result
+        : prependIssue(
+            {
+              code: "unrecognized_keys",
+              keys: unrecognized,
+            },
+            result
+          );
     };
 
     const pass = (
@@ -657,7 +684,8 @@ class ObjectType<
         let value: unknown = obj[key];
         if (value === undefined && !(key in obj)) {
           if (i < requiredCount) {
-            return { code: "missing_key", key };
+            result = prependIssue(missingValues[i], result);
+            continue;
           }
           value = Nothing;
         }
@@ -665,56 +693,6 @@ class ObjectType<
         result = addResult(result, funcs[i], obj, key, value, FuncMode.PASS);
       }
 
-      return result;
-    };
-
-    const strip = (
-      obj: Record<string, unknown>
-    ): RawResult<Record<string, unknown>> => {
-      let result: RawResult<Record<string, unknown>> = {
-        code: "ok",
-        value: {},
-      };
-
-      let requiredSeen = 0 | 0;
-      let optionalSeen = 0 | 0;
-      let seenIndexes = 0 | 0;
-
-      for (const key in obj) {
-        const value = obj[key];
-        const index = ~invertedIndexes[key] | 0;
-        if (index >= 0) {
-          if (index < requiredCount) {
-            requiredSeen = (requiredSeen + 1) | 0;
-          } else {
-            optionalSeen = (optionalSeen + 1) | 0;
-          }
-          if (index < 32) {
-            seenIndexes = seenIndexes | (1 << index);
-          }
-          if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
-            result = addResult(
-              result,
-              funcs[index],
-              obj,
-              key,
-              value,
-              FuncMode.STRIP
-            );
-          }
-        }
-      }
-
-      if (requiredSeen + optionalSeen < totalCount) {
-        return check(
-          result,
-          obj,
-          FuncMode.STRIP,
-          requiredSeen,
-          optionalSeen,
-          seenIndexes
-        );
-      }
       return result;
     };
 
@@ -751,7 +729,7 @@ class ObjectType<
         }
 
         if (requiredSeen + optionalSeen < totalCount) {
-          result = check(
+          result = checkRemainingKeys(
             result,
             obj,
             mode,
@@ -779,10 +757,8 @@ class ObjectType<
       }
 
       let result: RawResult<Record<string, unknown>>;
-      if (mode === FuncMode.STRICT) {
-        result = strict(obj);
-      } else if (mode === FuncMode.STRIP) {
-        result = strip(obj);
+      if (mode !== FuncMode.PASS) {
+        result = strict(obj, mode);
       } else {
         result = pass(obj);
       }
@@ -1198,6 +1174,10 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     const hasUnknown = hasTerminal(this, "unknown");
     const objects = createObjectMatchers(flattened);
     const base = createUnionMatcher(flattened);
+    const missingValue: Issue = {
+      code: "missing_value",
+      path: objects.length > 0 ? [objects[0].key] : undefined,
+    };
     return (v, mode) => {
       if (!hasUnknown && objects.length > 0 && isObject(v)) {
         const item = objects[0];
@@ -1208,7 +1188,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
               Infer<T[number]>
             >;
           }
-          return { code: "missing_key", key: item.key };
+          return missingValue;
         }
         return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
       }
