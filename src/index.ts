@@ -533,10 +533,11 @@ class ObjectType<
 
     const copyObj = (obj: Record<string, unknown>): Record<string, unknown> => {
       const result = {} as Record<string, unknown>;
-      for (let i = 0; i < requiredKeys.length; i++) {
-        const key = requiredKeys[i];
-        if (key in obj) {
-          result[key] = obj[key];
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const value = obj[key];
+        if (i < requiredCount || value !== undefined || key in obj) {
+          result[key] = value;
         }
       }
       return result;

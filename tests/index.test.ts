@@ -581,6 +581,21 @@ describe("object()", () => {
     const o = { a: 1 };
     expect(t.parse(o)).to.not.equal(o);
   });
+  it("doesn't lose enumerable optional keys when there are transformed non-enumerable optional keys", () => {
+    const o = { a: 1 };
+    Object.defineProperty(o, "b", {
+      value: 2,
+      enumerable: false,
+    });
+    const t = v.object({
+      a: v.number().optional(),
+      b: v
+        .number()
+        .map((n) => n + 1)
+        .optional(),
+    });
+    expect(t.parse(o)).to.deep.equal({ a: 1, b: 3 });
+  });
   it("rejects other types", () => {
     const t = v.object({});
     for (const val of ["1", 1n, true, null, undefined, []]) {
@@ -660,6 +675,16 @@ describe("object()", () => {
     const t = v.object({ a: v.number().map((x) => x + 1) });
     const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({ a: 2 });
+  });
+  it("doesn't lose optional keys when mode=strip and there unrecognized non-enumerable keys", () => {
+    const o = { a: 1 } as Record<string, unknown>;
+    o.b = 2;
+    o.c = 3;
+    const t = v.object({
+      a: v.number().optional(),
+      c: v.number().optional(),
+    });
+    expect(t.parse(o, { mode: "strip" })).to.deep.equal({ a: 1, c: 3 });
   });
   it("doesn't fail on unrecognized non-enumerable keys when mode=strict", () => {
     const o = { a: 1 };
