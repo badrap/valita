@@ -501,6 +501,7 @@ class ObjectType<
   }
 
   genFunc(): Func<ObjectOutput<Shape, Rest>> {
+    type Obj = Record<string, unknown>;
     const shape = this.shape;
     const checks = this.checks;
 
@@ -531,38 +532,37 @@ class ObjectType<
       path: [key],
     }));
 
-    const assignKnownKeys = (
-      result: Record<string, unknown>,
-      obj: Record<string, unknown>
-    ): Record<string, unknown> => {
+    const assignEnumerable = (to: Obj, from: Obj): Obj => {
+      for (const key in from) {
+        to[key] = from[key];
+      }
+      return to;
+    };
+
+    const assignKnown = (to: Obj, from: Obj): Obj => {
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
-        const value = obj[key];
-        if (i < requiredCount || value !== undefined || key in obj) {
-          result[key] = value;
+        const value = from[key];
+        if (i < requiredCount || value !== undefined || key in from) {
+          to[key] = value;
         }
       }
-      return result;
+      return to;
     };
-    const assignAllKeys = (
-      result: Record<string, unknown>,
-      obj: Record<string, unknown>
-    ): Record<string, unknown> => {
-      for (const key in obj) {
-        result[key] = obj[key];
-      }
-      return assignKnownKeys(result, obj);
+
+    const assignAll = (to: Obj, from: Obj): Obj => {
+      return assignKnown(assignEnumerable(to, from), from);
     };
-    const assignKeys = this.restType ? assignAllKeys : assignKnownKeys;
 
     const addResult = (
-      objResult: RawResult<Record<string, unknown>>,
+      objResult: RawResult<Obj>,
       func: Func<unknown>,
-      obj: Record<string, unknown>,
+      obj: Obj,
       key: string,
       value: unknown,
-      mode: FuncMode
-    ): RawResult<Record<string, unknown>> => {
+      mode: FuncMode,
+      assign: (to: Obj, from: Obj) => Obj
+    ): RawResult<Obj> => {
       const keyResult = func(value, mode);
       if (keyResult === true) {
         if (
@@ -575,7 +575,7 @@ class ObjectType<
         return objResult;
       } else if (keyResult.code === "ok") {
         if (objResult === true) {
-          const copy = assignKeys({}, obj);
+          const copy = assign({}, obj);
           copy[key] = keyResult.value;
           return { code: "ok", value: copy };
         } else if (objResult.code === "ok") {
@@ -599,13 +599,14 @@ class ObjectType<
     };
 
     const checkRemainingKeys = (
-      initialResult: RawResult<Record<string, unknown>>,
-      obj: Record<string, unknown>,
+      initialResult: RawResult<Obj>,
+      obj: Obj,
       mode: FuncMode,
       requiredSeen: number,
       optionalSeen: number,
-      seenIndexes: number
-    ): RawResult<Record<string, unknown>> => {
+      seenIndexes: number,
+      assign: (to: Obj, from: Obj) => Obj
+    ): RawResult<Obj> => {
       let result = initialResult;
       const start = requiredSeen < requiredCount ? 0 : requiredCount;
       const end = optionalSeen < optionalCount ? totalCount : requiredCount;
@@ -617,10 +618,26 @@ class ObjectType<
               i < 32 ||
               !Object.prototype.propertyIsEnumerable.call(obj, key)
             ) {
-              result = addResult(result, funcs[i], obj, key, obj[key], mode);
+              result = addResult(
+                result,
+                funcs[i],
+                obj,
+                key,
+                obj[key],
+                mode,
+                assign
+              );
             }
           } else if (i >= requiredCount) {
-            result = addResult(result, funcs[i], obj, key, Nothing, mode);
+            result = addResult(
+              result,
+              funcs[i],
+              obj,
+              key,
+              Nothing,
+              mode,
+              assign
+            );
           } else {
             result = prependIssue(missingValues[i], result);
           }
@@ -629,11 +646,8 @@ class ObjectType<
       return result;
     };
 
-    const strict = (
-      obj: Record<string, unknown>,
-      mode: FuncMode
-    ): RawResult<Record<string, unknown>> => {
-      let result: RawResult<Record<string, unknown>> = true;
+    const strict = (obj: Obj, mode: FuncMode): RawResult<Obj> => {
+      let result: RawResult<Obj> = true;
       let requiredSeen = 0 | 0;
       let optionalSeen = 0 | 0;
       let seenIndexes = 0 | 0;
@@ -652,12 +666,20 @@ class ObjectType<
             seenIndexes = seenIndexes | (1 << index);
           }
           if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
-            result = addResult(result, funcs[index], obj, key, value, mode);
+            result = addResult(
+              result,
+              funcs[index],
+              obj,
+              key,
+              value,
+              mode,
+              assignKnown
+            );
           }
         } else if (mode === FuncMode.STRIP) {
           result =
             result === true
-              ? { code: "ok", value: assignKeys({}, obj) }
+              ? { code: "ok", value: assignKnown({}, obj) }
               : result;
         } else if (unrecognized === undefined) {
           unrecognized = [key];
@@ -673,7 +695,8 @@ class ObjectType<
           mode,
           requiredSeen,
           optionalSeen,
-          seenIndexes
+          seenIndexes,
+          assignKnown
         );
       }
 
@@ -688,10 +711,8 @@ class ObjectType<
           );
     };
 
-    const pass = (
-      obj: Record<string, unknown>
-    ): RawResult<Record<string, unknown>> => {
-      let result: RawResult<Record<string, unknown>> = true;
+    const pass = (obj: Obj): RawResult<Obj> => {
+      let result: RawResult<Obj> = true;
 
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
@@ -705,7 +726,15 @@ class ObjectType<
           value = Nothing;
         }
 
-        result = addResult(result, funcs[i], obj, key, value, FuncMode.PASS);
+        result = addResult(
+          result,
+          funcs[i],
+          obj,
+          key,
+          value,
+          FuncMode.PASS,
+          assignKnown
+        );
       }
 
       return result;
@@ -718,7 +747,7 @@ class ObjectType<
           return invalidType;
         }
 
-        let result: RawResult<Record<string, unknown>> = true;
+        let result: RawResult<Obj> = true;
         let requiredSeen = 0 | 0;
         let optionalSeen = 0 | 0;
         let seenIndexes = 0 | 0;
@@ -736,10 +765,26 @@ class ObjectType<
               seenIndexes = seenIndexes | (1 << index);
             }
             if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
-              result = addResult(result, funcs[index], obj, key, value, mode);
+              result = addResult(
+                result,
+                funcs[index],
+                obj,
+                key,
+                value,
+                mode,
+                assignEnumerable
+              );
             }
           } else {
-            result = addResult(result, rest, obj, key, value, mode);
+            result = addResult(
+              result,
+              rest,
+              obj,
+              key,
+              value,
+              mode,
+              assignEnumerable
+            );
           }
         }
 
@@ -750,7 +795,8 @@ class ObjectType<
             mode,
             requiredSeen,
             optionalSeen,
-            seenIndexes
+            seenIndexes,
+            assignAll
           );
         }
 
@@ -771,7 +817,7 @@ class ObjectType<
         return invalidType;
       }
 
-      let result: RawResult<Record<string, unknown>>;
+      let result: RawResult<Obj>;
       if (mode !== FuncMode.PASS) {
         result = strict(obj, mode);
       } else {
