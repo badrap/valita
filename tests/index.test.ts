@@ -891,6 +891,18 @@ describe("object()", () => {
       const o = { a: 1, b: 2 };
       expect(t.parse(o)).to.not.equal(o);
     });
+    it("doesn't lose the extra fields if the object has to be copied", () => {
+      const t = v
+        .object({
+          a: v.number(),
+          c: v.number().map((n) => -n),
+        })
+        .rest(v.number());
+      const r = { a: 1, b: 2, c: 3 } as Record<string, unknown>;
+      const o = Object.create(r);
+      o.d = 4;
+      expect(t.parse(o)).to.deep.equal({ a: 1, b: 2, c: -3, d: 4 });
+    });
 
     it("ignores non-enumerable keys", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));

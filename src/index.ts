@@ -531,8 +531,10 @@ class ObjectType<
       path: [key],
     }));
 
-    const copyObj = (obj: Record<string, unknown>): Record<string, unknown> => {
-      const result = {} as Record<string, unknown>;
+    const assignKnownKeys = (
+      result: Record<string, unknown>,
+      obj: Record<string, unknown>
+    ): Record<string, unknown> => {
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
         const value = obj[key];
@@ -542,6 +544,16 @@ class ObjectType<
       }
       return result;
     };
+    const assignAllKeys = (
+      result: Record<string, unknown>,
+      obj: Record<string, unknown>
+    ): Record<string, unknown> => {
+      for (const key in obj) {
+        result[key] = obj[key];
+      }
+      return assignKnownKeys(result, obj);
+    };
+    const assignKeys = this.restType ? assignAllKeys : assignKnownKeys;
 
     const addResult = (
       objResult: RawResult<Record<string, unknown>>,
@@ -563,7 +575,7 @@ class ObjectType<
         return objResult;
       } else if (keyResult.code === "ok") {
         if (objResult === true) {
-          const copy = copyObj(obj);
+          const copy = assignKeys({}, obj);
           copy[key] = keyResult.value;
           return { code: "ok", value: copy };
         } else if (objResult.code === "ok") {
@@ -644,7 +656,9 @@ class ObjectType<
           }
         } else if (mode === FuncMode.STRIP) {
           result =
-            result === true ? { code: "ok", value: copyObj(obj) } : result;
+            result === true
+              ? { code: "ok", value: assignKeys({}, obj) }
+              : result;
         } else if (unrecognized === undefined) {
           unrecognized = [key];
         } else {
