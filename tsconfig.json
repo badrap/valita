@@ -6,7 +6,6 @@
     "noImplicitReturns": true,
     "moduleResolution": "node",
     "outDir": "./dist/main",
-    "isolatedModules": true,
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true
   },
