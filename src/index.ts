@@ -185,18 +185,18 @@ function formatIssueTree(issueTree: IssueTree): string {
 }
 
 export class ValitaError extends Error {
-  constructor(private readonly issueTree: IssueTree) {
+  private readonly issueTree!: IssueTree;
+
+  constructor(issueTree: IssueTree) {
     super(formatIssueTree(issueTree));
     Object.setPrototypeOf(this, new.target.prototype);
+    Object.defineProperty(this, "issueTree", { value: issueTree });
     this.name = new.target.name;
   }
 
   get issues(): readonly Issue[] {
     const issues = collectIssues(this.issueTree);
-    Object.defineProperty(this, "issues", {
-      value: issues,
-      writable: false,
-    });
+    Object.defineProperty(this, "issues", { value: issues });
     return issues;
   }
 }
@@ -320,11 +320,20 @@ abstract class AbstractType<Output = unknown> {
     v: unknown,
     options?: Partial<ParseOptions>
   ): Infer<T> {
-    const r = this.try(v, options);
-    if (r.ok) {
-      return r.value;
+    let mode: FuncMode = FuncMode.STRICT;
+    if (options && options.mode === "passthrough") {
+      mode = FuncMode.PASS;
+    } else if (options && options.mode === "strip") {
+      mode = FuncMode.STRIP;
+    }
+
+    const r = this.func(v, mode);
+    if (r === true) {
+      return v as Infer<T>;
+    } else if (r.code === "ok") {
+      return r.value as Infer<T>;
     } else {
-      return r.throw();
+      throw new ValitaError(r);
     }
   }
 
