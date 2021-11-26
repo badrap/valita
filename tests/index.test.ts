@@ -1146,6 +1146,11 @@ describe("record()", () => {
     expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     expectType(t).toImply<{ [K: string]: number }>(true);
   });
+  it("defaults to Record<string, unknown>", () => {
+    const t = v.record();
+    expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
+    expectType(t).toImply<{ [K: string]: unknown }>(true);
+  });
   it("rejects values other than the defined type", () => {
     const t = v.record(v.number());
     expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
