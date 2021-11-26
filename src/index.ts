@@ -1468,8 +1468,8 @@ function object<T extends Record<string, Type | Optional>>(
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
 }
-function record<T extends Type>(valueType: T): Type<Record<string, Infer<T>>> {
-  return new ObjectType({} as Record<string, never>, valueType);
+function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
+  return new ObjectType({} as Record<string, never>, valueType ?? unknown());
 }
 function array<T extends Type>(item: T): ArrayType<[], T> {
   return new ArrayType([], item);
