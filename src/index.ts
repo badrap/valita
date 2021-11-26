@@ -219,19 +219,13 @@ class Err {
 
   get issues(): readonly Issue[] {
     const issues = collectIssues(this.issueTree);
-    Object.defineProperty(this, "issues", {
-      value: issues,
-      writable: false,
-    });
+    Object.defineProperty(this, "issues", { value: issues });
     return issues;
   }
 
   get message(): string {
     const message = formatIssueTree(this.issueTree);
-    Object.defineProperty(this, "message", {
-      value: message,
-      writable: false,
-    });
+    Object.defineProperty(this, "message", { value: message });
     return message;
   }
 
@@ -286,10 +280,7 @@ abstract class AbstractType<Output = unknown> {
 
   get func(): Func<Output> {
     const f = this.genFunc();
-    Object.defineProperty(this, "func", {
-      value: f,
-      writable: false,
-    });
+    Object.defineProperty(this, "func", { value: f });
     return f;
   }
 
@@ -1425,10 +1416,7 @@ class LazyType<T> extends Type<T> {
   }
   private get type(): Type<T> {
     const type = this.definer();
-    Object.defineProperty(this, "type", {
-      value: type,
-      writable: false,
-    });
+    Object.defineProperty(this, "type", { value: type });
     return type;
   }
   genFunc(): Func<T> {
