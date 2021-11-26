@@ -337,7 +337,12 @@ abstract class AbstractType<Output = unknown> {
   ): Type<Exclude<Output, undefined> | T>;
   default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
   default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
-    return new DefaultType(this, defaultValue);
+    const defaultResult = { code: "ok", value: defaultValue } as RawResult<
+      Exclude<Output, undefined> | T
+    >;
+    return new TransformType(this.optional(), (v) => {
+      return v === undefined ? defaultResult : true;
+    });
   }
 
   assert<T extends Output>(
@@ -395,51 +400,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
-    into.push(new UndefinedType());
-    this.type.toTerminals(into);
-  }
-}
-
-class DefaultType<Output, DefaultValue> extends Type<
-  Exclude<Output, undefined> | DefaultValue
-> {
-  readonly name = "default";
-  constructor(
-    private readonly type: AbstractType<Output>,
-    private readonly defaultValue: DefaultValue
-  ) {
-    super();
-  }
-  genFunc(): Func<Exclude<Output, undefined> | DefaultValue> {
-    const func = this.type.func;
-    const undefinedOutput: RawResult<DefaultValue> =
-      this.defaultValue === undefined
-        ? true
-        : { code: "ok", value: this.defaultValue };
-    const nothingOutput: RawResult<DefaultValue> = {
-      code: "ok",
-      value: this.defaultValue,
-    };
-    return (v, mode) => {
-      if (v === undefined) {
-        return undefinedOutput;
-      } else if (v === Nothing) {
-        return nothingOutput;
-      } else {
-        const result = func(v, mode);
-        if (
-          result !== true &&
-          result.code === "ok" &&
-          result.value === undefined
-        ) {
-          return nothingOutput;
-        }
-        return result as RawResult<Exclude<Output, undefined>>;
-      }
-    };
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this.type.optional());
+    into.push(undefined_());
     this.type.toTerminals(into);
   }
 }
@@ -1262,85 +1223,6 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   }
 }
 
-class NeverType extends Type<never> {
-  readonly name = "never";
-  genFunc(): Func<never> {
-    const issue: Issue = { code: "invalid_type", expected: [] };
-    return (_v, _mode) => issue;
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class UnknownType extends Type<unknown> {
-  readonly name = "unknown";
-  genFunc(): Func<unknown> {
-    return (_v, _mode) => true;
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class NumberType extends Type<number> {
-  readonly name = "number";
-  genFunc(): Func<number> {
-    const issue: Issue = { code: "invalid_type", expected: ["number"] };
-    return (v, _mode) => (typeof v === "number" ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class StringType extends Type<string> {
-  readonly name = "string";
-  genFunc(): Func<string> {
-    const issue: Issue = { code: "invalid_type", expected: ["string"] };
-    return (v, _mode) => (typeof v === "string" ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class BigIntType extends Type<bigint> {
-  readonly name = "bigint";
-  genFunc(): Func<bigint> {
-    const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
-    return (v, _mode) => (typeof v === "bigint" ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class BooleanType extends Type<boolean> {
-  readonly name = "boolean";
-  genFunc(): Func<boolean> {
-    const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
-    return (v, _mode) => (typeof v === "boolean" ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class UndefinedType extends Type<undefined> {
-  readonly name = "undefined";
-  genFunc(): Func<undefined> {
-    const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
-    return (v, _mode) => (v === undefined ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
-class NullType extends Type<null> {
-  readonly name = "null";
-  genFunc(): Func<null> {
-    const issue: Issue = { code: "invalid_type", expected: ["null"] };
-    return (v, _mode) => (v === null ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
   constructor(readonly value: Out) {
@@ -1433,30 +1315,54 @@ class LazyType<T> extends Type<T> {
   }
 }
 
-function never(): Type<never> {
-  return new NeverType();
+function singleton<Name extends string, Output>(
+  name: Name,
+  genFunc: () => Func<Output>
+): () => Type<Output> & { name: Name } {
+  class Singleton extends Type<Output> {
+    readonly name = name;
+    genFunc(): Func<Output> {
+      return genFunc();
+    }
+    toTerminals(into: TerminalType[]): void {
+      into.push(this as TerminalType);
+    }
+  }
+  const instance = new Singleton();
+  return () => instance;
 }
-function unknown(): Type<unknown> {
-  return new UnknownType();
-}
-function number(): Type<number> {
-  return new NumberType();
-}
-function bigint(): Type<bigint> {
-  return new BigIntType();
-}
-function string(): Type<string> {
-  return new StringType();
-}
-function boolean(): Type<boolean> {
-  return new BooleanType();
-}
-function undefined_(): Type<undefined> {
-  return new UndefinedType();
-}
-function null_(): Type<null> {
-  return new NullType();
-}
+
+const never = singleton("never", (): Func<never> => {
+  const issue: Issue = { code: "invalid_type", expected: [] };
+  return (_v, _mode) => issue;
+});
+const unknown = singleton("unknown", (): Func<unknown> => {
+  return (_v, _mode) => true;
+});
+const number = singleton("number", (): Func<number> => {
+  const issue: Issue = { code: "invalid_type", expected: ["number"] };
+  return (v, _mode) => (typeof v === "number" ? true : issue);
+});
+const bigint = singleton("bigint", (): Func<bigint> => {
+  const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
+  return (v, _mode) => (typeof v === "bigint" ? true : issue);
+});
+const string = singleton("string", (): Func<string> => {
+  const issue: Issue = { code: "invalid_type", expected: ["string"] };
+  return (v, _mode) => (typeof v === "string" ? true : issue);
+});
+const boolean = singleton("boolean", (): Func<boolean> => {
+  const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
+  return (v, _mode) => (typeof v === "boolean" ? true : issue);
+});
+const undefined_ = singleton("undefined", (): Func<undefined> => {
+  const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
+  return (v, _mode) => (v === undefined ? true : issue);
+});
+const null_ = singleton("null", (): Func<null> => {
+  const issue: Issue = { code: "invalid_type", expected: ["null"] };
+  return (v, _mode) => (v === null ? true : issue);
+});
 function literal<T extends Literal>(value: T): Type<T> {
   return new LiteralType(value);
 }
@@ -1484,14 +1390,14 @@ function lazy<T>(definer: () => Type<T>): Type<T> {
 }
 
 type TerminalType =
-  | NeverType
-  | UnknownType
-  | StringType
-  | NumberType
-  | BigIntType
-  | BooleanType
-  | UndefinedType
-  | NullType
+  | ReturnType<typeof never>
+  | ReturnType<typeof unknown>
+  | ReturnType<typeof string>
+  | ReturnType<typeof number>
+  | ReturnType<typeof bigint>
+  | ReturnType<typeof boolean>
+  | ReturnType<typeof undefined_>
+  | ReturnType<typeof null_>
   | ObjectType
   | ArrayType
   | LiteralType
