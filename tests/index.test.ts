@@ -1564,6 +1564,23 @@ describe("union()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({ code: "invalid_union" });
     });
+    it("considers optional() its own type", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.literal(2).optional() })
+      );
+      expect(() => t.parse({ type: "test" }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_type",
+          expected: ["number", "undefined"],
+        });
+    });
+    it("matches missing values to optional()", () => {
+      const t = v.union(v.object({ a: v.unknown().optional() }));
+      expect(t.parse({})).to.deep.equal({});
+    });
     it("considers equal literals to overlap", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),

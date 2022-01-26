@@ -1122,6 +1122,10 @@ function createUnionMatcher(
     path,
     expected: expectedLiterals,
   };
+  const missingValue: Issue = {
+    code: "missing_value",
+    path,
+  };
 
   const literalTypes = new Set(expectedLiterals.map(toBaseType));
   return (rootValue, value, mode) => {
@@ -1138,7 +1142,7 @@ function createUnionMatcher(
         count++;
       }
       if (!issueTree) {
-        return invalidType;
+        return missingValue;
       } else if (count > 1) {
         return { code: "invalid_union", tree: issueTree };
       } else {
@@ -1196,21 +1200,12 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     const hasUnknown = hasTerminal(this, "unknown");
     const objects = createObjectMatchers(flattened);
     const base = createUnionMatcher(flattened);
-    const missingValue: Issue = {
-      code: "missing_value",
-      path: objects.length > 0 ? [objects[0].key] : undefined,
-    };
     return (v, mode) => {
       if (!hasUnknown && objects.length > 0 && isObject(v)) {
         const item = objects[0];
-        const value = v[item.key];
+        let value = v[item.key];
         if (value === undefined && !(item.key in v)) {
-          if (item.optional) {
-            return item.optional.func(Nothing, mode) as RawResult<
-              Infer<T[number]>
-            >;
-          }
-          return missingValue;
+          value = Nothing;
         }
         return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
       }
