@@ -672,7 +672,7 @@ class ObjectType<
           );
     };
 
-    const pass = (obj: Obj): RawResult<Obj> => {
+    const pass = (obj: Obj, mode: FuncMode): RawResult<Obj> => {
       let result: RawResult<Obj> = true;
 
       for (let i = 0; i < keys.length; i++) {
@@ -693,7 +693,7 @@ class ObjectType<
           obj,
           key,
           value,
-          FuncMode.PASS,
+          mode,
           assignKnown
         );
       }
@@ -701,8 +701,34 @@ class ObjectType<
       return result;
     };
 
+    const runChecks = (
+      obj: Record<string, unknown>,
+      result: RawResult<Obj>
+    ): RawResult<ObjectOutput<Shape, Rest>> => {
+      if ((result === true || result.code === "ok") && checks) {
+        const value = result === true ? obj : result.value;
+        for (let i = 0; i < checks.length; i++) {
+          if (!checks[i].func(value)) {
+            return checks[i].issue;
+          }
+        }
+      }
+      return result as RawResult<ObjectOutput<Shape, Rest>>;
+    };
+
     if (this.restType) {
       const rest = this.restType.func;
+      if (rest.name === "unknown") {
+        if (totalCount === 0) {
+          return (obj, _mode) => {
+            return isObject(obj) ? runChecks(obj, true) : invalidType;
+          };
+        }
+        return (obj, mode) => {
+          return isObject(obj) ? runChecks(obj, pass(obj, mode)) : invalidType;
+        };
+      }
+
       return (obj, mode) => {
         if (!isObject(obj)) {
           return invalidType;
@@ -761,15 +787,7 @@ class ObjectType<
           );
         }
 
-        if ((result === true || result.code === "ok") && checks) {
-          const value = result === true ? obj : result.value;
-          for (let i = 0; i < checks.length; i++) {
-            if (!checks[i].func(value)) {
-              return checks[i].issue;
-            }
-          }
-        }
-        return result as RawResult<ObjectOutput<Shape, Rest>>;
+        return runChecks(obj, result);
       };
     }
 
@@ -777,23 +795,10 @@ class ObjectType<
       if (!isObject(obj)) {
         return invalidType;
       }
-
-      let result: RawResult<Obj>;
-      if (mode !== FuncMode.PASS) {
-        result = strict(obj, mode);
-      } else {
-        result = pass(obj);
-      }
-
-      if ((result === true || result.code === "ok") && checks) {
-        const value = result === true ? obj : result.value;
-        for (let i = 0; i < checks.length; i++) {
-          if (!checks[i].func(value)) {
-            return checks[i].issue;
-          }
-        }
-      }
-      return result as RawResult<ObjectOutput<Shape, Rest>>;
+      return runChecks(
+        obj,
+        mode === FuncMode.PASS ? pass(obj, mode) : strict(obj, mode)
+      );
     };
   }
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {

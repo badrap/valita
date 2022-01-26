@@ -868,6 +868,21 @@ describe("object()", () => {
   });
 
   describe("rest", () => {
+    it("accepts extra keys", () => {
+      const t = v.object({}).rest(v.unknown());
+      expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
+    });
+    it("requires the given type from defined keys", () => {
+      const t = v.object({ a: v.number() }).rest(v.unknown());
+      expect(() => t.parse({ a: "test", b: 1 }))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_type",
+          path: ["a"],
+          expected: ["number"],
+        });
+    });
     it("adds an index signature to the inferred type", () => {
       const t = v.object({ a: v.literal(1) }).rest(v.number());
       expectType(t).toImply<{ a: 1; [K: string]: number }>(true);
