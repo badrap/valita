@@ -221,6 +221,62 @@ const schema = v
   .assert((v) => v >= 0 && v <= 255, "Must be in between 0 or 255");
 ```
 
+### Composing custom validation functions
+
+A core strength of valita is that validation functions are composable by nature. This means that you can reuse bits and pieces of your schema and compose schemas from smaller building blocks.
+
+```js
+import * as v from "@badrap/valita";
+
+// Reusable custom schema for a Person type
+const personSchema = v
+  .object({
+    name: v.string()
+    age: v.number(),
+  })
+
+// Reuse the custom schema times
+const schema = v.object({
+  person: personSchema,
+  otherPerson: personSchema,
+});
+```
+
+### Custom validations with type casting
+
+Whilst the `.assert()`-method is very powerful to check if a type is valid or not, it can only return a boolean value. But sometimes we want to parse our data into a propert type in one go. Imagine a JSON-API which serializes dates as a `string` type representing a unix timestamp and we want to return a valid `Date` in our validation schema.
+
+```json
+{
+  "created_at": "2022-01-01T00:00:00.000+00:00"
+}
+```
+
+This can be done with the `.chain()`-method which allows you to cast to a certain type on top of validating the value. It's a more general alternative to `.assert()` so to say.
+
+The `.chain()`-method receives a function to which it will pass the raw value as the first argument. If the value is deemed as being incorrect we return an error message via `v.err("My message")`. If not we cast it to the type we want and pass that to `v.ok(value)`.
+
+Similar to `.assert()` the `.chain()`-method must follow a preceding validation function like `v.string()` in our example.
+
+```js
+import * as v from "@badrap/valita";
+
+const dateSchema = v.string().chain(str => {
+  const date = new Date(str);
+
+  // If the date is invalid JS returns NaN here
+  if (isNaN(date.getTime())) {
+    return v.err(`Invalid date "${str}"`);
+  }
+
+  return v.ok(date);
+})
+
+const schema = v.object({
+  created_at: dateSchema,
+})
+```
+
 ### Recursive Types
 
 One strong suit of valita is its ability to parse types that references itself, like `type T = string | T[]`. We can express such a shape with valita using the `.lazy()` method.
@@ -233,6 +289,28 @@ const myType: v.Type<T> = v.lazy(() => v.union(v.string(), v.array(myType)));
 ```
 
 _Note that TypeScript needs an explicit type cast as it cannot interfere return types of recursive functions. That's why the variable is typed as `v.Type<T>`._
+
+### Validating Self-Referencing Schemas
+
+You may come across a schema where fields are related to each other and need to be validated together. Let's pick an example where a JSON-API returns an object with a `min` and `max` property. In our schema we want to ensure that the `min` value is smaller than `max`.
+
+```json
+{
+  "min": 10,
+  "max": 100
+}
+```
+
+For that we assert that both properties are of type `number` via the `.number()`-method. To be able to compare them to each other we add a validation helper on the common parent type of the fields we want to compare. We can leverage the `.assert()`-method on the surrounding `.object()` result in our example.
+
+```ts
+import * as v from "@badrap/valita";
+
+const schema = v.object({
+  min: v.number(),
+  max: v.number()
+}).assert(obj => obj.min < obj.max, ".min must be smaller than .max")
+```
 
 ## License
 
