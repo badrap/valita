@@ -596,6 +596,61 @@ describe("object()", () => {
     });
     expect(t.parse(o)).to.deep.equal({ a: 1, b: 3 });
   });
+  it("safely sets __proto__ in a cloned output when __proto__ is transformed", () => {
+    const o = Object.create(null);
+    o.__proto__ = v.unknown().map(() => ({ a: 1 }));
+    const t = v.object(o);
+    const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
+    expect(r).to.not.have.property("a");
+    expect(r).to.not.have.property("b");
+    expect(r).to.have.deep.own.property("__proto__", { a: 1 });
+  });
+  it("safely sets __proto__ in cloned output when __proto__ is transformed as a part of rest()", () => {
+    const t = v.object({}).rest(v.unknown().map(() => ({ a: 1 })));
+    const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
+    expect(r).to.not.have.property("a");
+    expect(r).to.not.have.property("b");
+    expect(r).to.have.deep.own.property("__proto__", { a: 1 });
+  });
+  it("safely sets __proto__ in a cloned output another key is transformed", () => {
+    const t = v.object({ x: v.unknown().map((x) => !x) }).rest(v.unknown());
+    const r = t.parse(JSON.parse('{ "x": 1, "__proto__": { "b": 2 } }'));
+    expect(r).to.not.have.property("b");
+    expect(r).to.have.deep.own.property("__proto__", { b: 2 });
+  });
+  it("safely sets __proto__ when it's added to output (causing cloning)", () => {
+    const o = Object.create(null);
+    o.__proto__ = v.unknown().default({ a: 1 });
+    const t = v.object(o);
+
+    // Parse a __proto__-less object
+    const r = t.parse(Object.create(null));
+    expect(r).to.not.have.property("a");
+    expect(r).to.have.deep.own.property("__proto__", { a: 1 });
+  });
+  it("safely sets __proto__ when it's added to already cloned output", () => {
+    const o = Object.create(null);
+    o.x = v.unknown().default(true);
+    o.__proto__ = v.unknown().default({ a: 1 });
+    const t = v.object(o);
+
+    // Parse a __proto__-less object
+    const r = t.parse(Object.create(null));
+    expect(r).to.not.have.property("a");
+    expect(r).to.have.deep.own.property("__proto__", { a: 1 });
+  });
+  it("sets __proto__ property as own-writable-enumerable-configurable in cloned output", () => {
+    const o = Object.create(null);
+    o.__proto__ = v.unknown().map(() => ({ a: 1 }));
+    const t = v.object(o);
+    const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
+    expect(Object.getOwnPropertyDescriptor(r, "__proto__")).to.deep.equal({
+      value: { a: 1 },
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  });
   it("rejects other types", () => {
     const t = v.object({});
     for (const val of ["1", 1n, true, null, undefined, []]) {
@@ -1183,6 +1238,23 @@ describe("record()", () => {
     expect(() =>
       t.parse({ a: 1, b: "test" }, { mode: "passthrough" })
     ).to.throw(v.ValitaError);
+  });
+  it("safely sets __proto__ in cloned output when values are transformed", () => {
+    const t = v.record(v.unknown().map(() => ({ a: 1 })));
+    const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
+    expect(r).to.not.have.property("a");
+    expect(r).to.not.have.property("b");
+    expect(r).to.have.deep.own.property("__proto__", { a: 1 });
+  });
+  it("sets __proto__ property as own-writable-enumerable-configurable in cloned output", () => {
+    const t = v.record(v.unknown().map(() => ({ a: 1 })));
+    const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
+    expect(Object.getOwnPropertyDescriptor(r, "__proto__")).to.deep.equal({
+      value: { a: 1 },
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   });
 });
 

@@ -246,6 +246,23 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function safeSet(
+  obj: Record<string, unknown>,
+  key: string,
+  value: unknown
+): void {
+  if (key === "__proto__") {
+    Object.defineProperty(obj, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    obj[key] = value;
+  }
+}
+
 function toTerminals(type: AbstractType): TerminalType[] {
   const result: TerminalType[] = [];
   type.toTerminals(result);
@@ -495,7 +512,7 @@ class ObjectType<
 
     const assignEnumerable = (to: Obj, from: Obj): Obj => {
       for (const key in from) {
-        to[key] = from[key];
+        safeSet(to, key, from[key]);
       }
       return to;
     };
@@ -505,7 +522,7 @@ class ObjectType<
         const key = keys[i];
         const value = from[key];
         if (i < requiredCount || value !== undefined || key in from) {
-          to[key] = value;
+          safeSet(to, key, value);
         }
       }
       return to;
@@ -531,16 +548,16 @@ class ObjectType<
           objResult.code === "ok" &&
           value !== Nothing
         ) {
-          objResult.value[key] = value;
+          safeSet(objResult.value, key, value);
         }
         return objResult;
       } else if (keyResult.code === "ok") {
         if (objResult === true) {
           const copy = assign({}, obj);
-          copy[key] = keyResult.value;
+          safeSet(copy, key, keyResult.value);
           return { code: "ok", value: copy };
         } else if (objResult.code === "ok") {
-          objResult.value[key] = keyResult.value;
+          safeSet(objResult.value, key, keyResult.value);
           return objResult;
         } else {
           return objResult;
