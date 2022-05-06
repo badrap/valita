@@ -1,4 +1,4 @@
-FROM node:16-alpine3.14
+FROM node:16-alpine
 RUN apk add --no-cache \
   git \
   openssh \
