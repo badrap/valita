@@ -510,14 +510,14 @@ class ObjectType<
       path: [key],
     }));
 
-    const assignEnumerable = (to: Obj, from: Obj): Obj => {
+    function assignEnumerable(to: Obj, from: Obj): Obj {
       for (const key in from) {
         safeSet(to, key, from[key]);
       }
       return to;
-    };
+    }
 
-    const assignKnown = (to: Obj, from: Obj): Obj => {
+    function assignKnown(to: Obj, from: Obj): Obj {
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
         const value = from[key];
@@ -526,13 +526,13 @@ class ObjectType<
         }
       }
       return to;
-    };
+    }
 
-    const assignAll = (to: Obj, from: Obj): Obj => {
+    function assignAll(to: Obj, from: Obj): Obj {
       return assignKnown(assignEnumerable(to, from), from);
-    };
+    }
 
-    const addResult = (
+    function addResult(
       objResult: RawResult<Obj>,
       func: Func<unknown>,
       obj: Obj,
@@ -540,7 +540,7 @@ class ObjectType<
       value: unknown,
       mode: FuncMode,
       assign: (to: Obj, from: Obj) => Obj
-    ): RawResult<Obj> => {
+    ): RawResult<Obj> {
       const keyResult = func(value, mode);
       if (keyResult === true) {
         if (
@@ -565,16 +565,16 @@ class ObjectType<
       } else {
         return prependIssue(prependPath(key, keyResult), objResult);
       }
-    };
+    }
 
-    const prependIssue = (
+    function prependIssue(
       issue: IssueTree,
       result: RawResult<unknown>
-    ): IssueTree => {
+    ): IssueTree {
       return result === true || result.code === "ok"
         ? issue
         : joinIssues(issue, result);
-    };
+    }
 
     // A bitset type, used for keeping track which known (required & optional) keys
     // the parser encounters (i.e. setting the bit at `keys.indexOf(knownKey)` to one
@@ -618,13 +618,13 @@ class ObjectType<
       }
     }
 
-    const checkRemainingKeys = (
+    function checkRemainingKeys(
       initialResult: RawResult<Obj>,
       obj: Obj,
       mode: FuncMode,
       bits: BitSet,
       assign: (to: Obj, from: Obj) => Obj
-    ): RawResult<Obj> => {
+    ): RawResult<Obj> {
       let result = initialResult;
       for (let i = 0; i < totalCount; i++) {
         if (!getBit(bits, i)) {
@@ -638,9 +638,9 @@ class ObjectType<
         }
       }
       return result;
-    };
+    }
 
-    const strict = (obj: Obj, mode: FuncMode): RawResult<Obj> => {
+    function strict(obj: Obj, mode: FuncMode): RawResult<Obj> {
       let result: RawResult<Obj> = true;
       let unrecognized: Key[] | undefined = undefined;
       let seenBits: BitSet = 0;
@@ -686,9 +686,9 @@ class ObjectType<
             },
             result
           );
-    };
+    }
 
-    const pass = (obj: Obj, mode: FuncMode): RawResult<Obj> => {
+    function pass(obj: Obj, mode: FuncMode): RawResult<Obj> {
       let result: RawResult<Obj> = true;
 
       for (let i = 0; i < keys.length; i++) {
@@ -715,12 +715,12 @@ class ObjectType<
       }
 
       return result;
-    };
+    }
 
-    const runChecks = (
+    function runChecks(
       obj: Record<string, unknown>,
       result: RawResult<Obj>
-    ): RawResult<ObjectOutput<Shape, Rest>> => {
+    ): RawResult<ObjectOutput<Shape, Rest>> {
       if ((result === true || result.code === "ok") && checks) {
         const value = result === true ? obj : result.value;
         for (let i = 0; i < checks.length; i++) {
@@ -730,7 +730,7 @@ class ObjectType<
         }
       }
       return result as RawResult<ObjectOutput<Shape, Rest>>;
-    };
+    }
 
     if (this.restType) {
       const rest = this.restType.func;
