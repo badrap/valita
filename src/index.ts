@@ -628,28 +628,12 @@ class ObjectType<
       let result = initialResult;
       for (let i = 0; i < totalCount; i++) {
         if (!getBit(bits, i)) {
-          if (keys[i] in obj) {
-            result = addResult(
-              result,
-              funcs[i],
-              obj,
-              keys[i],
-              obj[keys[i]],
-              mode,
-              assign
-            );
-          } else if (i >= requiredCount) {
-            result = addResult(
-              result,
-              funcs[i],
-              obj,
-              keys[i],
-              Nothing,
-              mode,
-              assign
-            );
-          } else {
+          const key = keys[i];
+          const value = key in obj ? obj[key] : Nothing;
+          if (i < requiredCount && value === Nothing) {
             result = prependIssue(missingValues[i], result);
+          } else {
+            result = addResult(result, funcs[i], obj, key, value, mode, assign);
           }
         }
       }
