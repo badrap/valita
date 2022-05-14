@@ -576,42 +576,74 @@ class ObjectType<
         : joinIssues(issue, result);
     };
 
+    // A bitset type, used for keeping track which known (required & optional) keys
+    // the parser encounters (i.e. setting the bit at `keys.indexOf(knownKey)` to one
+    // when knownKey is encountered).
+    //
+    // BitSet values initially start as a number (to avoid garbage collector churn),
+    // and an empty BitSet is initialized like this:
+    //    let bitSet: BitSet = 0;
+    //
+    // As JavaScript bit arithmetic for numbers can only deal with 32-bit numbers,
+    // BitSet values are opportunistically upgraded to number arrays if a bit in
+    // index >= 32 needs to be set.
+    type BitSet = number | number[];
+
+    // Preallocate a "template" array for fast cloning, in case the BitSet needs to
+    // be upgraded to an array. This will only become useful when keys.length > 32.
+    const template = [0 | 0];
+    for (let i = 32; i < totalCount; i += 32) {
+      template.push(0 | 0);
+    }
+
+    // Set a bit in position `index` to one and return the updated bitset.
+    function setBit(bits: BitSet, index: number): BitSet {
+      if (typeof bits !== "number") {
+        bits[index >> 5] |= 1 << index % 32;
+        return bits;
+      } else if (index > 32) {
+        template[0] = bits | 0;
+        return setBit(template.slice(), index);
+      } else {
+        return bits | (1 << index);
+      }
+    }
+
+    // Get the bit in position `index`.
+    function getBit(bits: BitSet, index: number): number {
+      if (typeof bits === "number") {
+        return index > 32 ? 0 : (bits >>> index) & 1;
+      } else {
+        return (bits[index >> 5] >>> index % 32) & 1;
+      }
+    }
+
     const checkRemainingKeys = (
       initialResult: RawResult<Obj>,
       obj: Obj,
       mode: FuncMode,
-      requiredSeen: number,
-      optionalSeen: number,
-      seenIndexes: number,
+      bits: BitSet,
       assign: (to: Obj, from: Obj) => Obj
     ): RawResult<Obj> => {
       let result = initialResult;
-      const start = requiredSeen < requiredCount ? 0 : requiredCount;
-      const end = optionalSeen < optionalCount ? totalCount : requiredCount;
-      for (let i = start | 0; i < (end | 0); i = (i + 1) | 0) {
-        if (i >= 32 || !(seenIndexes & (1 << i))) {
-          const key = keys[i];
-          if (key in obj) {
-            if (
-              i < 32 ||
-              !Object.prototype.propertyIsEnumerable.call(obj, key)
-            ) {
-              result = addResult(
-                result,
-                funcs[i],
-                obj,
-                key,
-                obj[key],
-                mode,
-                assign
-              );
-            }
+      for (let i = 0; i < totalCount; i++) {
+        if (!getBit(bits, i)) {
+          if (keys[i] in obj) {
+            result = addResult(
+              result,
+              funcs[i],
+              obj,
+              keys[i],
+              obj[keys[i]],
+              mode,
+              assign
+            );
           } else if (i >= requiredCount) {
             result = addResult(
               result,
               funcs[i],
               obj,
-              key,
+              keys[i],
               Nothing,
               mode,
               assign
@@ -626,34 +658,25 @@ class ObjectType<
 
     const strict = (obj: Obj, mode: FuncMode): RawResult<Obj> => {
       let result: RawResult<Obj> = true;
-      let requiredSeen = 0 | 0;
-      let optionalSeen = 0 | 0;
-      let seenIndexes = 0 | 0;
       let unrecognized: Key[] | undefined = undefined;
+      let seenBits: BitSet = 0;
+      let seenCount = 0;
 
       for (const key in obj) {
         const value = obj[key];
-        const index = ~invertedIndexes[key] | 0;
+        const index = ~invertedIndexes[key];
         if (index >= 0) {
-          if (index < requiredCount) {
-            requiredSeen = (requiredSeen + 1) | 0;
-          } else {
-            optionalSeen = (optionalSeen + 1) | 0;
-          }
-          if (index < 32) {
-            seenIndexes = seenIndexes | (1 << index);
-          }
-          if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
-            result = addResult(
-              result,
-              funcs[index],
-              obj,
-              key,
-              value,
-              mode,
-              assignKnown
-            );
-          }
+          seenCount++;
+          seenBits = setBit(seenBits, index);
+          result = addResult(
+            result,
+            funcs[index],
+            obj,
+            key,
+            value,
+            mode,
+            assignKnown
+          );
         } else if (mode === FuncMode.STRIP) {
           result =
             result === true
@@ -666,16 +689,8 @@ class ObjectType<
         }
       }
 
-      if (requiredSeen + optionalSeen < totalCount) {
-        result = checkRemainingKeys(
-          result,
-          obj,
-          mode,
-          requiredSeen,
-          optionalSeen,
-          seenIndexes,
-          assignKnown
-        );
+      if (seenCount < totalCount) {
+        result = checkRemainingKeys(result, obj, mode, seenBits, assignKnown);
       }
 
       return unrecognized === undefined
@@ -752,33 +767,24 @@ class ObjectType<
         }
 
         let result: RawResult<Obj> = true;
-        let requiredSeen = 0 | 0;
-        let optionalSeen = 0 | 0;
-        let seenIndexes = 0 | 0;
+        let seenBits: BitSet = 0;
+        let seenCount = 0;
 
         for (const key in obj) {
           const value = obj[key];
-          const index = ~invertedIndexes[key] | 0;
+          const index = ~invertedIndexes[key];
           if (index >= 0) {
-            if (index < requiredCount) {
-              requiredSeen = (requiredSeen + 1) | 0;
-            } else {
-              optionalSeen = (optionalSeen + 1) | 0;
-            }
-            if (index < 32) {
-              seenIndexes = seenIndexes | (1 << index);
-            }
-            if (index < 32 || Object.prototype.hasOwnProperty.call(obj, key)) {
-              result = addResult(
-                result,
-                funcs[index],
-                obj,
-                key,
-                value,
-                mode,
-                assignEnumerable
-              );
-            }
+            seenCount++;
+            seenBits = setBit(seenBits, index);
+            result = addResult(
+              result,
+              funcs[index],
+              obj,
+              key,
+              value,
+              mode,
+              assignEnumerable
+            );
           } else {
             result = addResult(
               result,
@@ -792,16 +798,8 @@ class ObjectType<
           }
         }
 
-        if (requiredSeen + optionalSeen < totalCount) {
-          result = checkRemainingKeys(
-            result,
-            obj,
-            mode,
-            requiredSeen,
-            optionalSeen,
-            seenIndexes,
-            assignAll
-          );
+        if (seenCount < totalCount) {
+          result = checkRemainingKeys(result, obj, mode, seenBits, assignAll);
         }
 
         return runChecks(obj, result);
