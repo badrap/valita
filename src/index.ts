@@ -577,16 +577,16 @@ class ObjectType<
     }
 
     // A bitset type, used for keeping track which known (required & optional) keys
-    // the parser encounters (i.e. setting the bit at `keys.indexOf(knownKey)` to one
-    // when knownKey is encountered).
+    // the object validator has seen. Basically, when key `knownKey` is encountered,
+    // the corresponding bit at index `keys.indexOf(knownKey)` gets flipped to 1.
     //
     // BitSet values initially start as a number (to avoid garbage collector churn),
     // and an empty BitSet is initialized like this:
     //    let bitSet: BitSet = 0;
     //
     // As JavaScript bit arithmetic for numbers can only deal with 32-bit numbers,
-    // BitSet values are opportunistically upgraded to number arrays if a bit in
-    // index >= 32 needs to be set.
+    // BitSet values are upgraded to number arrays if a bits other than 0-31 need
+    // to be flipped.
     type BitSet = number | number[];
 
     // Preallocate a "template" array for fast cloning, in case the BitSet needs to
@@ -597,6 +597,7 @@ class ObjectType<
     }
 
     // Set a bit in position `index` to one and return the updated bitset.
+    // This function may or may not mutate `bits` in-place.
     function setBit(bits: BitSet, index: number): BitSet {
       if (typeof bits !== "number") {
         bits[index >> 5] |= 1 << index % 32;
@@ -609,7 +610,7 @@ class ObjectType<
       }
     }
 
-    // Get the bit in position `index`.
+    // Get the bit at position `index`.
     function getBit(bits: BitSet, index: number): number {
       if (typeof bits === "number") {
         return index > 32 ? 0 : (bits >>> index) & 1;
