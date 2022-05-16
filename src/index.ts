@@ -592,7 +592,7 @@ class ObjectType<
     // Preallocate a "template" array for fast cloning, in case the BitSet needs to
     // be upgraded to an array. This will only become useful when keys.length > 32.
     const template = [0 | 0];
-    for (let i = 32; i < totalCount; i += 32) {
+    for (let i = 32; i < keys.length; i += 32) {
       template.push(0 | 0);
     }
 
@@ -602,18 +602,18 @@ class ObjectType<
       if (typeof bits !== "number") {
         bits[index >> 5] |= 1 << index % 32;
         return bits;
-      } else if (index > 32) {
+      } else if (index < 32) {
+        return bits | (1 << index);
+      } else {
         template[0] = bits | 0;
         return setBit(template.slice(), index);
-      } else {
-        return bits | (1 << index);
       }
     }
 
     // Get the bit at position `index`.
     function getBit(bits: BitSet, index: number): number {
       if (typeof bits === "number") {
-        return index > 32 ? 0 : (bits >>> index) & 1;
+        return index < 32 ? (bits >>> index) & 1 : 0;
       } else {
         return (bits[index >> 5] >>> index % 32) & 1;
       }
