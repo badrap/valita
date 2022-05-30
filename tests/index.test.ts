@@ -581,6 +581,28 @@ describe("object()", () => {
     const o = { a: 1 };
     expect(t.parse(o)).to.not.equal(o);
   });
+  it("supports more than 32 keys (33rd key required)", () => {
+    const shape: Record<string, v.Type | v.Optional> = {};
+    for (let i = 0; i < 32; i++) {
+      shape[`key-${i}`] = v.unknown().optional();
+    }
+    shape["key-32"] = v.unknown();
+    expect(() => v.object(shape).parse({})).to.throw(
+      v.ValitaError,
+      "missing_value at .key-32 (missing value)"
+    );
+  });
+  it("supports more than 32 keys (33rd key optional)", () => {
+    const shape: Record<string, v.Type | v.Optional> = {};
+    shape["key-0"] = v.unknown();
+    for (let i = 1; i <= 32; i++) {
+      shape[`key-${i}`] = v.unknown().optional();
+    }
+    expect(() => v.object(shape).parse({ "key-32": 1 })).to.throw(
+      v.ValitaError,
+      "missing_value at .key-0 (missing value)"
+    );
+  });
   it("doesn't lose enumerable optional keys when there are transformed non-enumerable optional keys", () => {
     const o = { a: 1 };
     Object.defineProperty(o, "b", {
