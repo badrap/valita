@@ -7,6 +7,7 @@
   "types": "./dist/types/index.d.ts",
   "exports": {
     "node": {
+      "types": "./dist/types/index.d.ts",
       "module": "./dist/node-mjs/index.mjs",
       "import": "./dist/node-mjs/index.mjs",
       "require": "./dist/node-cjs/index.js"
