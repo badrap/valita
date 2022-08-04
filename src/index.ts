@@ -292,14 +292,8 @@ export type Infer<T extends AbstractType> = T extends AbstractType<infer I>
 
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
-  abstract genFunc(): Func<Output>;
   abstract toTerminals(into: TerminalType[]): void;
-
-  get func(): Func<Output> {
-    const f = this.genFunc();
-    Object.defineProperty(this, "func", { value: f });
-    return f;
-  }
+  abstract func(v: unknown, mode: FuncMode): RawResult<Output>;
 
   try<T extends AbstractType>(
     this: T,
@@ -400,6 +394,10 @@ type IfOptional<T extends AbstractType, Then, Else> = T extends Optional
 
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   protected declare readonly [isOptional] = false;
+
+  toTerminals(into: TerminalType[]): void {
+    into.push(this as TerminalType);
+  }
 }
 
 class Optional<Output = unknown> extends AbstractType<Output | undefined> {
@@ -409,11 +407,8 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   constructor(private readonly type: AbstractType<Output>) {
     super();
   }
-  genFunc(): Func<Output | undefined> {
-    const func = this.type.func;
-    return (v, mode) => {
-      return v === undefined || v === Nothing ? true : func(v, mode);
-    };
+  func(v: unknown, mode: FuncMode): RawResult<Output | undefined> {
+    return v === undefined || v === Nothing ? true : this.type.func(v, mode);
   }
   toTerminals(into: TerminalType[]): void {
     into.push(this);
@@ -443,11 +438,118 @@ type ObjectOutput<
       : unknown)
 >;
 
+function prependIssue(issue: IssueTree, result: RawResult<unknown>): IssueTree {
+  return result === true || result.code === "ok"
+    ? issue
+    : joinIssues(issue, result);
+}
+
+type Obj = Record<string, unknown>;
+type AssignFunc = (to: Obj, from: Obj) => Obj;
+
+function assignEnumerable(to: Obj, from: Obj): Obj {
+  for (const key in from) {
+    safeSet(to, key, from[key]);
+  }
+  return to;
+}
+
+function addResult(
+  objResult: RawResult<Obj>,
+  obj: Obj,
+  key: string,
+  value: unknown,
+  keyResult: RawResult<unknown>,
+  assign: AssignFunc
+): RawResult<Obj> {
+  if (keyResult === true) {
+    if (objResult !== true && objResult.code === "ok" && value !== Nothing) {
+      safeSet(objResult.value, key, value);
+    }
+    return objResult;
+  } else if (keyResult.code === "ok") {
+    if (objResult === true) {
+      const copy = assign({}, obj);
+      safeSet(copy, key, keyResult.value);
+      return { code: "ok", value: copy };
+    } else if (objResult.code === "ok") {
+      safeSet(objResult.value, key, keyResult.value);
+      return objResult;
+    } else {
+      return objResult;
+    }
+  } else {
+    return prependIssue(prependPath(key, keyResult), objResult);
+  }
+}
+
+// A bitset type, used for keeping track which known (required & optional) keys
+// the object validator has seen. Basically, when key `knownKey` is encountered,
+// the corresponding bit at index `keys.indexOf(knownKey)` gets flipped to 1.
+//
+// BitSet values initially start as a number (to avoid garbage collector churn),
+// and an empty BitSet is initialized like this:
+//    let bitSet: BitSet = 0;
+//
+// As JavaScript bit arithmetic for numbers can only deal with 32-bit numbers,
+// BitSet values are upgraded to number arrays if a bits other than 0-31 need
+// to be flipped.
+type BitSet = number | number[];
+
+// Preallocate a "template" array for fast cloning, in case the BitSet needs to
+// be upgraded to an array. This will only become useful when keys.length > 32.
+function createBitsetTemplate(bits: number): number[] {
+  const template = [0 | 0];
+  for (let i = 32; i < bits; i += 32) {
+    template.push(0 | 0);
+  }
+  return template;
+}
+
+// Set a bit in position `index` to one and return the updated bitset.
+// This function may or may not mutate `bits` in-place.
+function setBit(template: number[], bits: BitSet, index: number): BitSet {
+  if (typeof bits !== "number") {
+    bits[index >> 5] |= 1 << index % 32;
+    return bits;
+  } else if (index < 32) {
+    return bits | (1 << index);
+  } else {
+    template[0] = bits | 0;
+    return setBit(template, template.slice(), index);
+  }
+}
+
+// Get the bit at position `index`.
+function getBit(bits: BitSet, index: number): number {
+  if (typeof bits === "number") {
+    return index < 32 ? (bits >>> index) & 1 : 0;
+  } else {
+    return (bits[index >> 5] >>> index % 32) & 1;
+  }
+}
+
 class ObjectType<
   Shape extends ObjectShape = ObjectShape,
   Rest extends AbstractType | undefined = AbstractType | undefined
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
+
+  private readonly missingValues: Issue[];
+  private readonly invalidType: Issue = {
+    code: "invalid_type",
+    expected: ["object"],
+  };
+
+  private readonly keys: string[];
+  private readonly types: AbstractType[];
+  private readonly requiredCount: number;
+  private readonly optionalCount: number;
+  private readonly totalCount: number;
+  private readonly bitsTemplate: number[];
+  private readonly invertedIndexes: Record<string, number>;
+  private readonly assignKnown: AssignFunc;
+  private readonly assignAll: AssignFunc;
 
   constructor(
     readonly shape: Shape,
@@ -458,10 +560,51 @@ class ObjectType<
     }[]
   ) {
     super();
-  }
 
-  toTerminals(into: TerminalType[]): void {
-    into.push(this as ObjectType);
+    const requiredKeys: string[] = [];
+    const optionalKeys: string[] = [];
+    for (const key in shape) {
+      if (hasTerminal(shape[key], "optional")) {
+        optionalKeys.push(key);
+      } else {
+        requiredKeys.push(key);
+      }
+    }
+
+    this.requiredCount = requiredKeys.length | 0;
+    this.optionalCount = optionalKeys.length | 0;
+    this.totalCount = (this.requiredCount + this.optionalCount) | 0;
+
+    this.keys = [...requiredKeys, ...optionalKeys];
+    this.types = this.keys.map((key) => shape[key]);
+
+    this.bitsTemplate = createBitsetTemplate(this.totalCount);
+    this.invertedIndexes = Object.create(null);
+    this.keys.forEach((key, index) => {
+      this.invertedIndexes[key] = ~index;
+    });
+
+    this.missingValues = requiredKeys.map((key) => ({
+      code: "missing_value",
+      path: [key],
+    }));
+
+    this.assignKnown = (to, from) => {
+      const keys = this.keys;
+      const requiredCount = this.requiredCount;
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const value = from[key];
+        if (i < requiredCount || value !== undefined || key in from) {
+          safeSet(to, key, value);
+        }
+      }
+      return to;
+    };
+
+    this.assignAll = (to, from) => {
+      return this.assignKnown(assignEnumerable(to, from), from);
+    };
   }
 
   check(
@@ -478,329 +621,215 @@ class ObjectType<
     ]);
   }
 
-  genFunc(): Func<ObjectOutput<Shape, Rest>> {
-    type Obj = Record<string, unknown>;
-    const shape = this.shape;
-    const checks = this.checks;
+  private checkRemainingKeys(
+    initialResult: RawResult<Obj>,
+    obj: Obj,
+    mode: FuncMode,
+    bits: BitSet,
+    assign: (to: Obj, from: Obj) => Obj
+  ): RawResult<Obj> {
+    const keys = this.keys;
+    const types = this.types;
+    const totalCount = this.totalCount;
+    const requiredCount = this.requiredCount;
+    const missingValues = this.missingValues;
 
-    const requiredKeys: string[] = [];
-    const optionalKeys: string[] = [];
-    for (const key in shape) {
-      if (hasTerminal(shape[key], "optional")) {
-        optionalKeys.push(key);
-      } else {
-        requiredKeys.push(key);
-      }
-    }
-
-    const requiredCount = requiredKeys.length | 0;
-    const optionalCount = optionalKeys.length | 0;
-    const totalCount = (requiredCount + optionalCount) | 0;
-
-    const keys = [...requiredKeys, ...optionalKeys];
-    const funcs = keys.map((key) => shape[key].func);
-    const invertedIndexes: Record<string, number> = Object.create(null);
-    keys.forEach((key, index) => {
-      invertedIndexes[key] = ~index;
-    });
-
-    const invalidType: Issue = { code: "invalid_type", expected: ["object"] };
-    const missingValues: Issue[] = requiredKeys.map((key) => ({
-      code: "missing_value",
-      path: [key],
-    }));
-
-    function assignEnumerable(to: Obj, from: Obj): Obj {
-      for (const key in from) {
-        safeSet(to, key, from[key]);
-      }
-      return to;
-    }
-
-    function assignKnown(to: Obj, from: Obj): Obj {
-      for (let i = 0; i < keys.length; i++) {
+    let result = initialResult;
+    for (let i = 0; i < totalCount; i++) {
+      if (!getBit(bits, i)) {
         const key = keys[i];
-        const value = from[key];
-        if (i < requiredCount || value !== undefined || key in from) {
-          safeSet(to, key, value);
-        }
-      }
-      return to;
-    }
-
-    function assignAll(to: Obj, from: Obj): Obj {
-      return assignKnown(assignEnumerable(to, from), from);
-    }
-
-    function addResult(
-      objResult: RawResult<Obj>,
-      func: Func<unknown>,
-      obj: Obj,
-      key: string,
-      value: unknown,
-      mode: FuncMode,
-      assign: (to: Obj, from: Obj) => Obj
-    ): RawResult<Obj> {
-      const keyResult = func(value, mode);
-      if (keyResult === true) {
-        if (
-          objResult !== true &&
-          objResult.code === "ok" &&
-          value !== Nothing
-        ) {
-          safeSet(objResult.value, key, value);
-        }
-        return objResult;
-      } else if (keyResult.code === "ok") {
-        if (objResult === true) {
-          const copy = assign({}, obj);
-          safeSet(copy, key, keyResult.value);
-          return { code: "ok", value: copy };
-        } else if (objResult.code === "ok") {
-          safeSet(objResult.value, key, keyResult.value);
-          return objResult;
+        const value = key in obj ? obj[key] : Nothing;
+        if (i < requiredCount && value === Nothing) {
+          result = prependIssue(missingValues[i], result);
         } else {
-          return objResult;
-        }
-      } else {
-        return prependIssue(prependPath(key, keyResult), objResult);
-      }
-    }
-
-    function prependIssue(
-      issue: IssueTree,
-      result: RawResult<unknown>
-    ): IssueTree {
-      return result === true || result.code === "ok"
-        ? issue
-        : joinIssues(issue, result);
-    }
-
-    // A bitset type, used for keeping track which known (required & optional) keys
-    // the object validator has seen. Basically, when key `knownKey` is encountered,
-    // the corresponding bit at index `keys.indexOf(knownKey)` gets flipped to 1.
-    //
-    // BitSet values initially start as a number (to avoid garbage collector churn),
-    // and an empty BitSet is initialized like this:
-    //    let bitSet: BitSet = 0;
-    //
-    // As JavaScript bit arithmetic for numbers can only deal with 32-bit numbers,
-    // BitSet values are upgraded to number arrays if a bits other than 0-31 need
-    // to be flipped.
-    type BitSet = number | number[];
-
-    // Preallocate a "template" array for fast cloning, in case the BitSet needs to
-    // be upgraded to an array. This will only become useful when keys.length > 32.
-    const template = [0 | 0];
-    for (let i = 32; i < keys.length; i += 32) {
-      template.push(0 | 0);
-    }
-
-    // Set a bit in position `index` to one and return the updated bitset.
-    // This function may or may not mutate `bits` in-place.
-    function setBit(bits: BitSet, index: number): BitSet {
-      if (typeof bits !== "number") {
-        bits[index >> 5] |= 1 << index % 32;
-        return bits;
-      } else if (index < 32) {
-        return bits | (1 << index);
-      } else {
-        template[0] = bits | 0;
-        return setBit(template.slice(), index);
-      }
-    }
-
-    // Get the bit at position `index`.
-    function getBit(bits: BitSet, index: number): number {
-      if (typeof bits === "number") {
-        return index < 32 ? (bits >>> index) & 1 : 0;
-      } else {
-        return (bits[index >> 5] >>> index % 32) & 1;
-      }
-    }
-
-    function checkRemainingKeys(
-      initialResult: RawResult<Obj>,
-      obj: Obj,
-      mode: FuncMode,
-      bits: BitSet,
-      assign: (to: Obj, from: Obj) => Obj
-    ): RawResult<Obj> {
-      let result = initialResult;
-      for (let i = 0; i < totalCount; i++) {
-        if (!getBit(bits, i)) {
-          const key = keys[i];
-          const value = key in obj ? obj[key] : Nothing;
-          if (i < requiredCount && value === Nothing) {
-            result = prependIssue(missingValues[i], result);
-          } else {
-            result = addResult(result, funcs[i], obj, key, value, mode, assign);
-          }
-        }
-      }
-      return result;
-    }
-
-    function strict(obj: Obj, mode: FuncMode): RawResult<Obj> {
-      let result: RawResult<Obj> = true;
-      let unrecognized: Key[] | undefined = undefined;
-      let seenBits: BitSet = 0;
-      let seenCount = 0;
-
-      for (const key in obj) {
-        const value = obj[key];
-        const index = ~invertedIndexes[key];
-        if (index >= 0) {
-          seenCount++;
-          seenBits = setBit(seenBits, index);
           result = addResult(
             result,
-            funcs[index],
             obj,
             key,
             value,
-            mode,
-            assignKnown
+            types[i].func(value, mode),
+            assign
           );
-        } else if (mode === FuncMode.STRIP) {
-          result =
-            result === true
-              ? { code: "ok", value: assignKnown({}, obj) }
-              : result;
-        } else if (unrecognized === undefined) {
-          unrecognized = [key];
-        } else {
-          unrecognized.push(key);
         }
       }
-
-      if (seenCount < totalCount) {
-        result = checkRemainingKeys(result, obj, mode, seenBits, assignKnown);
-      }
-
-      return unrecognized === undefined
-        ? result
-        : prependIssue(
-            {
-              code: "unrecognized_keys",
-              keys: unrecognized,
-            },
-            result
-          );
     }
+    return result;
+  }
 
-    function pass(obj: Obj, mode: FuncMode): RawResult<Obj> {
-      let result: RawResult<Obj> = true;
+  private pass(obj: Obj, mode: FuncMode): RawResult<Obj> {
+    const keys = this.keys;
+    const types = this.types;
+    const requiredCount = this.requiredCount;
+    const assignKnown = this.assignKnown;
 
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
+    let result: RawResult<Obj> = true;
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
 
-        let value: unknown = obj[key];
-        if (value === undefined && !(key in obj)) {
-          if (i < requiredCount) {
-            result = prependIssue(missingValues[i], result);
-            continue;
-          }
-          value = Nothing;
+      let value: unknown = obj[key];
+      if (value === undefined && !(key in obj)) {
+        if (i < requiredCount) {
+          result = prependIssue(this.missingValues[i], result);
+          continue;
         }
+        value = Nothing;
+      }
 
+      result = addResult(
+        result,
+        obj,
+        key,
+        value,
+        types[i].func(value, mode),
+        assignKnown
+      );
+    }
+    return result;
+  }
+
+  private strict(obj: Obj, mode: FuncMode): RawResult<Obj> {
+    const types = this.types;
+    const invertedIndexes = this.invertedIndexes;
+    const assignKnown = this.assignKnown;
+    const bitsTemplate = this.bitsTemplate;
+
+    let result: RawResult<Obj> = true;
+    let unrecognized: Key[] | undefined = undefined;
+    let seenBits: BitSet = 0;
+    let seenCount = 0;
+
+    for (const key in obj) {
+      const value = obj[key];
+      const index = ~invertedIndexes[key];
+      if (index >= 0) {
+        seenCount++;
+        seenBits = setBit(bitsTemplate, seenBits, index);
         result = addResult(
           result,
-          funcs[i],
           obj,
           key,
           value,
-          mode,
+          types[index].func(value, mode),
           assignKnown
         );
+      } else if (mode === FuncMode.STRIP) {
+        result =
+          result === true
+            ? { code: "ok", value: assignKnown({}, obj) }
+            : result;
+      } else if (unrecognized === undefined) {
+        unrecognized = [key];
+      } else {
+        unrecognized.push(key);
       }
-
-      return result;
     }
 
-    function runChecks(
-      obj: Record<string, unknown>,
-      result: RawResult<Obj>
-    ): RawResult<ObjectOutput<Shape, Rest>> {
-      if ((result === true || result.code === "ok") && checks) {
-        const value = result === true ? obj : result.value;
-        for (let i = 0; i < checks.length; i++) {
-          if (!checks[i].func(value)) {
-            return checks[i].issue;
-          }
+    if (seenCount < this.totalCount) {
+      result = this.checkRemainingKeys(
+        result,
+        obj,
+        mode,
+        seenBits,
+        assignKnown
+      );
+    }
+
+    return unrecognized === undefined
+      ? result
+      : prependIssue(
+          {
+            code: "unrecognized_keys",
+            keys: unrecognized,
+          },
+          result
+        );
+  }
+
+  private withRest(
+    rest: AbstractType,
+    obj: Obj,
+    mode: FuncMode
+  ): RawResult<Obj> {
+    if (rest.name === "unknown" && this.totalCount === 0) {
+      return true;
+    }
+
+    const types = this.types;
+    const invertedIndexes = this.invertedIndexes;
+    const bitsTemplate = this.bitsTemplate;
+
+    let result: RawResult<Obj> = true;
+    let seenBits: BitSet = 0;
+    let seenCount = 0;
+
+    for (const key in obj) {
+      const value = obj[key];
+      const index = ~invertedIndexes[key];
+      if (index >= 0) {
+        seenCount++;
+        seenBits = setBit(bitsTemplate, seenBits, index);
+        result = addResult(
+          result,
+          obj,
+          key,
+          value,
+          types[index].func(value, mode),
+          assignEnumerable
+        );
+      } else {
+        result = addResult(
+          result,
+          obj,
+          key,
+          value,
+          rest.func(value, mode),
+          assignEnumerable
+        );
+      }
+    }
+
+    if (seenCount < this.totalCount) {
+      result = this.checkRemainingKeys(
+        result,
+        obj,
+        mode,
+        seenBits,
+        this.assignAll
+      );
+    }
+    return result;
+  }
+
+  private runChecks(
+    obj: Record<string, unknown>,
+    result: RawResult<Obj>
+  ): RawResult<ObjectOutput<Shape, Rest>> {
+    const checks = this.checks;
+    if ((result === true || result.code === "ok") && checks) {
+      const value = result === true ? obj : result.value;
+      for (let i = 0; i < checks.length; i++) {
+        if (!checks[i].func(value)) {
+          return checks[i].issue;
         }
       }
-      return result as RawResult<ObjectOutput<Shape, Rest>>;
+    }
+    return result as RawResult<ObjectOutput<Shape, Rest>>;
+  }
+
+  func(obj: Obj, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
+    if (!isObject(obj)) {
+      return this.invalidType;
     }
 
     if (this.restType) {
-      const rest = this.restType.func;
-      if (rest.name === "unknown") {
-        if (totalCount === 0) {
-          return (obj, _mode) => {
-            return isObject(obj) ? runChecks(obj, true) : invalidType;
-          };
-        }
-        return (obj, mode) => {
-          return isObject(obj) ? runChecks(obj, pass(obj, mode)) : invalidType;
-        };
-      }
-
-      return (obj, mode) => {
-        if (!isObject(obj)) {
-          return invalidType;
-        }
-
-        let result: RawResult<Obj> = true;
-        let seenBits: BitSet = 0;
-        let seenCount = 0;
-
-        for (const key in obj) {
-          const value = obj[key];
-          const index = ~invertedIndexes[key];
-          if (index >= 0) {
-            seenCount++;
-            seenBits = setBit(seenBits, index);
-            result = addResult(
-              result,
-              funcs[index],
-              obj,
-              key,
-              value,
-              mode,
-              assignEnumerable
-            );
-          } else {
-            result = addResult(
-              result,
-              rest,
-              obj,
-              key,
-              value,
-              mode,
-              assignEnumerable
-            );
-          }
-        }
-
-        if (seenCount < totalCount) {
-          result = checkRemainingKeys(result, obj, mode, seenBits, assignAll);
-        }
-
-        return runChecks(obj, result);
-      };
+      return this.runChecks(obj, this.withRest(this.restType, obj, mode));
+    } else if (mode === FuncMode.PASS) {
+      return this.runChecks(obj, this.pass(obj, mode));
+    } else {
+      return this.runChecks(obj, this.strict(obj, mode));
     }
-
-    return (obj, mode) => {
-      if (!isObject(obj)) {
-        return invalidType;
-      }
-      return runChecks(
-        obj,
-        mode === FuncMode.PASS ? pass(obj, mode) : strict(obj, mode)
-      );
-    };
   }
+
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
     return new ObjectType(this.shape, restType);
   }
@@ -861,60 +890,65 @@ class ArrayType<
 > extends Type<ArrayOutput<Head, Rest>> {
   readonly name = "array";
 
-  constructor(readonly head: Head, readonly rest?: Rest) {
+  private readonly rest: Type;
+  private readonly invalidType: Issue;
+  private readonly invalidLength: Issue;
+  private readonly minLength: number;
+  private readonly maxLength: number;
+
+  constructor(readonly head: Head, rest?: Rest) {
     super();
+
+    this.rest = rest ?? never();
+    this.minLength = this.head.length;
+    this.maxLength = rest ? Infinity : this.minLength;
+    this.invalidType = { code: "invalid_type", expected: ["array"] };
+    this.invalidLength = {
+      code: "invalid_length",
+      minLength: this.minLength,
+      maxLength: this.maxLength,
+    };
   }
 
   toTerminals(into: TerminalType[]): void {
     into.push(this);
   }
 
-  genFunc(): Func<ArrayOutput<Head, Rest>> {
-    const headFuncs = this.head.map((t) => t.func);
-    const restFunc = (this.rest ?? never()).func;
-    const minLength = headFuncs.length;
-    const maxLength = this.rest ? Infinity : minLength;
+  func(arr: unknown, mode: FuncMode): RawResult<ArrayOutput<Head, Rest>> {
+    if (!Array.isArray(arr)) {
+      return this.invalidType;
+    }
 
-    const invalidType: Issue = { code: "invalid_type", expected: ["array"] };
-    const invalidLength: Issue = {
-      code: "invalid_length",
-      minLength,
-      maxLength,
-    };
+    const length = arr.length;
+    const minLength = this.minLength;
+    const maxLength = this.maxLength;
+    if (length < minLength || length > maxLength) {
+      return this.invalidLength;
+    }
 
-    return (arr, mode) => {
-      if (!Array.isArray(arr)) {
-        return invalidType;
-      }
-      const length = arr.length;
-      if (length < minLength || length > maxLength) {
-        return invalidLength;
-      }
-
-      let issueTree: IssueTree | undefined = undefined;
-      let output: unknown[] = arr;
-      for (let i = 0; i < arr.length; i++) {
-        const func = i < minLength ? headFuncs[i] : restFunc;
-        const r = func(arr[i], mode);
-        if (r !== true) {
-          if (r.code === "ok") {
-            if (output === arr) {
-              output = arr.slice();
-            }
-            output[i] = r.value;
-          } else {
-            issueTree = joinIssues(issueTree, prependPath(i, r));
+    let issueTree: IssueTree | undefined = undefined;
+    let output: unknown[] = arr;
+    for (let i = 0; i < arr.length; i++) {
+      const type = i < minLength ? this.head[i] : this.rest;
+      const r = type.func(arr[i], mode);
+      if (r !== true) {
+        if (r.code === "ok") {
+          if (output === arr) {
+            output = arr.slice();
           }
+          output[i] = r.value;
+        } else {
+          issueTree = joinIssues(issueTree, prependPath(i, r));
         }
       }
-      if (issueTree) {
-        return issueTree;
-      } else if (arr === output) {
-        return true;
-      } else {
-        return { code: "ok", value: output as ArrayOutput<Head, Rest> };
-      }
-    };
+    }
+    if (issueTree) {
+      return issueTree;
+    } else if (arr === output) {
+      return true;
+    } else {
+      return { code: "ok", value: output as ArrayOutput<Head, Rest> };
+    }
   }
 }
 
@@ -1190,201 +1224,298 @@ function flatten(
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
 
+  private readonly hasUnknown: boolean;
+  private readonly objects: {
+    key: string;
+    optional?: AbstractType<unknown> | undefined;
+    matcher: (
+      rootValue: unknown,
+      value: unknown,
+      mode: FuncMode
+    ) => RawResult<unknown>;
+  }[];
+  private readonly base: (
+    rootValue: unknown,
+    value: unknown,
+    mode: FuncMode
+  ) => RawResult<unknown>;
+
   constructor(readonly options: T) {
     super();
+
+    const flattened = flatten(options.map((root) => ({ root, type: root })));
+    this.objects = createObjectMatchers(flattened);
+    this.base = createUnionMatcher(flattened);
+    this.hasUnknown = hasTerminal(this, "unknown");
   }
 
   toTerminals(into: TerminalType[]): void {
     this.options.forEach((o) => o.toTerminals(into));
   }
 
-  genFunc(): Func<Infer<T[number]>> {
-    const flattened = flatten(
-      this.options.map((root) => ({ root, type: root }))
-    );
-    const hasUnknown = hasTerminal(this, "unknown");
-    const objects = createObjectMatchers(flattened);
-    const base = createUnionMatcher(flattened);
-    return (v, mode) => {
-      if (!hasUnknown && objects.length > 0 && isObject(v)) {
-        const item = objects[0];
-        let value = v[item.key];
-        if (value === undefined && !(item.key in v)) {
-          value = Nothing;
-        }
-        return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
+  func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
+    if (!this.hasUnknown && this.objects.length > 0 && isObject(v)) {
+      const item = this.objects[0];
+      let value = v[item.key];
+      if (value === undefined && !(item.key in v)) {
+        value = Nothing;
       }
-      return base(v, v, mode) as RawResult<Infer<T[number]>>;
-    };
-  }
-
-  optional(): Optional<Infer<T[number]>> {
-    return new Optional(this);
+      return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
+    }
+    return this.base(v, v, mode) as RawResult<Infer<T[number]>>;
   }
 }
 
-class LiteralType<Out extends Literal = Literal> extends Type<Out> {
-  readonly name = "literal";
-  constructor(readonly value: Out) {
-    super();
-  }
-  genFunc(): Func<Out> {
-    const value = this.value;
-    const issue: Issue = { code: "invalid_literal", expected: [value] };
-    return (v, _) => (v === value ? true : issue);
-  }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-  }
-}
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
+
+  private transformChain?: Func<unknown>[];
+  private transformRoot?: AbstractType;
+  private readonly undef: RawResult<unknown> = { code: "ok", value: undefined };
+
   constructor(
     protected readonly transformed: AbstractType,
     protected readonly transform: Func<unknown>
   ) {
     super();
+    this.transformChain = undefined;
+    this.transformRoot = undefined;
   }
-  genFunc(): Func<Output> {
-    const chain: Func<unknown>[] = [];
 
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    let next: AbstractType = this;
-    while (next instanceof TransformType) {
-      chain.push(next.transform);
-      next = next.transformed;
+  func(v: unknown, mode: FuncMode): RawResult<Output> {
+    let chain = this.transformChain;
+    if (!chain) {
+      chain = [];
+
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      let next: AbstractType = this;
+      while (next instanceof TransformType) {
+        chain.push(next.transform);
+        next = next.transformed;
+      }
+      chain.reverse();
+      this.transformChain = chain;
+      this.transformRoot = next;
     }
-    chain.reverse();
 
-    const func = next.func;
-    const undef = { code: "ok", value: undefined } as RawResult<unknown>;
-    return (v, mode) => {
-      let result = func(v, mode);
-      if (result !== true && result.code !== "ok") {
-        return result;
-      }
+    // eslint-disable-next-line
+    let result = this.transformRoot!.func(v, mode);
+    if (result !== true && result.code !== "ok") {
+      return result;
+    }
 
-      let current: unknown;
-      if (result !== true) {
-        current = result.value;
-      } else if (v === Nothing) {
-        current = undefined;
-        result = undef;
-      } else {
-        current = v;
-      }
+    let current: unknown;
+    if (result !== true) {
+      current = result.value;
+    } else if (v === Nothing) {
+      current = undefined;
+      result = this.undef;
+    } else {
+      current = v;
+    }
 
-      for (let i = 0; i < chain.length; i++) {
-        const r = chain[i](current, mode);
-        if (r !== true) {
-          if (r.code !== "ok") {
-            return r;
-          }
-          current = r.value;
-          result = r;
+    for (let i = 0; i < chain.length; i++) {
+      const r = chain[i](current, mode);
+      if (r !== true) {
+        if (r.code !== "ok") {
+          return r;
         }
+        current = r.value;
+        result = r;
       }
-      return result as RawResult<Output>;
-    };
+    }
+    return result as RawResult<Output>;
   }
+
   toTerminals(into: TerminalType[]): void {
     this.transformed.toTerminals(into);
   }
 }
 class LazyType<T> extends Type<T> {
   readonly name = "lazy";
+
+  private recursing = false;
+  private type?: Type<T>;
+
   constructor(private readonly definer: () => Type<T>) {
     super();
   }
-  private get type(): Type<T> {
-    const type = this.definer();
-    Object.defineProperty(this, "type", { value: type });
-    return type;
+
+  func(v: unknown, mode: FuncMode): RawResult<T> {
+    if (!this.type) {
+      this.type = this.definer();
+    }
+    return this.type.func(v, mode);
   }
-  genFunc(): Func<T> {
-    let func: Func<T> | undefined = undefined;
-    return (v, mode) => {
-      if (!func) {
-        func = this.type.func;
-      }
-      return func(v, mode);
-    };
-  }
+
   toTerminals(into: TerminalType[]): void {
-    this.type.toTerminals(into);
+    if (this.recursing) {
+      return;
+    }
+    try {
+      this.recursing = true;
+      if (!this.type) {
+        this.type = this.definer();
+      }
+      this.type.toTerminals(into);
+    } finally {
+      this.recursing = false;
+    }
   }
 }
 
-function singleton<Name extends string, Output>(
-  name: Name,
-  genFunc: () => Func<Output>
-): () => Type<Output> & { name: Name } {
-  class Singleton extends Type<Output> {
-    readonly name = name;
-    genFunc(): Func<Output> {
-      return genFunc();
-    }
-    toTerminals(into: TerminalType[]): void {
-      into.push(this as TerminalType);
-    }
+class NeverType extends Type<never> {
+  readonly name = "never";
+  private readonly issue: Issue = { code: "invalid_type", expected: [] };
+  func(_: unknown, __: FuncMode): RawResult<never> {
+    return this.issue;
   }
-  const instance = new Singleton();
-  return () => instance;
+}
+const neverSingleton = new NeverType();
+function never(): NeverType {
+  return neverSingleton;
 }
 
-const never = singleton("never", (): Func<never> => {
-  const issue: Issue = { code: "invalid_type", expected: [] };
-  return (_v, _mode) => issue;
-});
-const unknown = singleton("unknown", (): Func<unknown> => {
-  return (_v, _mode) => true;
-});
-const number = singleton("number", (): Func<number> => {
-  const issue: Issue = { code: "invalid_type", expected: ["number"] };
-  return (v, _mode) => (typeof v === "number" ? true : issue);
-});
-const bigint = singleton("bigint", (): Func<bigint> => {
-  const issue: Issue = { code: "invalid_type", expected: ["bigint"] };
-  return (v, _mode) => (typeof v === "bigint" ? true : issue);
-});
-const string = singleton("string", (): Func<string> => {
-  const issue: Issue = { code: "invalid_type", expected: ["string"] };
-  return (v, _mode) => (typeof v === "string" ? true : issue);
-});
-const boolean = singleton("boolean", (): Func<boolean> => {
-  const issue: Issue = { code: "invalid_type", expected: ["boolean"] };
-  return (v, _mode) => (typeof v === "boolean" ? true : issue);
-});
-const undefined_ = singleton("undefined", (): Func<undefined> => {
-  const issue: Issue = { code: "invalid_type", expected: ["undefined"] };
-  return (v, _mode) => (v === undefined ? true : issue);
-});
-const null_ = singleton("null", (): Func<null> => {
-  const issue: Issue = { code: "invalid_type", expected: ["null"] };
-  return (v, _mode) => (v === null ? true : issue);
-});
+class UnknownType extends Type<unknown> {
+  readonly name = "unknown";
+  func(_: unknown, __: FuncMode): RawResult<unknown> {
+    return true;
+  }
+}
+const unknownSingleton = new UnknownType();
+function unknown(): UnknownType {
+  return unknownSingleton;
+}
+
+class UndefinedType extends Type<undefined> {
+  readonly name = "undefined";
+  private readonly issue: Issue = {
+    code: "invalid_type",
+    expected: ["undefined"],
+  };
+  func(v: unknown, _: FuncMode): RawResult<undefined> {
+    return v === undefined ? true : this.issue;
+  }
+}
+const undefinedSingleton = new UndefinedType();
+function undefined_(): UndefinedType {
+  return undefinedSingleton;
+}
+
+class NullType extends Type<null> {
+  readonly name = "null";
+  private readonly issue: Issue = {
+    code: "invalid_type",
+    expected: ["null"],
+  };
+  func(v: unknown, _: FuncMode): RawResult<null> {
+    return v === null ? true : this.issue;
+  }
+}
+const nullSingleton = new NullType();
+function null_(): NullType {
+  return nullSingleton;
+}
+
+class NumberType extends Type<number> {
+  readonly name = "number";
+  private readonly issue: Issue = {
+    code: "invalid_type",
+    expected: ["number"],
+  };
+  func(v: unknown, _: FuncMode): RawResult<number> {
+    return typeof v === "number" ? true : this.issue;
+  }
+}
+const numberSingleton = new NumberType();
+function number(): NumberType {
+  return numberSingleton;
+}
+
+class BigIntType extends Type<bigint> {
+  readonly name = "bigint";
+  private readonly issue: Issue = {
+    code: "invalid_type",
+    expected: ["bigint"],
+  };
+  func(v: unknown, _: FuncMode): RawResult<bigint> {
+    return typeof v === "bigint" ? true : this.issue;
+  }
+}
+const bigintSingleton = new BigIntType();
+function bigint(): BigIntType {
+  return bigintSingleton;
+}
+
+class StringType extends Type<string> {
+  readonly name = "string";
+  private readonly issue: Issue = {
+    code: "invalid_type",
+    expected: ["string"],
+  };
+  func(v: unknown, _: FuncMode): RawResult<string> {
+    return typeof v === "string" ? true : this.issue;
+  }
+}
+const stringSingleton = new StringType();
+function string(): StringType {
+  return stringSingleton;
+}
+
+class BooleanType extends Type<boolean> {
+  readonly name = "boolean";
+  private readonly issue: Issue = {
+    code: "invalid_type",
+    expected: ["boolean"],
+  };
+  func(v: unknown, _: FuncMode): RawResult<boolean> {
+    return typeof v === "boolean" ? true : this.issue;
+  }
+}
+const booleanSingleton = new BooleanType();
+function boolean(): BooleanType {
+  return booleanSingleton;
+}
+
+class LiteralType<Out extends Literal = Literal> extends Type<Out> {
+  readonly name = "literal";
+  private readonly issue: Issue;
+  constructor(readonly value: Out) {
+    super();
+    this.issue = { code: "invalid_literal", expected: [value] };
+  }
+  func(v: unknown, _: FuncMode): RawResult<Out> {
+    return v === this.value ? true : this.issue;
+  }
+}
 function literal<T extends Literal>(value: T): Type<T> {
   return new LiteralType(value);
 }
+
 function object<T extends Record<string, Type | Optional>>(
   obj: T
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
 }
+
 function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
   return new ObjectType({} as Record<string, never>, valueType ?? unknown());
 }
+
 function array<T extends Type>(item: T): ArrayType<[], T> {
   return new ArrayType([], item);
 }
+
 function tuple<T extends [] | [Type, ...Type[]]>(
   items: T
 ): ArrayType<T, undefined> {
   return new ArrayType(items);
 }
+
 function union<T extends Type[]>(...options: T): Type<Infer<T[number]>> {
   return new UnionType(options);
 }
+
 function lazy<T>(definer: () => Type<T>): Type<T> {
   return new LazyType(definer);
 }
