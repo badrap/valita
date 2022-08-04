@@ -458,6 +458,10 @@ describe("string()", () => {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
   });
+  it("has output type 'string'", () => {
+    const t = v.string();
+    expectType(t).toImply<string>(true);
+  });
 });
 
 describe("unknown()", () => {
@@ -466,6 +470,10 @@ describe("unknown()", () => {
     for (const val of ["test", 1, 1n, true, null, undefined, [], {}]) {
       expect(t.parse(val)).to.equal(val);
     }
+  });
+  it("has output type 'unknown'", () => {
+    const t = v.unknown();
+    expectType(t).toImply<unknown>(true);
   });
 });
 
@@ -480,6 +488,10 @@ describe("number()", () => {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
   });
+  it("has output type 'number'", () => {
+    const t = v.number();
+    expectType(t).toImply<number>(true);
+  });
 });
 
 describe("bigint()", () => {
@@ -493,6 +505,10 @@ describe("bigint()", () => {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
   });
+  it("has output type 'bigint'", () => {
+    const t = v.bigint();
+    expectType(t).toImply<bigint>(true);
+  });
 });
 
 describe("boolean()", () => {
@@ -505,6 +521,44 @@ describe("boolean()", () => {
     for (const val of ["1", 1, 1n, null, undefined, [], {}]) {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
+  });
+  it("has output type 'boolean'", () => {
+    const t = v.boolean();
+    expectType(t).toImply<boolean>(true);
+  });
+});
+
+describe("null()", () => {
+  it("accepts null", () => {
+    const t = v.null();
+    expect(t.parse(null)).to.equal(null);
+  });
+  it("rejects other types", () => {
+    const t = v.null();
+    for (const val of ["1", 1, 1n, true, undefined, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+  it("has output type 'null'", () => {
+    const t = v.null();
+    expectType(t).toImply<null>(true);
+  });
+});
+
+describe("undefined()", () => {
+  it("accepts undefined", () => {
+    const t = v.undefined();
+    expect(t.parse(undefined)).to.equal(undefined);
+  });
+  it("rejects other types", () => {
+    const t = v.undefined();
+    for (const val of ["1", 1, 1n, true, null, [], {}]) {
+      expect(() => t.parse(val)).to.throw(v.ValitaError);
+    }
+  });
+  it("has output type 'undefined'", () => {
+    const t = v.undefined();
+    expectType(t).toImply<undefined>(true);
   });
 });
 
