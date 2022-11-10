@@ -1069,12 +1069,12 @@ function createUnionObjectMatchers(
     return {
       key,
       optional,
-      matcher: createUnionMatcher(flattened, [key]),
+      matcher: createUnionBaseMatcher(flattened, [key]),
     };
   });
 }
 
-function createUnionMatcher(
+function createUnionBaseMatcher(
   t: { root: AbstractType; terminal: TerminalType }[],
   path?: Key[]
 ): (rootValue: unknown, value: unknown, mode: FuncMode) => RawResult<unknown> {
@@ -1202,46 +1202,31 @@ function flatten(
   return result;
 }
 
-class InternalUnion<T extends Type[]> {
-  private readonly hasUnknown: boolean;
-  private readonly objects: {
-    key: string;
-    optional?: AbstractType<unknown> | undefined;
-    matcher: (
-      rootValue: unknown,
-      value: unknown,
-      mode: FuncMode
-    ) => RawResult<unknown>;
-  }[];
-  private readonly base: (
-    rootValue: unknown,
-    value: unknown,
-    mode: FuncMode
-  ) => RawResult<unknown>;
+function createUnionMatcher<T extends Type[]>(
+  options: T
+): Func<Infer<T[number]>> {
+  const flattened = flatten(options.map((root) => ({ root, type: root })));
+  const objects = createUnionObjectMatchers(flattened);
+  const base = createUnionBaseMatcher(flattened);
+  const hasUnknown = options.some((option) => hasTerminal(option, "unknown"));
 
-  constructor(options: T) {
-    const flattened = flatten(options.map((root) => ({ root, type: root })));
-    this.objects = createUnionObjectMatchers(flattened);
-    this.base = createUnionMatcher(flattened);
-    this.hasUnknown = options.some((option) => hasTerminal(option, "unknown"));
-  }
-
-  func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
-    if (!this.hasUnknown && this.objects.length > 0 && isObject(v)) {
-      const item = this.objects[0];
+  function func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
+    if (!hasUnknown && objects.length > 0 && isObject(v)) {
+      const item = objects[0];
       let value = v[item.key];
       if (value === undefined && !(item.key in v)) {
         value = Nothing;
       }
       return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
     }
-    return this.base(v, v, mode) as RawResult<Infer<T[number]>>;
+    return base(v, v, mode) as RawResult<Infer<T[number]>>;
   }
+  return func;
 }
 
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
-  private _internal?: InternalUnion<T> = undefined;
+  private _func?: Func<Infer<T[number]>>;
 
   constructor(readonly options: T) {
     super();
@@ -1252,10 +1237,12 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   }
 
   func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
-    if (this._internal === undefined) {
-      this._internal = new InternalUnion(this.options);
+    let func = this._func;
+    if (func === undefined) {
+      func = createUnionMatcher(this.options);
+      this._func = func;
     }
-    return this._internal.func(v, mode);
+    return func(v, mode);
   }
 }
 
