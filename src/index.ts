@@ -263,14 +263,12 @@ function safeSet(
   }
 }
 
-function toTerminals(type: AbstractType): TerminalType[] {
-  const result: TerminalType[] = [];
-  type.toTerminals(result);
-  return result;
-}
-
 function hasTerminal(type: AbstractType, name: TerminalType["name"]): boolean {
-  return toTerminals(type).some((t) => t.name === name);
+  let has = false;
+  type.toTerminals((t) => {
+    has = has || t.name === name;
+  });
+  return has;
 }
 
 const Nothing: unique symbol = Symbol();
@@ -292,7 +290,7 @@ export type Infer<T extends AbstractType> = T extends AbstractType<infer I>
 
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
-  abstract toTerminals(into: TerminalType[]): void;
+  abstract toTerminals(func: (t: TerminalType) => void): void;
   abstract func(v: unknown, mode: FuncMode): RawResult<Output>;
 
   try<T extends AbstractType>(
@@ -395,8 +393,8 @@ type IfOptional<T extends AbstractType, Then, Else> = T extends Optional
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   protected declare readonly [isOptional] = false;
 
-  toTerminals(into: TerminalType[]): void {
-    into.push(this as TerminalType);
+  toTerminals(func: (t: TerminalType) => void): void {
+    func(this as TerminalType);
   }
 }
 
@@ -410,10 +408,10 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   func(v: unknown, mode: FuncMode): RawResult<Output | undefined> {
     return v === undefined || v === Nothing ? true : this.type.func(v, mode);
   }
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
-    into.push(undefined_());
-    this.type.toTerminals(into);
+  toTerminals(func: (t: TerminalType) => void): void {
+    func(this);
+    func(undefined_());
+    this.type.toTerminals(func);
   }
 }
 
@@ -910,8 +908,8 @@ class ArrayType<
     };
   }
 
-  toTerminals(into: TerminalType[]): void {
-    into.push(this);
+  toTerminals(func: (t: TerminalType) => void): void {
+    func(this);
   }
 
   func(arr: unknown, mode: FuncMode): RawResult<ArrayOutput<Head, Rest>> {
@@ -1022,9 +1020,7 @@ function createObjectMatchers(
     let unknowns = [] as number[];
     for (let i = 0; i < shapes.length; i++) {
       const shape = shapes[i];
-      const terminals = toTerminals(shape[key]);
-      for (let j = 0; j < terminals.length; j++) {
-        const terminal = terminals[j];
+      shape[key].toTerminals((terminal) => {
         if (terminal.name === "never") {
           // skip
         } else if (terminal.name === "unknown") {
@@ -1040,7 +1036,7 @@ function createObjectMatchers(
           options.push(i);
           types.set(terminal.name, options);
         }
-      }
+      });
     }
     optionals = dedup(optionals);
     if (optionals.length > 1) {
@@ -1214,7 +1210,7 @@ function flatten(
 ): { root: AbstractType; terminal: TerminalType }[] {
   const result: { root: AbstractType; terminal: TerminalType }[] = [];
   t.forEach(({ root, type }) =>
-    toTerminals(type).forEach((terminal) => {
+    type.toTerminals((terminal) => {
       result.push({ root, terminal });
     })
   );
@@ -1249,8 +1245,8 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     this.hasUnknown = hasTerminal(this, "unknown");
   }
 
-  toTerminals(into: TerminalType[]): void {
-    this.options.forEach((o) => o.toTerminals(into));
+  toTerminals(func: (t: TerminalType) => void): void {
+    this.options.forEach((o) => o.toTerminals(func));
   }
 
   func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
@@ -1327,8 +1323,8 @@ class TransformType<Output> extends Type<Output> {
     return result as RawResult<Output>;
   }
 
-  toTerminals(into: TerminalType[]): void {
-    this.transformed.toTerminals(into);
+  toTerminals(func: (t: TerminalType) => void): void {
+    this.transformed.toTerminals(func);
   }
 }
 class LazyType<T> extends Type<T> {
@@ -1348,7 +1344,7 @@ class LazyType<T> extends Type<T> {
     return this.type.func(v, mode);
   }
 
-  toTerminals(into: TerminalType[]): void {
+  toTerminals(func: (t: TerminalType) => void): void {
     if (this.recursing) {
       return;
     }
@@ -1357,7 +1353,7 @@ class LazyType<T> extends Type<T> {
       if (!this.type) {
         this.type = this.definer();
       }
-      this.type.toTerminals(into);
+      this.type.toTerminals(func);
     } finally {
       this.recursing = false;
     }
