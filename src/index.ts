@@ -533,7 +533,7 @@ class ObjectType<
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
-  private _internal?: InternalObject<Shape, Rest> = undefined;
+  private _func?: Func<ObjectOutput<Shape, Rest>>;
 
   constructor(
     readonly shape: Shape,
@@ -561,14 +561,12 @@ class ObjectType<
   }
 
   func(obj: Obj, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
-    if (this._internal === undefined) {
-      this._internal = new InternalObject(
-        this.shape,
-        this.restType,
-        this.checks
-      );
+    let func = this._func;
+    if (func === undefined) {
+      func = createObjectMatcher(this.shape, this.restType, this.checks);
+      this._func = func;
     }
-    return this._internal.func(obj, mode);
+    return func(obj, mode);
   }
 
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
@@ -620,93 +618,71 @@ class ObjectType<
   }
 }
 
-class InternalObject<
+function createObjectMatcher<
   Shape extends ObjectShape = ObjectShape,
   Rest extends AbstractType | undefined = AbstractType | undefined
-> {
-  private readonly missingValues: Issue[];
-  private readonly invalidType: Issue = {
+>(
+  shape: Shape,
+  restType: Rest,
+  checks?: {
+    func: (v: unknown) => boolean;
+    issue: Issue;
+  }[]
+): Func<ObjectOutput<Shape, Rest>> {
+  const requiredKeys: string[] = [];
+  const optionalKeys: string[] = [];
+  for (const key in shape) {
+    if (hasTerminal(shape[key], "optional")) {
+      optionalKeys.push(key);
+    } else {
+      requiredKeys.push(key);
+    }
+  }
+
+  const requiredCount = requiredKeys.length | 0;
+  const optionalCount = optionalKeys.length | 0;
+  const totalCount = (requiredCount + optionalCount) | 0;
+
+  const keys = [...requiredKeys, ...optionalKeys];
+  const types = keys.map((key) => shape[key]);
+
+  const bitsTemplate = createBitsetTemplate(totalCount);
+  const invertedIndexes = Object.create(null);
+  keys.forEach((key, index) => {
+    invertedIndexes[key] = ~index;
+  });
+
+  const invalidType: Issue = {
     code: "invalid_type",
     expected: ["object"],
   };
+  const missingValues: Issue[] = requiredKeys.map((key) => ({
+    code: "missing_value",
+    path: [key],
+  }));
 
-  private readonly keys: string[];
-  private readonly types: AbstractType[];
-  private readonly requiredCount: number;
-  private readonly optionalCount: number;
-  private readonly totalCount: number;
-  private readonly bitsTemplate: number[];
-  private readonly invertedIndexes: Record<string, number>;
-  private readonly assignKnown: AssignFunc;
-  private readonly assignAll: AssignFunc;
-
-  constructor(
-    readonly shape: Shape,
-    private readonly restType: Rest,
-    private readonly checks?: {
-      func: (v: unknown) => boolean;
-      issue: Issue;
-    }[]
-  ) {
-    const requiredKeys: string[] = [];
-    const optionalKeys: string[] = [];
-    for (const key in shape) {
-      if (hasTerminal(shape[key], "optional")) {
-        optionalKeys.push(key);
-      } else {
-        requiredKeys.push(key);
+  function assignKnown(to: any, from: any): any {
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const value = from[key];
+      if (i < requiredCount || value !== undefined || key in from) {
+        safeSet(to, key, value);
       }
     }
-
-    this.requiredCount = requiredKeys.length | 0;
-    this.optionalCount = optionalKeys.length | 0;
-    this.totalCount = (this.requiredCount + this.optionalCount) | 0;
-
-    this.keys = [...requiredKeys, ...optionalKeys];
-    this.types = this.keys.map((key) => shape[key]);
-
-    this.bitsTemplate = createBitsetTemplate(this.totalCount);
-    this.invertedIndexes = Object.create(null);
-    this.keys.forEach((key, index) => {
-      this.invertedIndexes[key] = ~index;
-    });
-
-    this.missingValues = requiredKeys.map((key) => ({
-      code: "missing_value",
-      path: [key],
-    }));
-
-    this.assignKnown = (to, from) => {
-      const keys = this.keys;
-      const requiredCount = this.requiredCount;
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        const value = from[key];
-        if (i < requiredCount || value !== undefined || key in from) {
-          safeSet(to, key, value);
-        }
-      }
-      return to;
-    };
-
-    this.assignAll = (to, from) => {
-      return this.assignKnown(assignEnumerable(to, from), from);
-    };
+    return to;
   }
 
-  private checkRemainingKeys(
+  function assignAll(to: any, from: any): any {
+    return assignKnown(assignEnumerable(to, from), from);
+  }
+
+  function checkRemainingKeys(
     initialResult: RawResult<Obj>,
     obj: Obj,
     mode: FuncMode,
     bits: BitSet,
     assign: (to: Obj, from: Obj) => Obj
   ): RawResult<Obj> {
-    const keys = this.keys;
-    const types = this.types;
-    const totalCount = this.totalCount;
-    const requiredCount = this.requiredCount;
-    const missingValues = this.missingValues;
-
     let result = initialResult;
     for (let i = 0; i < totalCount; i++) {
       if (!getBit(bits, i)) {
@@ -729,12 +705,7 @@ class InternalObject<
     return result;
   }
 
-  private pass(obj: Obj, mode: FuncMode): RawResult<Obj> {
-    const keys = this.keys;
-    const types = this.types;
-    const requiredCount = this.requiredCount;
-    const assignKnown = this.assignKnown;
-
+  function pass(obj: Obj, mode: FuncMode): RawResult<Obj> {
     let result: RawResult<Obj> = true;
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
@@ -742,7 +713,7 @@ class InternalObject<
       let value: unknown = obj[key];
       if (value === undefined && !(key in obj)) {
         if (i < requiredCount) {
-          result = prependIssue(this.missingValues[i], result);
+          result = prependIssue(missingValues[i], result);
           continue;
         }
         value = Nothing;
@@ -760,12 +731,7 @@ class InternalObject<
     return result;
   }
 
-  private strict(obj: Obj, mode: FuncMode): RawResult<Obj> {
-    const types = this.types;
-    const invertedIndexes = this.invertedIndexes;
-    const assignKnown = this.assignKnown;
-    const bitsTemplate = this.bitsTemplate;
-
+  function strict(obj: Obj, mode: FuncMode): RawResult<Obj> {
     let result: RawResult<Obj> = true;
     let unrecognized: Key[] | undefined = undefined;
     let seenBits: BitSet = 0;
@@ -797,14 +763,8 @@ class InternalObject<
       }
     }
 
-    if (seenCount < this.totalCount) {
-      result = this.checkRemainingKeys(
-        result,
-        obj,
-        mode,
-        seenBits,
-        assignKnown
-      );
+    if (seenCount < totalCount) {
+      result = checkRemainingKeys(result, obj, mode, seenBits, assignKnown);
     }
 
     return unrecognized === undefined
@@ -818,18 +778,14 @@ class InternalObject<
         );
   }
 
-  private withRest(
+  function withRest(
     rest: AbstractType,
     obj: Obj,
     mode: FuncMode
   ): RawResult<Obj> {
-    if (rest.name === "unknown" && this.totalCount === 0) {
+    if (rest.name === "unknown" && totalCount === 0) {
       return true;
     }
-
-    const types = this.types;
-    const invertedIndexes = this.invertedIndexes;
-    const bitsTemplate = this.bitsTemplate;
 
     let result: RawResult<Obj> = true;
     let seenBits: BitSet = 0;
@@ -861,23 +817,16 @@ class InternalObject<
       }
     }
 
-    if (seenCount < this.totalCount) {
-      result = this.checkRemainingKeys(
-        result,
-        obj,
-        mode,
-        seenBits,
-        this.assignAll
-      );
+    if (seenCount < totalCount) {
+      result = checkRemainingKeys(result, obj, mode, seenBits, assignAll);
     }
     return result;
   }
 
-  private runChecks(
+  function runChecks(
     obj: Record<string, unknown>,
     result: RawResult<Obj>
   ): RawResult<ObjectOutput<Shape, Rest>> {
-    const checks = this.checks;
     if ((result === true || result.code === "ok") && checks) {
       const value = result === true ? obj : result.value;
       for (let i = 0; i < checks.length; i++) {
@@ -889,19 +838,24 @@ class InternalObject<
     return result as RawResult<ObjectOutput<Shape, Rest>>;
   }
 
-  func(obj: Obj, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
+  function func(
+    obj: unknown,
+    mode: FuncMode
+  ): RawResult<ObjectOutput<Shape, Rest>> {
     if (!isObject(obj)) {
-      return this.invalidType;
+      return invalidType;
     }
 
-    if (this.restType) {
-      return this.runChecks(obj, this.withRest(this.restType, obj, mode));
+    if (restType) {
+      return runChecks(obj, withRest(restType, obj, mode));
     } else if (mode === FuncMode.PASS) {
-      return this.runChecks(obj, this.pass(obj, mode));
+      return runChecks(obj, pass(obj, mode));
     } else {
-      return this.runChecks(obj, this.strict(obj, mode));
+      return runChecks(obj, strict(obj, mode));
     }
   }
+
+  return func;
 }
 
 type TupleOutput<T extends Type[]> = {
@@ -1022,7 +976,7 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
   return result;
 }
 
-function createObjectMatchers(
+function createUnionObjectMatchers(
   t: { root: AbstractType; terminal: TerminalType }[]
 ): {
   key: string;
@@ -1267,7 +1221,7 @@ class InternalUnion<T extends Type[]> {
 
   constructor(options: T) {
     const flattened = flatten(options.map((root) => ({ root, type: root })));
-    this.objects = createObjectMatchers(flattened);
+    this.objects = createUnionObjectMatchers(flattened);
     this.base = createUnionMatcher(flattened);
     this.hasUnknown = options.some((option) => hasTerminal(option, "unknown"));
   }
