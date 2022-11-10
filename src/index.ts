@@ -443,7 +443,6 @@ function prependIssue(issue: IssueTree, result: RawResult<unknown>): IssueTree {
 }
 
 type Obj = Record<string, unknown>;
-type AssignFunc = (to: Obj, from: Obj) => Obj;
 
 function assignEnumerable(to: Obj, from: Obj): Obj {
   for (const key in from) {
@@ -458,7 +457,7 @@ function addResult(
   key: string,
   value: unknown,
   keyResult: RawResult<unknown>,
-  assign: AssignFunc
+  assign: (to: Obj, from: Obj) => Obj
 ): RawResult<Obj> {
   if (keyResult === true) {
     if (objResult !== true && objResult.code === "ok" && value !== Nothing) {
@@ -661,7 +660,7 @@ function createObjectMatcher<
     path: [key],
   }));
 
-  function assignKnown(to: any, from: any): any {
+  function assignKnown(to: Obj, from: Obj): Obj {
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
       const value = from[key];
@@ -672,7 +671,7 @@ function createObjectMatcher<
     return to;
   }
 
-  function assignAll(to: any, from: any): any {
+  function assignAll(to: Obj, from: Obj): Obj {
     return assignKnown(assignEnumerable(to, from), from);
   }
 
