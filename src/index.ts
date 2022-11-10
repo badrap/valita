@@ -387,7 +387,7 @@ abstract class AbstractType<Output = unknown> {
   }
 }
 
-declare const isOptional: unique symbol;
+const isOptional: unique symbol = Symbol();
 type IfOptional<T extends AbstractType, Then, Else> = T extends Optional
   ? Then
   : Else;

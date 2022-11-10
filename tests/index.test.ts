@@ -1,4 +1,4 @@
-import { expect } from "chai";
+import { describe, it, expect } from "vitest";
 import { expectType as _expectType, TypeEqual, TypeOf } from "ts-expect";
 import * as v from "../src";
 
