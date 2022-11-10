@@ -1825,6 +1825,16 @@ describe("lazy()", () => {
     expectType(a).toImply<A>(true);
     expectType(b).toImply<B>(true);
   });
+  it("allows referencing object matchers that are defined later", () => {
+    const a: v.Type = v.lazy(() => v.union(v.undefined(), b));
+    const b = v.object({ a });
+    expect(a.parse(undefined)).to.equal(undefined);
+  });
+  it("allows referencing union matchers that are defined later", () => {
+    const a: v.Type = v.lazy(() => v.union(v.undefined(), b));
+    const b = v.union(a);
+    expect(a.parse(undefined)).to.equal(undefined);
+  });
   it("fail typecheck on conflicting return type", () => {
     type T =
       | undefined

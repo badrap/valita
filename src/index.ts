@@ -533,6 +533,97 @@ class ObjectType<
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
+  private _internal?: InternalObject<Shape, Rest> = undefined;
+
+  constructor(
+    readonly shape: Shape,
+    private readonly restType: Rest,
+    private readonly checks?: {
+      func: (v: unknown) => boolean;
+      issue: Issue;
+    }[]
+  ) {
+    super();
+  }
+
+  check(
+    func: (v: ObjectOutput<Shape, Rest>) => boolean,
+    error?: CustomError
+  ): ObjectType<Shape, Rest> {
+    const issue = { code: "custom_error", error } as const;
+    return new ObjectType(this.shape, this.restType, [
+      ...(this.checks ?? []),
+      {
+        func: func as (v: unknown) => boolean,
+        issue,
+      },
+    ]);
+  }
+
+  func(obj: Obj, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
+    if (this._internal === undefined) {
+      this._internal = new InternalObject(
+        this.shape,
+        this.restType,
+        this.checks
+      );
+    }
+    return this._internal.func(obj, mode);
+  }
+
+  rest<R extends Type>(restType: R): ObjectType<Shape, R> {
+    return new ObjectType(this.shape, restType);
+  }
+
+  extend<S extends ObjectShape>(
+    shape: S
+  ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
+    return new ObjectType(
+      { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
+      this.restType
+    );
+  }
+
+  pick<K extends (keyof Shape)[]>(
+    ...keys: K
+  ): ObjectType<Pick<Shape, K[number]>, undefined> {
+    const shape = {} as Pick<Shape, K[number]>;
+    keys.forEach((key) => {
+      shape[key] = this.shape[key];
+    });
+    return new ObjectType(shape, undefined);
+  }
+
+  omit<K extends (keyof Shape)[]>(
+    ...keys: K
+  ): ObjectType<Omit<Shape, K[number]>, Rest> {
+    const shape = { ...this.shape };
+    keys.forEach((key) => {
+      delete shape[key];
+    });
+    return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
+  }
+
+  partial(): ObjectType<
+    { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
+    Rest extends AbstractType<infer I> ? Optional<I> : undefined
+  > {
+    const shape = {} as Record<string, unknown>;
+    Object.keys(this.shape).forEach((key) => {
+      shape[key] = this.shape[key].optional();
+    });
+    const rest = this.restType?.optional();
+    return new ObjectType(
+      shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
+      rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined
+    );
+  }
+}
+
+class InternalObject<
+  Shape extends ObjectShape = ObjectShape,
+  Rest extends AbstractType | undefined = AbstractType | undefined
+> {
   private readonly missingValues: Issue[];
   private readonly invalidType: Issue = {
     code: "invalid_type",
@@ -557,8 +648,6 @@ class ObjectType<
       issue: Issue;
     }[]
   ) {
-    super();
-
     const requiredKeys: string[] = [];
     const optionalKeys: string[] = [];
     for (const key in shape) {
@@ -603,20 +692,6 @@ class ObjectType<
     this.assignAll = (to, from) => {
       return this.assignKnown(assignEnumerable(to, from), from);
     };
-  }
-
-  check(
-    func: (v: ObjectOutput<Shape, Rest>) => boolean,
-    error?: CustomError
-  ): ObjectType<Shape, Rest> {
-    const issue = { code: "custom_error", error } as const;
-    return new ObjectType(this.shape, this.restType, [
-      ...(this.checks ?? []),
-      {
-        func: func as (v: unknown) => boolean,
-        issue,
-      },
-    ]);
   }
 
   private checkRemainingKeys(
@@ -826,50 +901,6 @@ class ObjectType<
     } else {
       return this.runChecks(obj, this.strict(obj, mode));
     }
-  }
-
-  rest<R extends Type>(restType: R): ObjectType<Shape, R> {
-    return new ObjectType(this.shape, restType);
-  }
-  extend<S extends ObjectShape>(
-    shape: S
-  ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
-    return new ObjectType(
-      { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
-      this.restType
-    );
-  }
-  pick<K extends (keyof Shape)[]>(
-    ...keys: K
-  ): ObjectType<Pick<Shape, K[number]>, undefined> {
-    const shape = {} as Pick<Shape, K[number]>;
-    keys.forEach((key) => {
-      shape[key] = this.shape[key];
-    });
-    return new ObjectType(shape, undefined);
-  }
-  omit<K extends (keyof Shape)[]>(
-    ...keys: K
-  ): ObjectType<Omit<Shape, K[number]>, Rest> {
-    const shape = { ...this.shape };
-    keys.forEach((key) => {
-      delete shape[key];
-    });
-    return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
-  }
-  partial(): ObjectType<
-    { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-    Rest extends AbstractType<infer I> ? Optional<I> : undefined
-  > {
-    const shape = {} as Record<string, unknown>;
-    Object.keys(this.shape).forEach((key) => {
-      shape[key] = this.shape[key].optional();
-    });
-    const rest = this.restType?.optional();
-    return new ObjectType(
-      shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-      rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined
-    );
   }
 }
 
@@ -1217,9 +1248,7 @@ function flatten(
   return result;
 }
 
-class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
-  readonly name = "union";
-
+class InternalUnion<T extends Type[]> {
   private readonly hasUnknown: boolean;
   private readonly objects: {
     key: string;
@@ -1236,17 +1265,11 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     mode: FuncMode
   ) => RawResult<unknown>;
 
-  constructor(readonly options: T) {
-    super();
-
+  constructor(options: T) {
     const flattened = flatten(options.map((root) => ({ root, type: root })));
     this.objects = createObjectMatchers(flattened);
     this.base = createUnionMatcher(flattened);
-    this.hasUnknown = hasTerminal(this, "unknown");
-  }
-
-  toTerminals(func: (t: TerminalType) => void): void {
-    this.options.forEach((o) => o.toTerminals(func));
+    this.hasUnknown = options.some((option) => hasTerminal(option, "unknown"));
   }
 
   func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
@@ -1259,6 +1282,26 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
       return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
     }
     return this.base(v, v, mode) as RawResult<Infer<T[number]>>;
+  }
+}
+
+class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
+  readonly name = "union";
+  private _internal?: InternalUnion<T> = undefined;
+
+  constructor(readonly options: T) {
+    super();
+  }
+
+  toTerminals(func: (t: TerminalType) => void): void {
+    this.options.forEach((o) => o.toTerminals(func));
+  }
+
+  func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
+    if (this._internal === undefined) {
+      this._internal = new InternalUnion(this.options);
+    }
+    return this._internal.func(v, mode);
   }
 }
 
