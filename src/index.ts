@@ -410,7 +410,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
   toTerminals(func: (t: TerminalType) => void): void {
     func(this);
-    func(undefined_());
+    func(undefinedSingleton);
     this.type.toTerminals(func);
   }
 }
@@ -948,7 +948,7 @@ function toBaseType(v: unknown): BaseType {
 }
 
 function dedup<T>(arr: T[]): T[] {
-  const output = [];
+  const output: T[] = [];
   const seen = new Set();
   for (let i = 0; i < arr.length; i++) {
     if (!seen.has(arr[i])) {
@@ -1351,7 +1351,7 @@ class NeverType extends Type<never> {
   }
 }
 const neverSingleton = new NeverType();
-function never(): NeverType {
+function never(): Type<never> {
   return neverSingleton;
 }
 
@@ -1362,7 +1362,7 @@ class UnknownType extends Type<unknown> {
   }
 }
 const unknownSingleton = new UnknownType();
-function unknown(): UnknownType {
+function unknown(): Type<unknown> {
   return unknownSingleton;
 }
 
@@ -1377,7 +1377,7 @@ class UndefinedType extends Type<undefined> {
   }
 }
 const undefinedSingleton = new UndefinedType();
-function undefined_(): UndefinedType {
+function undefined_(): Type<undefined> {
   return undefinedSingleton;
 }
 
@@ -1392,7 +1392,7 @@ class NullType extends Type<null> {
   }
 }
 const nullSingleton = new NullType();
-function null_(): NullType {
+function null_(): Type<null> {
   return nullSingleton;
 }
 
@@ -1407,7 +1407,7 @@ class NumberType extends Type<number> {
   }
 }
 const numberSingleton = new NumberType();
-function number(): NumberType {
+function number(): Type<number> {
   return numberSingleton;
 }
 
@@ -1422,7 +1422,7 @@ class BigIntType extends Type<bigint> {
   }
 }
 const bigintSingleton = new BigIntType();
-function bigint(): BigIntType {
+function bigint(): Type<bigint> {
   return bigintSingleton;
 }
 
@@ -1437,7 +1437,7 @@ class StringType extends Type<string> {
   }
 }
 const stringSingleton = new StringType();
-function string(): StringType {
+function string(): Type<string> {
   return stringSingleton;
 }
 
@@ -1452,7 +1452,7 @@ class BooleanType extends Type<boolean> {
   }
 }
 const booleanSingleton = new BooleanType();
-function boolean(): BooleanType {
+function boolean(): Type<boolean> {
   return booleanSingleton;
 }
 
@@ -1491,7 +1491,7 @@ function tuple<T extends [] | [Type, ...Type[]]>(
   return new ArrayType(items);
 }
 
-function union<T extends Type[]>(...options: T): Type<Infer<T[number]>> {
+function union<T extends Type[]>(...options: T): UnionType<T> {
   return new UnionType(options);
 }
 
@@ -1500,14 +1500,14 @@ function lazy<T>(definer: () => Type<T>): Type<T> {
 }
 
 type TerminalType =
-  | ReturnType<typeof never>
-  | ReturnType<typeof unknown>
-  | ReturnType<typeof string>
-  | ReturnType<typeof number>
-  | ReturnType<typeof bigint>
-  | ReturnType<typeof boolean>
-  | ReturnType<typeof undefined_>
-  | ReturnType<typeof null_>
+  | NeverType
+  | UnknownType
+  | StringType
+  | NumberType
+  | BigIntType
+  | BooleanType
+  | UndefinedType
+  | NullType
   | ObjectType
   | ArrayType
   | LiteralType
@@ -1534,4 +1534,4 @@ export {
 };
 
 export type { Type, Optional };
-export type { ObjectType, UnionType, ArrayType };
+export type { ObjectType };
