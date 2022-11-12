@@ -1534,4 +1534,4 @@ export {
 };
 
 export type { Type, Optional };
-export type { ObjectType };
+export type { ObjectType, ArrayType, UnionType };
