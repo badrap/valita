@@ -6,6 +6,7 @@
   "module": "./dist/mjs/index.mjs",
   "types": "./dist/types/index.d.ts",
   "exports": {
+    "./package.json": "./package.json",
     "node": {
       "types": "./dist/types/index.d.ts",
       "module": "./dist/node-mjs/index.mjs",
