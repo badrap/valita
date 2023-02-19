@@ -201,15 +201,9 @@ export class ValitaError extends Error {
   }
 }
 
-type Ok<T> = Readonly<{
-  ok: true;
-  value: T;
-}>;
-
-function ok<T extends Literal>(value: T): Ok<T>;
-function ok<T>(value: T): Ok<T>;
-function ok<T>(value: T): Ok<T> {
-  return { ok: true, value };
+interface Ok<T> {
+  readonly ok: true;
+  readonly value: T;
 }
 
 class Err {
@@ -234,10 +228,17 @@ class Err {
   }
 }
 
-function err<E extends CustomError>(error?: E): Err {
+function ok<T extends Literal>(value: T): Ok<T>;
+function ok<T>(value: T): Ok<T>;
+function ok<T>(value: T): Ok<T> {
+  return { ok: true, value };
+}
+
+function err(error?: CustomError): Err {
   return new Err({ code: "custom_error", error });
 }
 
+export type { Ok, Err };
 export type ValitaResult<V> = Ok<V> | Err;
 
 type RawResult<T> = true | Readonly<{ code: "ok"; value: T }> | IssueTree;
