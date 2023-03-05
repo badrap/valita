@@ -967,15 +967,7 @@ function toBaseType(v: unknown): BaseType {
 }
 
 function dedup<T>(arr: T[]): T[] {
-  const output: T[] = [];
-  const seen = new Set();
-  for (let i = 0; i < arr.length; i++) {
-    if (!seen.has(arr[i])) {
-      output.push(arr[i]);
-      seen.add(arr[i]);
-    }
-  }
-  return output;
+  return Array.from(new Set(arr));
 }
 
 function findCommonKeys(rs: ObjectShape[]): string[] {
