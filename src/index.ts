@@ -786,8 +786,23 @@ function createObjectMatcher<
     obj: Obj,
     mode: FuncMode
   ): RawResult<Obj> {
-    if (rest.name === "unknown" && totalCount === 0) {
-      return true;
+    if (totalCount === 0) {
+      if (rest.name === "unknown") {
+        return true;
+      }
+
+      let result: RawResult<Obj> = true;
+      for (const key in obj) {
+        const value = obj[key];
+        result = addResult(
+          result,
+          obj,
+          key,
+          value,
+          rest.func(value, mode),
+          assignEnumerable
+        );
+      }
     }
 
     let result: RawResult<Obj> = true;
