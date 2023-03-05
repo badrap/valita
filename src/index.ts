@@ -281,10 +281,6 @@ const enum FuncMode {
 }
 type Func<T> = (v: unknown, mode: FuncMode) => RawResult<T>;
 
-type ParseOptions = {
-  mode: "passthrough" | "strict" | "strip";
-};
-
 export type Infer<T extends AbstractType> = T extends AbstractType<infer I>
   ? I
   : never;
@@ -293,50 +289,6 @@ abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
   abstract toTerminals(func: (t: TerminalType) => void): void;
   abstract func(v: unknown, mode: FuncMode): RawResult<Output>;
-
-  try<T extends AbstractType>(
-    this: T,
-    v: unknown,
-    options?: Partial<ParseOptions>
-  ): ValitaResult<Infer<T>> {
-    let mode: FuncMode = FuncMode.STRICT;
-    if (options && options.mode === "passthrough") {
-      mode = FuncMode.PASS;
-    } else if (options && options.mode === "strip") {
-      mode = FuncMode.STRIP;
-    }
-
-    const r = this.func(v, mode);
-    if (r === true) {
-      return { ok: true, value: v as Infer<T> };
-    } else if (r.code === "ok") {
-      return { ok: true, value: r.value as Infer<T> };
-    } else {
-      return new Err(r);
-    }
-  }
-
-  parse<T extends AbstractType>(
-    this: T,
-    v: unknown,
-    options?: Partial<ParseOptions>
-  ): Infer<T> {
-    let mode: FuncMode = FuncMode.STRICT;
-    if (options && options.mode === "passthrough") {
-      mode = FuncMode.PASS;
-    } else if (options && options.mode === "strip") {
-      mode = FuncMode.STRIP;
-    }
-
-    const r = this.func(v, mode);
-    if (r === true) {
-      return v as Infer<T>;
-    } else if (r.code === "ok") {
-      return r.value as Infer<T>;
-    } else {
-      throw new ValitaError(r);
-    }
-  }
 
   optional(): Optional<Output> {
     return new Optional(this);
@@ -391,11 +343,59 @@ type IfOptional<T extends AbstractType, Then, Else> = T extends Optional
   ? Then
   : Else;
 
+type ParseOptions = {
+  mode: "passthrough" | "strict" | "strip";
+};
+
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   protected declare readonly [isOptional] = false;
 
   toTerminals(func: (t: TerminalType) => void): void {
     func(this as TerminalType);
+  }
+
+  try<T extends AbstractType>(
+    this: T,
+    v: unknown,
+    options?: Partial<ParseOptions>
+  ): ValitaResult<Infer<T>> {
+    let mode: FuncMode = FuncMode.STRICT;
+    if (options && options.mode === "passthrough") {
+      mode = FuncMode.PASS;
+    } else if (options && options.mode === "strip") {
+      mode = FuncMode.STRIP;
+    }
+
+    const r = this.func(v, mode);
+    if (r === true) {
+      return { ok: true, value: v as Infer<T> };
+    } else if (r.code === "ok") {
+      return { ok: true, value: r.value as Infer<T> };
+    } else {
+      return new Err(r);
+    }
+  }
+
+  parse<T extends AbstractType>(
+    this: T,
+    v: unknown,
+    options?: Partial<ParseOptions>
+  ): Infer<T> {
+    let mode: FuncMode = FuncMode.STRICT;
+    if (options && options.mode === "passthrough") {
+      mode = FuncMode.PASS;
+    } else if (options && options.mode === "strip") {
+      mode = FuncMode.STRIP;
+    }
+
+    const r = this.func(v, mode);
+    if (r === true) {
+      return v as Infer<T>;
+    } else if (r.code === "ok") {
+      return r.value as Infer<T>;
+    } else {
+      throw new ValitaError(r);
+    }
   }
 }
 
@@ -413,6 +413,9 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     func(this);
     func(undefinedSingleton);
     this.type.toTerminals(func);
+  }
+  optional(): Optional<Output> {
+    return this;
   }
 }
 
