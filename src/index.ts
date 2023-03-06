@@ -1144,36 +1144,17 @@ function createUnionBaseMatcher(
     path,
     expected: expectedLiterals,
   };
-  const missingValue: Issue = {
-    code: "missing_value",
-    path,
-  };
 
   const literalTypes = new Set(expectedLiterals.map(toBaseType));
   return (rootValue, value, mode) => {
     let count = 0;
     let issueTree: IssueTree | undefined;
 
-    if (value === Nothing) {
-      for (let i = 0; i < optionals.length; i++) {
-        const r = optionals[i].func(rootValue, mode);
-        if (r === true || r.code === "ok") {
-          return r;
-        }
-        issueTree = joinIssues(issueTree, r);
-        count++;
-      }
-      if (!issueTree) {
-        return missingValue;
-      } else if (count > 1) {
-        return { code: "invalid_union", tree: issueTree };
-      } else {
-        return issueTree;
-      }
+    let options = optionals;
+    if (value !== Nothing) {
+      options = literals.get(value) || types.get(toBaseType(value)) || unknowns;
     }
 
-    const type = toBaseType(value);
-    const options = literals.get(value) || types.get(type) || unknowns;
     for (let i = 0; i < options.length; i++) {
       const r = options[i].func(rootValue, mode);
       if (r === true || r.code === "ok") {
@@ -1183,7 +1164,7 @@ function createUnionBaseMatcher(
       count++;
     }
     if (!issueTree) {
-      return literalTypes.has(type) ? invalidLiteral : invalidType;
+      return literalTypes.has(toBaseType(value)) ? invalidLiteral : invalidType;
     } else if (count > 1) {
       return { code: "invalid_union", tree: issueTree };
     } else {
