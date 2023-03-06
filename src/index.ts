@@ -497,27 +497,20 @@ function addResult(
 // to be flipped.
 type BitSet = number | number[];
 
-// Preallocate a "template" array for fast cloning, in case the BitSet needs to
-// be upgraded to an array. This will only become useful when keys.length > 32.
-function createBitsetTemplate(bits: number): number[] {
-  const template = [0 | 0];
-  for (let i = 32; i < bits; i += 32) {
-    template.push(0 | 0);
-  }
-  return template;
-}
-
 // Set a bit in position `index` to one and return the updated bitset.
 // This function may or may not mutate `bits` in-place.
-function setBit(template: number[], bits: BitSet, index: number): BitSet {
+function setBit(bits: BitSet, index: number): BitSet {
   if (typeof bits !== "number") {
-    bits[index >> 5] |= 1 << index % 32;
+    const idx = index >> 5;
+    for (let i = bits.length; i <= idx; i++) {
+      bits.push(0);
+    }
+    bits[idx] |= 1 << index % 32;
     return bits;
   } else if (index < 32) {
     return bits | (1 << index);
   } else {
-    template[0] = bits | 0;
-    return setBit(template, template.slice(), index);
+    return setBit([bits, 0], index);
   }
 }
 
@@ -649,7 +642,6 @@ function createObjectMatcher<
   const keys = [...requiredKeys, ...optionalKeys];
   const types = keys.map((key) => shape[key]);
 
-  const bitsTemplate = createBitsetTemplate(totalCount);
   const invertedIndexes = Object.create(null);
   keys.forEach((key, index) => {
     invertedIndexes[key] = ~index;
@@ -745,7 +737,7 @@ function createObjectMatcher<
       const index = ~invertedIndexes[key];
       if (index >= 0) {
         seenCount++;
-        seenBits = setBit(bitsTemplate, seenBits, index);
+        seenBits = setBit(seenBits, index);
         result = addResult(
           result,
           obj,
@@ -814,7 +806,7 @@ function createObjectMatcher<
       const index = ~invertedIndexes[key];
       if (index >= 0) {
         seenCount++;
-        seenBits = setBit(bitsTemplate, seenBits, index);
+        seenBits = setBit(seenBits, index);
         result = addResult(
           result,
           obj,
