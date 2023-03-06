@@ -978,136 +978,38 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
   return result;
 }
 
-function createUnionObjectMatchers(
-  t: { root: AbstractType; terminal: TerminalType }[]
+function groupTerminals<GroupKey>(
+  terminals: { groupKey: GroupKey; terminal: TerminalType }[]
 ): {
-  key: string;
-  optional?: AbstractType;
-  matcher: (
-    rootValue: unknown,
-    value: unknown,
-    mode: FuncMode
-  ) => RawResult<unknown>;
-}[] {
-  const objects: {
-    root: AbstractType;
-    terminal: TerminalType & { name: "object" };
-  }[] = [];
-  t.forEach(({ root, terminal }) => {
-    if (terminal.name === "object") {
-      objects.push({ root, terminal });
-    }
-  });
-  const shapes = objects.map(({ terminal }) => terminal.shape);
-  const common = findCommonKeys(shapes);
-  const discriminants = common.filter((key) => {
-    const types = new Map<BaseType, number[]>();
-    const literals = new Map<unknown, number[]>();
-    let optionals = [] as number[];
-    let unknowns = [] as number[];
-    for (let i = 0; i < shapes.length; i++) {
-      const shape = shapes[i];
-      shape[key].toTerminals((terminal) => {
-        if (terminal.name === "never") {
-          // skip
-        } else if (terminal.name === "unknown") {
-          unknowns.push(i);
-        } else if (terminal.name === "optional") {
-          optionals.push(i);
-        } else if (terminal.name === "literal") {
-          const options = literals.get(terminal.value) || [];
-          options.push(i);
-          literals.set(terminal.value, options);
-        } else {
-          const options = types.get(terminal.name) || [];
-          options.push(i);
-          types.set(terminal.name, options);
-        }
-      });
-    }
-    optionals = dedup(optionals);
-    if (optionals.length > 1) {
-      return false;
-    }
-    unknowns = dedup(unknowns);
-    if (unknowns.length > 1) {
-      return false;
-    }
-    literals.forEach((found, value) => {
-      const options = types.get(toBaseType(value));
-      if (options) {
-        options.push(...found);
-        literals.delete(value);
-      }
-    });
-    let success = true;
-    literals.forEach((found) => {
-      if (dedup(found.concat(unknowns)).length > 1) {
-        success = false;
-      }
-    });
-    types.forEach((found) => {
-      if (dedup(found.concat(unknowns)).length > 1) {
-        success = false;
-      }
-    });
-    return success;
-  });
-  return discriminants.map((key) => {
-    const flattened = flatten(
-      objects.map(({ root, terminal }) => ({
-        root,
-        type: terminal.shape[key],
-      }))
-    );
-    let optional: AbstractType | undefined = undefined;
-    for (let i = 0; i < flattened.length; i++) {
-      const { root, terminal } = flattened[i];
-      if (terminal.name === "optional") {
-        optional = root;
-        break;
-      }
-    }
-    return {
-      key,
-      optional,
-      matcher: createUnionBaseMatcher(flattened, [key]),
-    };
-  });
-}
-
-function createUnionBaseMatcher(
-  t: { root: AbstractType; terminal: TerminalType }[],
-  path?: Key[]
-): (rootValue: unknown, value: unknown, mode: FuncMode) => RawResult<unknown> {
-  const order = new Map<AbstractType, number>();
-  t.forEach(({ root }, i) => {
-    order.set(root, order.get(root) ?? i);
-  });
-  const byOrder = (a: AbstractType, b: AbstractType): number => {
-    return (order.get(a) ?? 0) - (order.get(b) ?? 0);
-  };
-
+  types: Map<BaseType, GroupKey[]>;
+  literals: Map<unknown, GroupKey[]>;
+  unknowns: GroupKey[];
+  optionals: GroupKey[];
+  expectedTypes: BaseType[];
+} {
+  const order = new Map<GroupKey, number>();
+  const literals = new Map<unknown, GroupKey[]>();
+  const types = new Map<BaseType, GroupKey[]>();
+  const unknowns = [] as GroupKey[];
+  const optionals = [] as GroupKey[];
   const expectedTypes = [] as BaseType[];
-  const literals = new Map<unknown, AbstractType[]>();
-  const types = new Map<BaseType, AbstractType[]>();
-  let unknowns = [] as AbstractType[];
-  let optionals = [] as AbstractType[];
-  t.forEach(({ root, terminal }) => {
+  terminals.forEach(({ groupKey, terminal }) => {
+    order.set(groupKey, order.get(groupKey) ?? order.size);
+
     if (terminal.name === "never") {
       // skip
     } else if (terminal.name === "optional") {
-      optionals.push(root);
+      optionals.push(groupKey);
     } else if (terminal.name === "unknown") {
-      unknowns.push(root);
+      unknowns.push(groupKey);
     } else if (terminal.name === "literal") {
       const roots = literals.get(terminal.value) || [];
-      roots.push(root);
+      roots.push(groupKey);
       literals.set(terminal.value, roots);
       expectedTypes.push(toBaseType(terminal.value));
     } else {
       const roots = types.get(terminal.name) || [];
-      roots.push(root);
+      roots.push(groupKey);
       types.set(terminal.name, roots);
       expectedTypes.push(terminal.name);
     }
@@ -1121,19 +1023,102 @@ function createUnionBaseMatcher(
     }
   });
 
-  unknowns = dedup(unknowns).sort(byOrder);
-  optionals = dedup(optionals).sort(byOrder);
+  const byOrder = (a: GroupKey, b: GroupKey): number => {
+    return (order.get(a) ?? 0) - (order.get(b) ?? 0);
+  };
   types.forEach((roots, type) =>
     types.set(type, dedup(roots.concat(unknowns).sort(byOrder)))
   );
   literals.forEach((roots, value) =>
     literals.set(value, dedup(roots.concat(unknowns)).sort(byOrder))
   );
+  return {
+    types,
+    literals,
+    unknowns: dedup(unknowns).sort(byOrder),
+    optionals: dedup(optionals).sort(byOrder),
+    expectedTypes: dedup(expectedTypes),
+  };
+}
 
-  const expectedLiterals = [] as Literal[];
-  literals.forEach((_, value) => {
-    expectedLiterals.push(value as Literal);
+function createUnionObjectMatcher(
+  terminals: { groupKey: AbstractType; terminal: TerminalType }[]
+):
+  | {
+      key: string;
+      optional?: AbstractType;
+      matcher: (
+        rootValue: unknown,
+        value: unknown,
+        mode: FuncMode
+      ) => RawResult<unknown>;
+    }
+  | undefined {
+  const objects = terminals.filter(
+    (item): item is { groupKey: AbstractType; terminal: ObjectType } => {
+      return item.terminal instanceof ObjectType;
+    }
+  );
+  const shapes = objects.map(({ terminal }) => terminal.shape);
+  const common = findCommonKeys(shapes);
+  const discriminants = common.filter((key) => {
+    const list: { groupKey: number; terminal: TerminalType }[] = [];
+    for (let i = 0; i < shapes.length; i++) {
+      const shape = shapes[i];
+      shape[key].toTerminals((terminal) =>
+        list.push({ groupKey: i, terminal })
+      );
+    }
+
+    const { types, literals, optionals, unknowns } = groupTerminals(list);
+    if (optionals.length > 1 || unknowns.length > 1) {
+      return false;
+    }
+    for (const [_, found] of literals) {
+      if (found.length > 1) {
+        return false;
+      }
+    }
+    for (const [_, found] of types) {
+      if (found.length > 1) {
+        return false;
+      }
+    }
+    return true;
   });
+
+  if (discriminants.length === 0) {
+    return undefined;
+  }
+  const key = discriminants[0];
+  const flattened = flatten(
+    objects.map(({ groupKey, terminal }) => ({
+      groupKey,
+      type: terminal.shape[key],
+    }))
+  );
+  let optional: AbstractType | undefined = undefined;
+  for (let i = 0; i < flattened.length; i++) {
+    const { groupKey, terminal } = flattened[i];
+    if (terminal instanceof Optional) {
+      optional = groupKey;
+      break;
+    }
+  }
+  return {
+    key,
+    optional,
+    matcher: createUnionBaseMatcher(flattened, [key]),
+  };
+}
+
+function createUnionBaseMatcher(
+  terminals: { groupKey: AbstractType; terminal: TerminalType }[],
+  path?: Key[]
+): (rootValue: unknown, value: unknown, mode: FuncMode) => RawResult<unknown> {
+  const { expectedTypes, literals, types, unknowns, optionals } =
+    groupTerminals(terminals);
+
   const invalidType: Issue = {
     code: "invalid_type",
     path,
@@ -1142,18 +1127,56 @@ function createUnionBaseMatcher(
   const invalidLiteral: Issue = {
     code: "invalid_literal",
     path,
-    expected: expectedLiterals,
+    expected: Array.from(literals.keys()) as Literal[],
   };
 
-  const literalTypes = new Set(expectedLiterals.map(toBaseType));
+  const byType: {
+    [K in BaseType]?: {
+      types: AbstractType[];
+      literals?: Map<unknown, AbstractType[]>;
+      defaultIssue: Issue;
+    };
+  } = {};
+  types.forEach((roots, type) => {
+    byType[type] = {
+      types: roots,
+      literals: undefined,
+      defaultIssue: invalidType,
+    };
+  });
+  literals.forEach((roots, value) => {
+    const type = toBaseType(value);
+    let item = byType[type];
+    if (!item) {
+      item = { types: [], literals: new Map(), defaultIssue: invalidLiteral };
+      byType[type] = item;
+    }
+    item.literals?.set(value, roots);
+  });
+  const fallback = {
+    types: unknowns,
+    literals: undefined,
+    defaultIssue: invalidType,
+  };
+  const optionalFallback = {
+    types: optionals,
+    literals: undefined,
+    defaultIssue: invalidType,
+  };
+
   return (rootValue, value, mode) => {
     let count = 0;
     let issueTree: IssueTree | undefined;
 
-    let options = optionals;
-    if (value !== Nothing) {
-      options = literals.get(value) || types.get(toBaseType(value)) || unknowns;
-    }
+    const item =
+      value === Nothing
+        ? optionalFallback
+        : byType[toBaseType(value)] ?? fallback;
+
+    const options =
+      item.literals === undefined
+        ? item.types
+        : item.literals.get(value) || unknowns;
 
     for (let i = 0; i < options.length; i++) {
       const r = options[i].func(rootValue, mode);
@@ -1163,8 +1186,9 @@ function createUnionBaseMatcher(
       issueTree = joinIssues(issueTree, r);
       count++;
     }
+
     if (!issueTree) {
-      return literalTypes.has(toBaseType(value)) ? invalidLiteral : invalidType;
+      return item.defaultIssue;
     } else if (count > 1) {
       return { code: "invalid_union", tree: issueTree };
     } else {
@@ -1173,13 +1197,13 @@ function createUnionBaseMatcher(
   };
 }
 
-function flatten(
-  t: { root: AbstractType; type: AbstractType }[]
-): { root: AbstractType; terminal: TerminalType }[] {
-  const result: { root: AbstractType; terminal: TerminalType }[] = [];
-  t.forEach(({ root, type }) =>
+function flatten<GroupKey>(
+  t: { groupKey: GroupKey; type: AbstractType }[]
+): { groupKey: GroupKey; terminal: TerminalType }[] {
+  const result: { groupKey: GroupKey; terminal: TerminalType }[] = [];
+  t.forEach(({ groupKey, type }) =>
     type.toTerminals((terminal) => {
-      result.push({ root, terminal });
+      result.push({ groupKey, terminal });
     })
   );
   return result;
@@ -1188,23 +1212,29 @@ function flatten(
 function createUnionMatcher<T extends Type[]>(
   options: T
 ): Func<Infer<T[number]>> {
-  const flattened = flatten(options.map((root) => ({ root, type: root })));
-  const objects = createUnionObjectMatchers(flattened);
+  const flattened = flatten(
+    options.map((root) => ({ groupKey: root, type: root }))
+  );
   const base = createUnionBaseMatcher(flattened);
+  const object = createUnionObjectMatcher(flattened);
   const hasUnknown = options.some((option) => hasTerminal(option, "unknown"));
 
-  function func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
-    if (!hasUnknown && objects.length > 0 && isObject(v)) {
-      const item = objects[0];
-      let value = v[item.key];
-      if (value === undefined && !(item.key in v)) {
+  if (hasUnknown || !object) {
+    return function (v, mode) {
+      return base(v, v, mode) as RawResult<Infer<T[number]>>;
+    };
+  }
+
+  return function (v, mode) {
+    if (isObject(v)) {
+      let value = v[object.key];
+      if (value === undefined && !(object.key in v)) {
         value = Nothing;
       }
-      return item.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
+      return object.matcher(v, value, mode) as RawResult<Infer<T[number]>>;
     }
     return base(v, v, mode) as RawResult<Infer<T[number]>>;
-  }
-  return func;
+  };
 }
 
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
