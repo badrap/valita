@@ -1071,6 +1071,10 @@ function createUnionObjectMatcher(
       return item.terminal instanceof ObjectType;
     }
   );
+  if (objects.length < 2) {
+    return undefined;
+  }
+
   const shapes = objects.map(({ terminal }) => terminal.shape);
   const common = findCommonKeys(shapes);
   const discriminants = common.filter((key) => {
