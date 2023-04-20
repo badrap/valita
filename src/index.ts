@@ -13,15 +13,6 @@ type BaseType =
   | "bigint"
   | "boolean";
 
-type I<Code, Extra = unknown> = Readonly<
-  PrettyIntersection<
-    Extra & {
-      code: Code;
-      path?: Key[];
-    }
-  >
->;
-
 type CustomError =
   | undefined
   | string
@@ -30,19 +21,27 @@ type CustomError =
       path?: Key[];
     };
 
-type Issue =
-  | I<"invalid_type", { expected: BaseType[] }>
-  | I<"missing_value">
-  | I<"invalid_literal", { expected: Literal[] }>
-  | I<"invalid_length", { minLength: number; maxLength: number }>
-  | I<"unrecognized_keys", { keys: Key[] }>
-  | I<"invalid_union", { tree: IssueTree }>
-  | I<"custom_error", { error: CustomError }>;
+type IssueNode<PathType = Key | undefined> = Readonly<
+  | { code: "invalid_type"; path: PathType; expected: BaseType[] }
+  | { code: "missing_value"; path: PathType }
+  | { code: "invalid_literal"; path: PathType; expected: Literal[] }
+  | {
+      code: "invalid_length";
+      path: PathType;
+      minLength: number;
+      maxLength: number;
+    }
+  | { code: "unrecognized_keys"; path: PathType; keys: Key[] }
+  | { code: "invalid_union"; path: PathType; tree: IssueTree }
+  | { code: "custom_error"; path: PathType; error: CustomError }
+>;
 
 type IssueTree =
   | Readonly<{ code: "prepend"; key: Key; tree: IssueTree }>
   | Readonly<{ code: "join"; left: IssueTree; right: IssueTree }>
-  | Issue;
+  | IssueNode;
+
+type Issue = IssueNode<Key[]>;
 
 function joinIssues(left: IssueTree | undefined, right: IssueTree): IssueTree {
   return left ? { code: "join", left, right } : right;
@@ -62,13 +61,13 @@ function _collectIssues(tree: IssueTree, path: Key[], issues: Issue[]): void {
     path.pop();
   } else {
     const finalPath = path.slice();
-    if (tree.path) {
-      finalPath.push(...tree.path);
+    if (tree.path !== undefined) {
+      finalPath.push(tree.path);
     }
     if (
       tree.code === "custom_error" &&
-      typeof tree.error !== "string" &&
-      tree.error?.path
+      typeof tree.error === "object" &&
+      tree.error.path !== undefined
     ) {
       finalPath.push(...tree.error.path);
     }
@@ -105,17 +104,17 @@ function findOneIssue(tree: IssueTree, path: Key[] = []): Issue {
     path.push(tree.key);
     return findOneIssue(tree.tree, path);
   } else {
-    if (tree.path) {
-      path.push(...tree.path);
+    if (tree.path !== undefined) {
+      path.push(tree.path);
     }
     if (
       tree.code === "custom_error" &&
-      typeof tree.error !== "string" &&
-      tree.error?.path
+      typeof tree.error === "object" &&
+      tree.error.path !== undefined
     ) {
       path.push(...tree.error.path);
     }
-    return { ...tree, path };
+    return { ...tree, path: path };
   }
 }
 
@@ -132,8 +131,6 @@ function countIssues(tree: IssueTree): number {
 function formatIssueTree(issueTree: IssueTree): string {
   const count = countIssues(issueTree);
   const issue = findOneIssue(issueTree);
-
-  const path = issue.path || [];
 
   let message = "validation failed";
   if (issue.code === "invalid_type") {
@@ -175,7 +172,7 @@ function formatIssueTree(issueTree: IssueTree): string {
     }
   }
 
-  let msg = `${issue.code} at .${path.join(".")} (${message})`;
+  let msg = `${issue.code} at .${issue.path.join(".")} (${message})`;
   if (count === 2) {
     msg += ` (+ 1 other issue)`;
   } else if (count > 2) {
@@ -185,19 +182,20 @@ function formatIssueTree(issueTree: IssueTree): string {
 }
 
 export class ValitaError extends Error {
-  private readonly issueTree!: IssueTree;
+  private _issues?: Issue[];
 
-  constructor(issueTree: IssueTree) {
+  constructor(private readonly issueTree: IssueTree) {
     super(formatIssueTree(issueTree));
     Object.setPrototypeOf(this, new.target.prototype);
-    Object.defineProperty(this, "issueTree", { value: issueTree });
     this.name = new.target.name;
+    this._issues = undefined;
   }
 
   get issues(): readonly Issue[] {
-    const issues = collectIssues(this.issueTree);
-    Object.defineProperty(this, "issues", { value: issues });
-    return issues;
+    if (this._issues === undefined) {
+      this._issues = collectIssues(this.issueTree);
+    }
+    return this._issues;
   }
 }
 
@@ -208,19 +206,26 @@ interface Ok<T> {
 
 class Err {
   readonly ok = false;
+  private _issues?: Issue[];
+  private _message?: string;
 
-  constructor(private readonly issueTree: IssueTree) {}
+  constructor(private readonly issueTree: IssueTree) {
+    this._issues = undefined;
+    this._message = undefined;
+  }
 
   get issues(): readonly Issue[] {
-    const issues = collectIssues(this.issueTree);
-    Object.defineProperty(this, "issues", { value: issues });
-    return issues;
+    if (this._issues === undefined) {
+      this._issues = collectIssues(this.issueTree);
+    }
+    return this._issues;
   }
 
   get message(): string {
-    const message = formatIssueTree(this.issueTree);
-    Object.defineProperty(this, "message", { value: message });
-    return message;
+    if (this._message === undefined) {
+      this._message = formatIssueTree(this.issueTree);
+    }
+    return this._message;
   }
 
   throw(): never {
@@ -235,7 +240,7 @@ function ok<T>(value: T): Ok<T> {
 }
 
 function err(error?: CustomError): Err {
-  return new Err({ code: "custom_error", error });
+  return new Err({ code: "custom_error", path: undefined, error });
 }
 
 export type { Ok, Err };
@@ -311,7 +316,7 @@ abstract class AbstractType<Output = unknown> {
     func: ((v: Output) => v is T) | ((v: Output) => boolean),
     error?: CustomError
   ): Type<T> {
-    const err: Issue = { code: "custom_error", error };
+    const err: IssueNode = { code: "custom_error", path: undefined, error };
     return new TransformType(this, (v) => (func(v as Output) ? true : err));
   }
 
@@ -536,7 +541,7 @@ class ObjectType<
     private readonly restType: Rest,
     private readonly checks?: {
       func: (v: unknown) => boolean;
-      issue: Issue;
+      issue: IssueNode;
     }[]
   ) {
     super();
@@ -546,7 +551,7 @@ class ObjectType<
     func: (v: ObjectOutput<Shape, Rest>) => boolean,
     error?: CustomError
   ): ObjectType<Shape, Rest> {
-    const issue = { code: "custom_error", error } as const;
+    const issue: IssueNode = { code: "custom_error", path: undefined, error };
     return new ObjectType(this.shape, this.restType, [
       ...(this.checks ?? []),
       {
@@ -622,7 +627,7 @@ function createObjectMatcher<
   restType: Rest,
   checks?: {
     func: (v: unknown) => boolean;
-    issue: Issue;
+    issue: IssueNode;
   }[]
 ): Func<ObjectOutput<Shape, Rest>> {
   const requiredKeys: string[] = [];
@@ -647,13 +652,14 @@ function createObjectMatcher<
     invertedIndexes[key] = ~index;
   });
 
-  const invalidType: Issue = {
+  const invalidType: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["object"],
   };
-  const missingValues: Issue[] = requiredKeys.map((key) => ({
+  const missingValues: IssueNode[] = requiredKeys.map((key) => ({
     code: "missing_value",
-    path: [key],
+    path: key,
   }));
 
   function assignKnown(to: Obj, from: Obj): Obj {
@@ -767,6 +773,7 @@ function createObjectMatcher<
       : prependIssue(
           {
             code: "unrecognized_keys",
+            path: undefined,
             keys: unrecognized,
           },
           result
@@ -884,8 +891,8 @@ class ArrayType<
   readonly name = "array";
 
   private readonly rest: Type;
-  private readonly invalidType: Issue;
-  private readonly invalidLength: Issue;
+  private readonly invalidType: IssueNode;
+  private readonly invalidLength: IssueNode;
   private readonly minLength: number;
   private readonly maxLength: number;
 
@@ -895,9 +902,14 @@ class ArrayType<
     this.rest = rest ?? never();
     this.minLength = this.head.length;
     this.maxLength = rest ? Infinity : this.minLength;
-    this.invalidType = { code: "invalid_type", expected: ["array"] };
+    this.invalidType = {
+      code: "invalid_type",
+      path: undefined,
+      expected: ["array"],
+    };
     this.invalidLength = {
       code: "invalid_length",
+      path: undefined,
       minLength: this.minLength,
       maxLength: this.maxLength,
     };
@@ -1108,23 +1120,23 @@ function createUnionObjectMatcher(
   return {
     key,
     optional,
-    matcher: createUnionBaseMatcher(flattened, [key]),
+    matcher: createUnionBaseMatcher(flattened, key),
   };
 }
 
 function createUnionBaseMatcher(
   terminals: { groupKey: AbstractType; terminal: TerminalType }[],
-  path?: Key[]
+  path?: Key
 ): (rootValue: unknown, value: unknown, mode: FuncMode) => RawResult<unknown> {
   const { expectedTypes, literals, types, unknowns, optionals } =
     groupTerminals(terminals);
 
-  const invalidType: Issue = {
+  const invalidType: IssueNode = {
     code: "invalid_type",
     path,
     expected: dedup(expectedTypes),
   };
-  const invalidLiteral: Issue = {
+  const invalidLiteral: IssueNode = {
     code: "invalid_literal",
     path,
     expected: Array.from(literals.keys()) as Literal[],
@@ -1134,7 +1146,7 @@ function createUnionBaseMatcher(
     [K in BaseType]?: {
       types: AbstractType[];
       literals?: Map<unknown, AbstractType[]>;
-      defaultIssue: Issue;
+      defaultIssue: IssueNode;
     };
   } = {};
   types.forEach((roots, type) => {
@@ -1190,7 +1202,7 @@ function createUnionBaseMatcher(
     if (!issueTree) {
       return item.defaultIssue;
     } else if (count > 1) {
-      return { code: "invalid_union", tree: issueTree };
+      return { code: "invalid_union", path: undefined, tree: issueTree };
     } else {
       return issueTree;
     }
@@ -1359,7 +1371,11 @@ class LazyType<T> extends Type<T> {
 
 class NeverType extends Type<never> {
   readonly name = "never";
-  private readonly issue: Issue = { code: "invalid_type", expected: [] };
+  private readonly issue: IssueNode = {
+    code: "invalid_type",
+    path: undefined,
+    expected: [],
+  };
   func(_: unknown, __: FuncMode): RawResult<never> {
     return this.issue;
   }
@@ -1382,8 +1398,9 @@ function unknown(): Type<unknown> {
 
 class UndefinedType extends Type<undefined> {
   readonly name = "undefined";
-  private readonly issue: Issue = {
+  private readonly issue: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["undefined"],
   };
   func(v: unknown, _: FuncMode): RawResult<undefined> {
@@ -1397,8 +1414,9 @@ function undefined_(): Type<undefined> {
 
 class NullType extends Type<null> {
   readonly name = "null";
-  private readonly issue: Issue = {
+  private readonly issue: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["null"],
   };
   func(v: unknown, _: FuncMode): RawResult<null> {
@@ -1412,8 +1430,9 @@ function null_(): Type<null> {
 
 class NumberType extends Type<number> {
   readonly name = "number";
-  private readonly issue: Issue = {
+  private readonly issue: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["number"],
   };
   func(v: unknown, _: FuncMode): RawResult<number> {
@@ -1427,8 +1446,9 @@ function number(): Type<number> {
 
 class BigIntType extends Type<bigint> {
   readonly name = "bigint";
-  private readonly issue: Issue = {
+  private readonly issue: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["bigint"],
   };
   func(v: unknown, _: FuncMode): RawResult<bigint> {
@@ -1442,8 +1462,9 @@ function bigint(): Type<bigint> {
 
 class StringType extends Type<string> {
   readonly name = "string";
-  private readonly issue: Issue = {
+  private readonly issue: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["string"],
   };
   func(v: unknown, _: FuncMode): RawResult<string> {
@@ -1457,8 +1478,9 @@ function string(): Type<string> {
 
 class BooleanType extends Type<boolean> {
   readonly name = "boolean";
-  private readonly issue: Issue = {
+  private readonly issue: IssueNode = {
     code: "invalid_type",
+    path: undefined,
     expected: ["boolean"],
   };
   func(v: unknown, _: FuncMode): RawResult<boolean> {
@@ -1472,10 +1494,14 @@ function boolean(): Type<boolean> {
 
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
-  private readonly issue: Issue;
+  private readonly issue: IssueNode;
   constructor(readonly value: Out) {
     super();
-    this.issue = { code: "invalid_literal", expected: [value] };
+    this.issue = {
+      code: "invalid_literal",
+      path: undefined,
+      expected: [value],
+    };
   }
   func(v: unknown, _: FuncMode): RawResult<Out> {
     return v === this.value ? true : this.issue;
