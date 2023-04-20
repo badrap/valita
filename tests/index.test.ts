@@ -1951,6 +1951,7 @@ describe("ValitaResult", () => {
 describe("ValitaError", () => {
   const error = new v.ValitaError({
     code: "invalid_type",
+    path: undefined,
     expected: ["bigint"],
   });
   it("is derived from Error", () => {
@@ -1974,6 +1975,7 @@ describe("ValitaError", () => {
         code: "join",
         left: {
           code: "invalid_type",
+          path: undefined,
           expected: ["bigint"],
         },
         right: {
@@ -1981,6 +1983,7 @@ describe("ValitaError", () => {
           key: "first",
           tree: {
             code: "invalid_type",
+            path: undefined,
             expected: ["string"],
           },
         },
@@ -2011,6 +2014,7 @@ describe("ValitaError", () => {
         code: "join",
         left: {
           code: "invalid_type",
+          path: undefined,
           expected: ["bigint"],
         },
         right: {
@@ -2018,6 +2022,7 @@ describe("ValitaError", () => {
           key: "first",
           tree: {
             code: "invalid_type",
+            path: undefined,
             expected: ["string"],
           },
         },
@@ -2031,12 +2036,14 @@ describe("ValitaError", () => {
         code: "join",
         left: {
           code: "invalid_type",
+          path: undefined,
           expected: ["bigint"],
         },
         right: {
           code: "join",
           left: {
             code: "invalid_type",
+            path: undefined,
             expected: ["bigint"],
           },
           right: {
@@ -2044,6 +2051,7 @@ describe("ValitaError", () => {
             key: "first",
             tree: {
               code: "invalid_type",
+              path: undefined,
               expected: ["string"],
             },
           },
