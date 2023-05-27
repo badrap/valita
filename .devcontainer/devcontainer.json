@@ -1,18 +1,19 @@
 {
-	"name": "Node.js",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
-	"extensions": [
-		"dbaeumer.vscode-eslint",
-		"esbenp.prettier-vscode"
-	],
-	"postCreateCommand": "npm ci",
-	"remoteUser": "node",
-	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
-	"workspaceFolder": "/workspace",
-	"mounts": [
-		"type=volume,target=/workspace/node_modules",
-		"type=volume,target=/workspace/dist"
-	]
+  "name": "@badrap/valita",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "postCreateCommand": "npm ci",
+  "remoteUser": "node",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "type=volume,target=/workspace/node_modules",
+    "type=volume,target=/workspace/dist"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
 }
