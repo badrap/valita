@@ -299,7 +299,7 @@ abstract class AbstractType<Output = unknown> {
     return new Optional(this);
   }
 
-  nullable(): Nullable<Output | null> {
+  nullable(): Nullable<Output> {
     return new Nullable(this);
   }
 
