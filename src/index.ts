@@ -299,6 +299,10 @@ abstract class AbstractType<Output = unknown> {
     return new Optional(this);
   }
 
+  nullable(): Nullable<Output | null> {
+    return new Nullable(this);
+  }
+
   default<T extends Literal>(
     defaultValue: T
   ): Type<Exclude<Output, undefined> | T>;
@@ -420,6 +424,29 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     this.type.toTerminals(func);
   }
   optional(): Optional<Output> {
+    return this;
+  }
+}
+
+class Nullable<Output = unknown> extends AbstractType<Output | null> {
+  protected declare readonly [isOptional] = false;
+  readonly name = "nullable";
+
+  constructor(private readonly type: AbstractType<Output>) {
+    super();
+  }
+
+  func(v: unknown, mode: FuncMode): RawResult<Output | null> {
+    return v === null ? true : this.type.func(v, mode);
+  }
+
+  toTerminals(func: (t: TerminalType) => void): void {
+    func(this);
+    func(nullSingleton);
+    this.type.toTerminals(func);
+  }
+
+  nullable(): Nullable<Output> {
     return this;
   }
 }
@@ -997,6 +1024,7 @@ function groupTerminals<GroupKey>(
   literals: Map<unknown, GroupKey[]>;
   unknowns: GroupKey[];
   optionals: GroupKey[];
+  nullables: GroupKey[];
   expectedTypes: BaseType[];
 } {
   const order = new Map<GroupKey, number>();
@@ -1004,6 +1032,7 @@ function groupTerminals<GroupKey>(
   const types = new Map<BaseType, GroupKey[]>();
   const unknowns = [] as GroupKey[];
   const optionals = [] as GroupKey[];
+  const nullables = [] as GroupKey[];
   const expectedTypes = [] as BaseType[];
   terminals.forEach(({ groupKey, terminal }) => {
     order.set(groupKey, order.get(groupKey) ?? order.size);
@@ -1012,6 +1041,8 @@ function groupTerminals<GroupKey>(
       // skip
     } else if (terminal.name === "optional") {
       optionals.push(groupKey);
+    } else if (terminal.name === "nullable") {
+      nullables.push(groupKey);
     } else if (terminal.name === "unknown") {
       unknowns.push(groupKey);
     } else if (terminal.name === "literal") {
@@ -1049,6 +1080,7 @@ function groupTerminals<GroupKey>(
     literals,
     unknowns: dedup(unknowns).sort(byOrder),
     optionals: dedup(optionals).sort(byOrder),
+    nullables: dedup(nullables).sort(byOrder),
     expectedTypes: dedup(expectedTypes),
   };
 }
@@ -1515,7 +1547,7 @@ function literal<T extends Literal>(value: T): Type<T> {
   return new LiteralType(value);
 }
 
-function object<T extends Record<string, Type | Optional>>(
+function object<T extends Record<string, Type | Optional | Nullable>>(
   obj: T
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
@@ -1555,7 +1587,8 @@ type TerminalType =
   | ObjectType
   | ArrayType
   | LiteralType
-  | Optional;
+  | Optional
+  | Nullable;
 
 export {
   never,
@@ -1577,5 +1610,5 @@ export {
   err,
 };
 
-export type { Type, Optional };
+export type { Type, Optional, Nullable };
 export type { ObjectType, ArrayType, UnionType };

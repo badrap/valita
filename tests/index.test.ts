@@ -12,7 +12,7 @@ import * as v from "../src";
 //  expectType(v.number()).toImply<unknown>(false);
 //  expectType(v.number()).toImply<any>(false);
 //  expectType(v.number()).toImply<never>(false);
-function expectType<T extends v.Type | v.Optional>(
+function expectType<T extends v.Type | v.Optional | v.Nullable>(
   _type: T
 ): {
   toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
@@ -377,6 +377,49 @@ describe("Type", () => {
       });
       t.parse({});
       expect(value).to.be.undefined;
+    });
+  });
+  describe.only("nullable()", () => {
+    it("accepts null", () => {
+      const t = v.object({
+        a: v.string().nullable(),
+      });
+      expect(t.parse({ a: null })).to.deep.equal({ a: null });
+    });
+    it("accepts the original type", () => {
+      const t = v.object({
+        a: v.string().nullable(),
+      });
+      expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
+    });
+    it("adds null to output", () => {
+      const t = v.string().nullable();
+      expectType(t).toImply<string | null>(true);
+    });
+    it("makes the output type nullable", () => {
+      const t1 = v.object({ a: v.number().nullable() });
+      expectType(t1).toImply<{ a: number | null }>(true);
+    });
+    it("short-circuits previous nulls", () => {
+      const t = v.object({
+        a: v
+          .string()
+          .nullable()
+          .map(() => 1)
+          .nullable(),
+      });
+      expect(t.parse({ a: null })).to.deep.equal({ a: null });
+      expectType(t).toImply<{ a: 1 | null }>(true);
+    });
+    it("short-circuits null()", () => {
+      const t = v.object({
+        a: v
+          .null()
+          .map(() => 1)
+          .nullable(),
+      });
+      expect(t.parse({ a: null })).to.deep.equal({ a: null });
+      expectType(t).toImply<{ a: 1 | null }>(true);
     });
   });
   describe("default", () => {
