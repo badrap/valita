@@ -379,7 +379,7 @@ describe("Type", () => {
       expect(value).to.be.undefined;
     });
   });
-  describe.only("nullable()", () => {
+  describe("nullable()", () => {
     it("accepts null", () => {
       const t = v.object({
         a: v.string().nullable(),
