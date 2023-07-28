@@ -113,7 +113,7 @@ const something = v.object({
 
 ### Nullable Type
 
-When working with APIs/DBs is that some types are nullable. Valita can validate those types via the `.nullable()` method:
+When working with APIs/DBs some types are nullable. Valita can validate those types via the `.nullable()` method:
 
 ```ts
 import * as v from "@badrap/valita";
