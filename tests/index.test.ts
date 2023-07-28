@@ -13,7 +13,7 @@ import * as v from "../src";
 //  expectType(v.number()).toImply<any>(false);
 //  expectType(v.number()).toImply<never>(false);
 function expectType<T extends v.Type | v.Optional>(
-  _type: T
+  _type: T,
 ): {
   toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
   toBeAssignableTo<M>(_truth: TypeOf<T, M>): void;
@@ -31,7 +31,7 @@ describe("Type", () => {
     it("returns type v.ValitaResult<v.Infer<...>>", () => {
       function _<T extends v.Type>(
         type: T,
-        value: unknown
+        value: unknown,
       ): v.ValitaResult<v.Infer<T>> {
         return type.try(value);
       }
@@ -686,7 +686,7 @@ describe("object()", () => {
     shape["key-32"] = v.unknown();
     expect(() => v.object(shape).parse({})).to.throw(
       v.ValitaError,
-      "missing_value at .key-32 (missing value)"
+      "missing_value at .key-32 (missing value)",
     );
   });
   it("supports more than 32 keys (33rd key optional)", () => {
@@ -697,7 +697,7 @@ describe("object()", () => {
     }
     expect(() => v.object(shape).parse({ "key-32": 1 })).to.throw(
       v.ValitaError,
-      "missing_value at .key-0 (missing value)"
+      "missing_value at .key-0 (missing value)",
     );
   });
   it("doesn't lose enumerable optional keys when there are transformed non-enumerable optional keys", () => {
@@ -992,7 +992,7 @@ describe("object()", () => {
         .pick("a");
       expectType(t).toImply<{ a: 1 }>(true);
       expect(() => t.parse({ a: 1, b: "test" }, { mode: "strict" })).to.throw(
-        v.ValitaError
+        v.ValitaError,
       );
     });
     it("removes checks", () => {
@@ -1348,14 +1348,14 @@ describe("record()", () => {
     const t = v.record(v.number());
     expect(t.parse({ a: 1 }, { mode: "strict" })).to.deep.equal({ a: 1 });
     expect(() => t.parse({ a: 1, b: "test" }, { mode: "strict" })).to.throw(
-      v.ValitaError
+      v.ValitaError,
     );
     expect(t.parse({ a: 1 }, { mode: "strip" })).to.deep.equal({ a: 1 });
     expect(() => t.parse({ a: 1, b: "test" }, { mode: "strip" })).to.throw(
-      v.ValitaError
+      v.ValitaError,
     );
     expect(() =>
-      t.parse({ a: 1, b: "test" }, { mode: "passthrough" })
+      t.parse({ a: 1, b: "test" }, { mode: "passthrough" }),
     ).to.throw(v.ValitaError);
   });
   it("safely sets __proto__ in cloned output when values are transformed", () => {
@@ -1533,7 +1533,7 @@ describe("union()", () => {
         .string()
         .map(() => 1)
         .assert(() => false),
-      v.string().map(() => 2)
+      v.string().map(() => 2),
     );
     expect(t.parse("test")).to.equal(2);
   });
@@ -1567,7 +1567,7 @@ describe("union()", () => {
       v.number(),
       v.null(),
       v.undefined(),
-      v.boolean()
+      v.boolean(),
     );
     expect(t.parse("test")).to.equal("test");
     expect(t.parse(1)).to.equal(1);
@@ -1611,7 +1611,7 @@ describe("union()", () => {
     const t = v.union(
       v.literal(1),
       v.literal(2),
-      v.unknown().assert(() => false, "test")
+      v.unknown().assert(() => false, "test"),
     );
     expect(() => t.parse({ a: 1 }))
       .to.throw(v.ValitaError)
@@ -1624,7 +1624,7 @@ describe("union()", () => {
   it("considers never() to not overlap with anything", () => {
     const t = v.union(
       v.never(),
-      v.unknown().assert(() => false, "unknown")
+      v.unknown().assert(() => false, "unknown"),
     );
     expect(() => t.parse(2))
       .to.throw(v.ValitaError)
@@ -1638,7 +1638,7 @@ describe("union()", () => {
     const t = v.union(
       v.literal(1),
       v.literal(2).assert(() => false),
-      v.unknown().assert(() => false)
+      v.unknown().assert(() => false),
     );
     expect(() => t.parse(2))
       .to.throw(v.ValitaError)
@@ -1651,7 +1651,7 @@ describe("union()", () => {
     const t = v.union(
       v.unknown(),
       v.object({ type: v.literal("a") }),
-      v.object({ type: v.literal("b") })
+      v.object({ type: v.literal("b") }),
     );
     expect(t.parse({ type: "c" })).to.deep.equal({ type: "c" });
   });
@@ -1669,7 +1669,7 @@ describe("union()", () => {
     it("discriminates based on base types", () => {
       const t = v.union(
         v.object({ type: v.number() }),
-        v.object({ type: v.string() })
+        v.object({ type: v.string() }),
       );
       expect(() => t.parse({ type: true }))
         .to.throw(v.ValitaError)
@@ -1683,7 +1683,7 @@ describe("union()", () => {
     it("discriminates based on literal values", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
-        v.object({ type: v.literal(2) })
+        v.object({ type: v.literal(2) }),
       );
       expect(() => t.parse({ type: 3 }))
         .to.throw(v.ValitaError)
@@ -1739,7 +1739,7 @@ describe("union()", () => {
     it("discriminates based on mixture of base types and literal values", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
-        v.object({ type: v.string() })
+        v.object({ type: v.string() }),
       );
       expect(() => t.parse({ type: true }))
         .to.throw(v.ValitaError)
@@ -1753,7 +1753,7 @@ describe("union()", () => {
     it("considers unknown() to overlap with everything except never()", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
-        v.object({ type: v.unknown().assert(() => false) })
+        v.object({ type: v.unknown().assert(() => false) }),
       );
       expect(() => t.parse({ type: "test" }))
         .to.throw(v.ValitaError)
@@ -1763,7 +1763,7 @@ describe("union()", () => {
     it("considers literals to overlap with their base types", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
-        v.object({ type: v.number() })
+        v.object({ type: v.number() }),
       );
       expect(() => t.parse({ type: "test" }))
         .to.throw(v.ValitaError)
@@ -1773,7 +1773,7 @@ describe("union()", () => {
     it("considers optional() its own type", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
-        v.object({ type: v.literal(2).optional() })
+        v.object({ type: v.literal(2).optional() }),
       );
       expect(() => t.parse({ type: "test" }))
         .to.throw(v.ValitaError)
@@ -1790,7 +1790,7 @@ describe("union()", () => {
     it("considers equal literals to overlap", () => {
       const t = v.union(
         v.object({ type: v.literal(1) }),
-        v.object({ type: v.literal(1) })
+        v.object({ type: v.literal(1) }),
       );
       expect(() => t.parse({ type: "test" }))
         .to.throw(v.ValitaError)
@@ -1805,7 +1805,7 @@ describe("union()", () => {
         v.object({
           type: v.union(v.literal(2), v.undefined()),
           other: v.literal("test"),
-        })
+        }),
       );
       expect(() => t.parse({ type: 2, other: "not_test" }))
         .to.throw(v.ValitaError)
@@ -1819,7 +1819,7 @@ describe("union()", () => {
     it("considers two optionals to overlap", () => {
       const t = v.union(
         v.object({ type: v.literal(1).optional() }),
-        v.object({ type: v.literal(2).optional() })
+        v.object({ type: v.literal(2).optional() }),
       );
       expect(() => t.parse({ type: 3 }))
         .to.throw(v.ValitaError)
@@ -1828,7 +1828,7 @@ describe("union()", () => {
     it("considers two optionals and undefineds to overlap", () => {
       const t = v.union(
         v.object({ type: v.undefined() }),
-        v.object({ type: v.literal(2).optional() })
+        v.object({ type: v.literal(2).optional() }),
       );
       expect(() => t.parse({ type: 3 }))
         .to.throw(v.ValitaError)
@@ -1837,7 +1837,7 @@ describe("union()", () => {
     it("considers two unions with partially same types to overlap", () => {
       const t = v.union(
         v.object({ type: v.union(v.literal(1), v.literal(2)) }),
-        v.object({ type: v.union(v.literal(2), v.literal(3)) })
+        v.object({ type: v.union(v.literal(2), v.literal(3)) }),
       );
       expect(() => t.parse({ type: 4 }))
         .to.throw(v.ValitaError)
@@ -1885,7 +1885,7 @@ describe("lazy()", () => {
           t: T;
         };
     expectType(
-      v.lazy(() => v.union(v.undefined(), v.object({ t: v.number() })))
+      v.lazy(() => v.union(v.undefined(), v.object({ t: v.number() }))),
     ).toBeAssignableTo<v.Type<T>>(false);
   });
   it("parses recursively", () => {
@@ -1900,7 +1900,7 @@ describe("lazy()", () => {
     });
     expect(() => t.parse({ t: { t: { t: 1 } } })).to.throw(
       v.ValitaError,
-      "invalid_type at .t.t.t (expected undefined or object)"
+      "invalid_type at .t.t.t (expected undefined or object)",
     );
   });
   it("parses recursively", () => {
@@ -1913,7 +1913,7 @@ describe("lazy()", () => {
     });
     expect(() => t.parse({ t: { t: { t: 1 } } })).to.throw(
       v.ValitaError,
-      "invalid_type at .t.t.t (expected object)"
+      "invalid_type at .t.t.t (expected object)",
     );
   });
 });
@@ -1963,13 +1963,13 @@ describe("ValitaResult", () => {
     it("describes the issue when there's only one issue", () => {
       const result = v.bigint().try("test");
       expect(!result.ok && result.message).to.equal(
-        "invalid_type at . (expected bigint)"
+        "invalid_type at . (expected bigint)",
       );
     });
     it("describes the leftmost issue when there are two issues", () => {
       const result = v.tuple([v.bigint(), v.string()]).try(["test", 1]);
       expect(!result.ok && result.message).to.equal(
-        "invalid_type at .0 (expected bigint) (+ 1 other issue)"
+        "invalid_type at .0 (expected bigint) (+ 1 other issue)",
       );
     });
     it("describes the leftmost issue when there are more than two issues", () => {
@@ -1977,7 +1977,7 @@ describe("ValitaResult", () => {
         .tuple([v.bigint(), v.string(), v.number()])
         .try(["test", 1, "other"]);
       expect(!result.ok && result.message).to.equal(
-        "invalid_type at .0 (expected bigint) (+ 2 other issues)"
+        "invalid_type at .0 (expected bigint) (+ 2 other issues)",
       );
     });
   });
@@ -2071,7 +2071,7 @@ describe("ValitaError", () => {
         },
       });
       expect(error.message).to.equal(
-        "invalid_type at . (expected bigint) (+ 1 other issue)"
+        "invalid_type at . (expected bigint) (+ 1 other issue)",
       );
     });
     it("describes the leftmost issue when there are more than two issues", () => {
@@ -2101,7 +2101,7 @@ describe("ValitaError", () => {
         },
       });
       expect(error.message).to.equal(
-        "invalid_type at . (expected bigint) (+ 2 other issues)"
+        "invalid_type at . (expected bigint) (+ 2 other issues)",
       );
     });
   });

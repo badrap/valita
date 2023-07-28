@@ -138,7 +138,7 @@ function formatIssueTree(issueTree: IssueTree): string {
   } else if (issue.code === "invalid_literal") {
     message = `expected ${separatedList(
       issue.expected.map(formatLiteral),
-      "or"
+      "or",
     )}`;
   } else if (issue.code === "missing_value") {
     message = `missing value`;
@@ -255,7 +255,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function safeSet(
   obj: Record<string, unknown>,
   key: string,
-  value: unknown
+  value: unknown,
 ): void {
   if (key === "__proto__") {
     Object.defineProperty(obj, key, {
@@ -300,7 +300,7 @@ abstract class AbstractType<Output = unknown> {
   }
 
   default<T extends Literal>(
-    defaultValue: T
+    defaultValue: T,
   ): Type<Exclude<Output, undefined> | T>;
   default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
   default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
@@ -314,7 +314,7 @@ abstract class AbstractType<Output = unknown> {
 
   assert<T extends Output>(
     func: ((v: Output) => v is T) | ((v: Output) => boolean),
-    error?: CustomError
+    error?: CustomError,
   ): Type<T> {
     const err: IssueNode = { code: "custom_error", path: undefined, error };
     return new TransformType(this, (v) => (func(v as Output) ? true : err));
@@ -366,7 +366,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   try<T extends AbstractType>(
     this: T,
     v: unknown,
-    options?: Partial<ParseOptions>
+    options?: Partial<ParseOptions>,
   ): ValitaResult<Infer<T>> {
     let mode: FuncMode = FuncMode.STRICT;
     if (options && options.mode === "passthrough") {
@@ -388,7 +388,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   parse<T extends AbstractType>(
     this: T,
     v: unknown,
-    options?: Partial<ParseOptions>
+    options?: Partial<ParseOptions>,
   ): Infer<T> {
     let mode: FuncMode = FuncMode.STRICT;
     if (options && options.mode === "passthrough") {
@@ -436,7 +436,7 @@ type Optionals<T extends ObjectShape> = {
 
 type ObjectOutput<
   T extends ObjectShape,
-  R extends AbstractType | undefined
+  R extends AbstractType | undefined,
 > = PrettyIntersection<
   {
     [K in Optionals<T>]?: Infer<T[K]>;
@@ -470,7 +470,7 @@ function addResult(
   key: string,
   value: unknown,
   keyResult: RawResult<unknown>,
-  assign: (to: Obj, from: Obj) => Obj
+  assign: (to: Obj, from: Obj) => Obj,
 ): RawResult<Obj> {
   if (keyResult === true) {
     if (objResult !== true && objResult.code === "ok" && value !== Nothing) {
@@ -534,7 +534,7 @@ function getBit(bits: BitSet, index: number): number {
 
 class ObjectType<
   Shape extends ObjectShape = ObjectShape,
-  Rest extends AbstractType | undefined = AbstractType | undefined
+  Rest extends AbstractType | undefined = AbstractType | undefined,
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
@@ -546,14 +546,14 @@ class ObjectType<
     private readonly checks?: {
       func: (v: unknown) => boolean;
       issue: IssueNode;
-    }[]
+    }[],
   ) {
     super();
   }
 
   check(
     func: (v: ObjectOutput<Shape, Rest>) => boolean,
-    error?: CustomError
+    error?: CustomError,
   ): ObjectType<Shape, Rest> {
     const issue: IssueNode = { code: "custom_error", path: undefined, error };
     return new ObjectType(this.shape, this.restType, [
@@ -579,11 +579,11 @@ class ObjectType<
   }
 
   extend<S extends ObjectShape>(
-    shape: S
+    shape: S,
   ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
     return new ObjectType(
       { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
-      this.restType
+      this.restType,
     );
   }
 
@@ -618,21 +618,21 @@ class ObjectType<
     const rest = this.restType?.optional();
     return new ObjectType(
       shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-      rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined
+      rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined,
     );
   }
 }
 
 function createObjectMatcher<
   Shape extends ObjectShape = ObjectShape,
-  Rest extends AbstractType | undefined = AbstractType | undefined
+  Rest extends AbstractType | undefined = AbstractType | undefined,
 >(
   shape: Shape,
   restType: Rest,
   checks?: {
     func: (v: unknown) => boolean;
     issue: IssueNode;
-  }[]
+  }[],
 ): Func<ObjectOutput<Shape, Rest>> {
   const requiredKeys: string[] = [];
   const optionalKeys: string[] = [];
@@ -686,7 +686,7 @@ function createObjectMatcher<
     obj: Obj,
     mode: FuncMode,
     bits: BitSet,
-    assign: (to: Obj, from: Obj) => Obj
+    assign: (to: Obj, from: Obj) => Obj,
   ): RawResult<Obj> {
     let result = initialResult;
     for (let i = 0; i < totalCount; i++) {
@@ -702,7 +702,7 @@ function createObjectMatcher<
             key,
             value,
             types[i].func(value, mode),
-            assign
+            assign,
           );
         }
       }
@@ -730,7 +730,7 @@ function createObjectMatcher<
         key,
         value,
         types[i].func(value, mode),
-        assignKnown
+        assignKnown,
       );
     }
     return result;
@@ -754,7 +754,7 @@ function createObjectMatcher<
           key,
           value,
           types[index].func(value, mode),
-          assignKnown
+          assignKnown,
         );
       } else if (mode === FuncMode.STRIP) {
         result =
@@ -780,14 +780,14 @@ function createObjectMatcher<
             path: undefined,
             keys: unrecognized,
           },
-          result
+          result,
         );
   }
 
   function withRest(
     rest: AbstractType,
     obj: Obj,
-    mode: FuncMode
+    mode: FuncMode,
   ): RawResult<Obj> {
     if (totalCount === 0) {
       if (rest.name === "unknown") {
@@ -803,7 +803,7 @@ function createObjectMatcher<
           key,
           value,
           rest.func(value, mode),
-          assignEnumerable
+          assignEnumerable,
         );
       }
     }
@@ -824,7 +824,7 @@ function createObjectMatcher<
           key,
           value,
           types[index].func(value, mode),
-          assignEnumerable
+          assignEnumerable,
         );
       } else {
         result = addResult(
@@ -833,7 +833,7 @@ function createObjectMatcher<
           key,
           value,
           rest.func(value, mode),
-          assignEnumerable
+          assignEnumerable,
         );
       }
     }
@@ -846,7 +846,7 @@ function createObjectMatcher<
 
   function runChecks(
     obj: Record<string, unknown>,
-    result: RawResult<Obj>
+    result: RawResult<Obj>,
   ): RawResult<ObjectOutput<Shape, Rest>> {
     if ((result === true || result.code === "ok") && checks) {
       const value = result === true ? obj : result.value;
@@ -861,7 +861,7 @@ function createObjectMatcher<
 
   function func(
     obj: unknown,
-    mode: FuncMode
+    mode: FuncMode,
   ): RawResult<ObjectOutput<Shape, Rest>> {
     if (!isObject(obj)) {
       return invalidType;
@@ -885,12 +885,12 @@ type TupleOutput<T extends Type[]> = {
 
 type ArrayOutput<Head extends Type[], Rest extends Type | undefined> = [
   ...TupleOutput<Head>,
-  ...(Rest extends Type ? Infer<Rest>[] : [])
+  ...(Rest extends Type ? Infer<Rest>[] : []),
 ];
 
 class ArrayType<
   Head extends Type[] = Type[],
-  Rest extends Type | undefined = Type | undefined
+  Rest extends Type | undefined = Type | undefined,
 > extends Type<ArrayOutput<Head, Rest>> {
   readonly name = "array";
 
@@ -900,7 +900,10 @@ class ArrayType<
   private readonly minLength: number;
   private readonly maxLength: number;
 
-  constructor(readonly head: Head, rest?: Rest) {
+  constructor(
+    readonly head: Head,
+    rest?: Rest,
+  ) {
     super();
 
     this.rest = rest ?? never();
@@ -995,7 +998,7 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
 }
 
 function groupTerminals<GroupKey>(
-  terminals: { groupKey: GroupKey; terminal: TerminalType }[]
+  terminals: { groupKey: GroupKey; terminal: TerminalType }[],
 ): {
   types: Map<BaseType, GroupKey[]>;
   literals: Map<unknown, GroupKey[]>;
@@ -1043,10 +1046,10 @@ function groupTerminals<GroupKey>(
     return (order.get(a) ?? 0) - (order.get(b) ?? 0);
   };
   types.forEach((roots, type) =>
-    types.set(type, dedup(roots.concat(unknowns).sort(byOrder)))
+    types.set(type, dedup(roots.concat(unknowns).sort(byOrder))),
   );
   literals.forEach((roots, value) =>
-    literals.set(value, dedup(roots.concat(unknowns)).sort(byOrder))
+    literals.set(value, dedup(roots.concat(unknowns)).sort(byOrder)),
   );
   return {
     types,
@@ -1058,7 +1061,7 @@ function groupTerminals<GroupKey>(
 }
 
 function createUnionObjectMatcher(
-  terminals: { groupKey: AbstractType; terminal: TerminalType }[]
+  terminals: { groupKey: AbstractType; terminal: TerminalType }[],
 ):
   | {
       key: string;
@@ -1066,14 +1069,14 @@ function createUnionObjectMatcher(
       matcher: (
         rootValue: unknown,
         value: unknown,
-        mode: FuncMode
+        mode: FuncMode,
       ) => RawResult<unknown>;
     }
   | undefined {
   const objects = terminals.filter(
     (item): item is { groupKey: AbstractType; terminal: ObjectType } => {
       return item.terminal instanceof ObjectType;
-    }
+    },
   );
   if (objects.length < 2) {
     return undefined;
@@ -1086,7 +1089,7 @@ function createUnionObjectMatcher(
     for (let i = 0; i < shapes.length; i++) {
       const shape = shapes[i];
       shape[key].toTerminals((terminal) =>
-        list.push({ groupKey: i, terminal })
+        list.push({ groupKey: i, terminal }),
       );
     }
 
@@ -1115,7 +1118,7 @@ function createUnionObjectMatcher(
     objects.map(({ groupKey, terminal }) => ({
       groupKey,
       type: terminal.shape[key],
-    }))
+    })),
   );
   let optional: AbstractType | undefined = undefined;
   for (let i = 0; i < flattened.length; i++) {
@@ -1134,7 +1137,7 @@ function createUnionObjectMatcher(
 
 function createUnionBaseMatcher(
   terminals: { groupKey: AbstractType; terminal: TerminalType }[],
-  path?: Key
+  path?: Key,
 ): (rootValue: unknown, value: unknown, mode: FuncMode) => RawResult<unknown> {
   const { expectedTypes, literals, types, unknowns, optionals } =
     groupTerminals(terminals);
@@ -1218,22 +1221,22 @@ function createUnionBaseMatcher(
 }
 
 function flatten<GroupKey>(
-  t: { groupKey: GroupKey; type: AbstractType }[]
+  t: { groupKey: GroupKey; type: AbstractType }[],
 ): { groupKey: GroupKey; terminal: TerminalType }[] {
   const result: { groupKey: GroupKey; terminal: TerminalType }[] = [];
   t.forEach(({ groupKey, type }) =>
     type.toTerminals((terminal) => {
       result.push({ groupKey, terminal });
-    })
+    }),
   );
   return result;
 }
 
 function createUnionMatcher<T extends Type[]>(
-  options: T
+  options: T,
 ): Func<Infer<T[number]>> {
   const flattened = flatten(
-    options.map((root) => ({ groupKey: root, type: root }))
+    options.map((root) => ({ groupKey: root, type: root })),
   );
   const base = createUnionBaseMatcher(flattened);
   const object = createUnionObjectMatcher(flattened);
@@ -1288,7 +1291,7 @@ class TransformType<Output> extends Type<Output> {
 
   constructor(
     protected readonly transformed: AbstractType,
-    protected readonly transform: Func<unknown>
+    protected readonly transform: Func<unknown>,
   ) {
     super();
     this.transformChain = undefined;
@@ -1520,7 +1523,7 @@ function literal<T extends Literal>(value: T): Type<T> {
 }
 
 function object<T extends Record<string, Type | Optional>>(
-  obj: T
+  obj: T,
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
 }
@@ -1534,7 +1537,7 @@ function array<T extends Type>(item: T): ArrayType<[], T> {
 }
 
 function tuple<T extends [] | [Type, ...Type[]]>(
-  items: T
+  items: T,
 ): ArrayType<T, undefined> {
   return new ArrayType(items);
 }
