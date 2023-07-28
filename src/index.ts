@@ -355,6 +355,10 @@ type ParseOptions = {
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   protected declare readonly [isOptional] = false;
 
+  nullable(): Type<null | Output> {
+    return union(nullSingleton, this);
+  }
+
   toTerminals(func: (t: TerminalType) => void): void {
     func(this as TerminalType);
   }
