@@ -16,8 +16,16 @@ vehicle.parse({ type: "bike" });
 
 ## Installation
 
-```bash
+### For Node.js
+
+```sh
 npm i @badrap/valita
+```
+
+### For Deno
+
+```ts
+import * as v from "https://deno.land/x/valita/mod.ts";
 ```
 
 ## Docs aren't my forté
@@ -277,7 +285,7 @@ Similar to `.assert()` the `.chain()`-method must follow a preceding validation 
 ```js
 import * as v from "@badrap/valita";
 
-const dateSchema = v.string().chain(str => {
+const dateSchema = v.string().chain((str) => {
   const date = new Date(str);
 
   // If the date is invalid JS returns NaN here
@@ -286,11 +294,11 @@ const dateSchema = v.string().chain(str => {
   }
 
   return v.ok(date);
-})
+});
 
 const schema = v.object({
   created_at: dateSchema,
-})
+});
 ```
 
 ### Recursive Types
@@ -322,10 +330,12 @@ For that we assert that both properties are of type `number` via the `.number()`
 ```ts
 import * as v from "@badrap/valita";
 
-const schema = v.object({
-  min: v.number(),
-  max: v.number()
-}).assert(obj => obj.min < obj.max, ".min must be smaller than .max")
+const schema = v
+  .object({
+    min: v.number(),
+    max: v.number(),
+  })
+  .assert((obj) => obj.min < obj.max, ".min must be smaller than .max");
 ```
 
 ## License

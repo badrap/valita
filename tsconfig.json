@@ -8,7 +8,9 @@
     "moduleResolution": "node",
     "outDir": "./dist/main",
     "sourceMap": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["mod.ts", "src/**/*.ts", "tests/**/*.ts"]
 }
