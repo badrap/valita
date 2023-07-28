@@ -12,7 +12,7 @@ import * as v from "../src";
 //  expectType(v.number()).toImply<unknown>(false);
 //  expectType(v.number()).toImply<any>(false);
 //  expectType(v.number()).toImply<never>(false);
-function expectType<T extends v.Type | v.Optional | v.Nullable>(
+function expectType<T extends v.Type | v.Optional>(
   _type: T
 ): {
   toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
