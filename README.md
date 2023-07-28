@@ -103,6 +103,22 @@ const something = v.object({
 });
 ```
 
+### Nullable Type
+
+When working with APIs/DBs is that some types are nullable. Valita can validate those types via the `.nullable()` method:
+
+```ts
+import * as v from "@badrap/valita";
+
+// type name = null | string
+const name = v.string().nullable();
+
+// Passes
+name.parse("Jane Doe");
+// Passes
+name.parse(null);
+```
+
 ### Optional Object Properties
 
 One common occurrence when working with APIs is that some fields in an object are optional and therefore can be missing completely. Valita can skip validating those via the `.optional()` method:
