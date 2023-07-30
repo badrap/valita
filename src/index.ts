@@ -3,7 +3,7 @@ type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
 
 type Literal = string | number | bigint | boolean;
 type Key = string | number;
-type BaseType =
+type InputType =
   | "object"
   | "array"
   | "null"
@@ -22,7 +22,7 @@ type CustomError =
     };
 
 type IssueNode<PathType = Key | undefined> = Readonly<
-  | { code: "invalid_type"; path: PathType; expected: BaseType[] }
+  | { code: "invalid_type"; path: PathType; expected: InputType[] }
   | { code: "missing_value"; path: PathType }
   | { code: "invalid_literal"; path: PathType; expected: Literal[] }
   | {
@@ -277,7 +277,7 @@ function hasTerminal(type: AbstractType, name: TerminalType["name"]): boolean {
   return has;
 }
 
-const Nothing: unique symbol = Symbol();
+const Nothing = Symbol.for("valita.Nothing");
 
 const enum FuncMode {
   PASS = 0,
@@ -343,18 +343,11 @@ abstract class AbstractType<Output = unknown> {
   }
 }
 
-const isOptional: unique symbol = Symbol();
-type IfOptional<T extends AbstractType, Then, Else> = T extends Optional
-  ? Then
-  : Else;
-
 type ParseOptions = {
   mode: "passthrough" | "strict" | "strip";
 };
 
 abstract class Type<Output = unknown> extends AbstractType<Output> {
-  protected declare readonly [isOptional] = false;
-
   nullable(): Type<null | Output> {
     return union(nullSingleton, this);
   }
@@ -409,20 +402,22 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 }
 
 class Optional<Output = unknown> extends AbstractType<Output | undefined> {
-  protected declare readonly [isOptional] = true;
-
   readonly name = "optional";
+
   constructor(private readonly type: AbstractType<Output>) {
     super();
   }
+
   func(v: unknown, mode: FuncMode): RawResult<Output | undefined> {
     return v === undefined || v === Nothing ? true : this.type.func(v, mode);
   }
+
   toTerminals(func: (t: TerminalType) => void): void {
     func(this);
     func(undefinedSingleton);
     this.type.toTerminals(func);
   }
+
   optional(): Optional<Output> {
     return this;
   }
@@ -430,18 +425,14 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
 
 type ObjectShape = Record<string, AbstractType>;
 
-type Optionals<T extends ObjectShape> = {
-  [K in keyof T]: IfOptional<T[K], K, never>;
-}[keyof T];
-
 type ObjectOutput<
   T extends ObjectShape,
   R extends AbstractType | undefined,
 > = PrettyIntersection<
   {
-    [K in Optionals<T>]?: Infer<T[K]>;
+    [K in keyof T as T[K] extends Optional ? K : never]?: Infer<T[K]>;
   } & {
-    [K in Exclude<keyof T, Optionals<T>>]: Infer<T[K]>;
+    [K in keyof T as T[K] extends Optional ? never : K]: Infer<T[K]>;
   } & (R extends Type<infer I>
       ? { [K: string]: I }
       : R extends Optional<infer J>
@@ -964,10 +955,10 @@ class ArrayType<
   }
 }
 
-function toBaseType(v: unknown): BaseType {
+function toInputType(v: unknown): InputType {
   const type = typeof v;
   if (type !== "object") {
-    return type as BaseType;
+    return type as InputType;
   } else if (v === null) {
     return "null";
   } else if (Array.isArray(v)) {
@@ -1000,18 +991,18 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
 function groupTerminals<GroupKey>(
   terminals: { groupKey: GroupKey; terminal: TerminalType }[],
 ): {
-  types: Map<BaseType, GroupKey[]>;
+  types: Map<InputType, GroupKey[]>;
   literals: Map<unknown, GroupKey[]>;
   unknowns: GroupKey[];
   optionals: GroupKey[];
-  expectedTypes: BaseType[];
+  expectedTypes: InputType[];
 } {
   const order = new Map<GroupKey, number>();
   const literals = new Map<unknown, GroupKey[]>();
-  const types = new Map<BaseType, GroupKey[]>();
+  const types = new Map<InputType, GroupKey[]>();
   const unknowns = [] as GroupKey[];
   const optionals = [] as GroupKey[];
-  const expectedTypes = [] as BaseType[];
+  const expectedTypes = [] as InputType[];
   terminals.forEach(({ groupKey, terminal }) => {
     order.set(groupKey, order.get(groupKey) ?? order.size);
 
@@ -1025,7 +1016,7 @@ function groupTerminals<GroupKey>(
       const roots = literals.get(terminal.value) || [];
       roots.push(groupKey);
       literals.set(terminal.value, roots);
-      expectedTypes.push(toBaseType(terminal.value));
+      expectedTypes.push(toInputType(terminal.value));
     } else {
       const roots = types.get(terminal.name) || [];
       roots.push(groupKey);
@@ -1035,7 +1026,7 @@ function groupTerminals<GroupKey>(
   });
 
   literals.forEach((roots, value) => {
-    const options = types.get(toBaseType(value));
+    const options = types.get(toInputType(value));
     if (options) {
       options.push(...roots);
       literals.delete(value);
@@ -1072,9 +1063,12 @@ function createUnionObjectMatcher(
       ) => RawResult<unknown>;
     }
   | undefined {
+  if (terminals.some(({ terminal: t }) => t.name === "unknown")) {
+    return undefined;
+  }
   const objects = terminals.filter(
     (item): item is { groupKey: AbstractType; terminal: ObjectType } => {
-      return item.terminal instanceof ObjectType;
+      return item.terminal.name === "object";
     },
   );
   if (objects.length < 2) {
@@ -1144,7 +1138,7 @@ function createUnionBaseMatcher(
   };
 
   const byType: {
-    [K in BaseType]?: {
+    [K in InputType]?: {
       types: AbstractType[];
       literals?: Map<unknown, AbstractType[]>;
       defaultIssue: IssueNode;
@@ -1158,7 +1152,7 @@ function createUnionBaseMatcher(
     };
   });
   literals.forEach((roots, value) => {
-    const type = toBaseType(value);
+    const type = toInputType(value);
     let item = byType[type];
     if (!item) {
       item = { types: [], literals: new Map(), defaultIssue: invalidLiteral };
@@ -1184,7 +1178,7 @@ function createUnionBaseMatcher(
     const item =
       value === Nothing
         ? optionalFallback
-        : byType[toBaseType(value)] ?? fallback;
+        : byType[toInputType(value)] ?? fallback;
 
     const options =
       item.literals === undefined
@@ -1230,9 +1224,7 @@ function createUnionMatcher<T extends Type[]>(
   );
   const base = createUnionBaseMatcher(flattened);
   const object = createUnionObjectMatcher(flattened);
-  const hasUnknown = options.some((option) => hasTerminal(option, "unknown"));
-
-  if (hasUnknown || !object) {
+  if (!object) {
     return function (v, mode) {
       return base(v, v, mode) as RawResult<Infer<T[number]>>;
     };
@@ -1519,7 +1511,9 @@ function object<T extends Record<string, Type | Optional>>(
 }
 
 function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
-  return new ObjectType({} as Record<string, never>, valueType ?? unknown());
+  return new ObjectType({}, valueType ?? unknown()) as Type<
+    Record<string, Infer<T>>
+  >;
 }
 
 function array<T extends Type>(item: T): ArrayType<[], T> {
