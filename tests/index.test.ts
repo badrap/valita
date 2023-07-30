@@ -1607,6 +1607,48 @@ describe("union()", () => {
         expected: ["number"],
       });
   });
+  it("reports expected types in the order they were first listed", () => {
+    const t1 = v.union(v.literal(2), v.string(), v.literal(2));
+    expect(() => t1.parse(true))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_type",
+        path: [],
+        expected: ["number", "string"],
+      });
+
+    const t2 = v.union(v.string(), v.literal(2), v.string());
+    expect(() => t2.parse(true))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_type",
+        path: [],
+        expected: ["string", "number"],
+      });
+  });
+  it("reports expected literals in the order they were first listed", () => {
+    const t1 = v.union(v.literal(2), v.literal(1), v.literal(2));
+    expect(() => t1.parse(3))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_literal",
+        path: [],
+        expected: [2, 1],
+      });
+
+    const t2 = v.union(v.literal(1), v.literal(2), v.literal(1));
+    expect(() => t2.parse(3))
+      .to.throw(v.ValitaError)
+      .with.nested.property("issues[0]")
+      .that.deep.includes({
+        code: "invalid_literal",
+        path: [],
+        expected: [1, 2],
+      });
+  });
   it("matches unknowns if nothing else matches", () => {
     const t = v.union(
       v.literal(1),
@@ -1691,48 +1733,6 @@ describe("union()", () => {
         .that.deep.includes({
           code: "invalid_literal",
           path: ["type"],
-          expected: [1, 2],
-        });
-    });
-    it("reports expected types in the order they were first listed", () => {
-      const t1 = v.union(v.literal(2), v.string(), v.literal(2));
-      expect(() => t1.parse(true))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "invalid_type",
-          path: [],
-          expected: ["number", "string"],
-        });
-
-      const t2 = v.union(v.string(), v.literal(2), v.string());
-      expect(() => t2.parse(true))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "invalid_type",
-          path: [],
-          expected: ["string", "number"],
-        });
-    });
-    it("reports expected literals in the order they were first listed", () => {
-      const t1 = v.union(v.literal(2), v.literal(1), v.literal(2));
-      expect(() => t1.parse(3))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: [],
-          expected: [2, 1],
-        });
-
-      const t2 = v.union(v.literal(1), v.literal(2), v.literal(1));
-      expect(() => t2.parse(3))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: [],
           expected: [1, 2],
         });
     });
