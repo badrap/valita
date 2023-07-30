@@ -1065,7 +1065,6 @@ function createUnionObjectMatcher(
 ):
   | {
       key: string;
-      optional?: AbstractType;
       matcher: (
         rootValue: unknown,
         value: unknown,
@@ -1120,17 +1119,8 @@ function createUnionObjectMatcher(
       type: terminal.shape[key],
     })),
   );
-  let optional: AbstractType | undefined = undefined;
-  for (let i = 0; i < flattened.length; i++) {
-    const { groupKey, terminal } = flattened[i];
-    if (terminal instanceof Optional) {
-      optional = groupKey;
-      break;
-    }
-  }
   return {
     key,
-    optional,
     matcher: createUnionBaseMatcher(flattened, key),
   };
 }
