@@ -51,6 +51,30 @@ function prependPath(key: Key, tree: IssueTree): IssueTree {
   return { code: "prepend", key, tree };
 }
 
+function cloneIssueWithPath(tree: IssueNode, path: Key[]): Issue {
+  switch (tree.code) {
+    case "invalid_type":
+      return { code: "invalid_type", path, expected: tree.expected };
+    case "invalid_literal":
+      return { code: "invalid_literal", path, expected: tree.expected };
+    case "missing_value":
+      return { code: "missing_value", path };
+    case "invalid_length":
+      return {
+        code: "invalid_length",
+        path,
+        minLength: tree.minLength,
+        maxLength: tree.maxLength,
+      };
+    case "unrecognized_keys":
+      return { code: "unrecognized_keys", path, keys: tree.keys };
+    case "invalid_union":
+      return { code: "invalid_union", path, tree: tree.tree };
+    default:
+      return { code: "custom_error", path, error: tree.error };
+  }
+}
+
 function collectIssues(
   tree: IssueTree,
   path: Key[] = [],
@@ -73,7 +97,7 @@ function collectIssues(
     ) {
       path.push(...tree.error.path);
     }
-    issues.push({ ...tree, path });
+    issues.push(cloneIssueWithPath(tree, path));
   }
   return issues;
 }
@@ -110,7 +134,7 @@ function findOneIssue(tree: IssueTree, path: Key[] = []): Issue {
     ) {
       path.push(...tree.error.path);
     }
-    return { ...tree, path: path };
+    return cloneIssueWithPath(tree, path);
   }
 }
 
