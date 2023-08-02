@@ -1582,8 +1582,8 @@ describe("union()", () => {
       .to.throw(v.ValitaError)
       .with.nested.property("issues[0]")
       .that.deep.includes({
-        code: "invalid_type",
-        expected: ["number", "string"],
+        code: "invalid_literal",
+        expected: [1, "test"],
       });
   });
   it("reports the expected literals when the base type matches", () => {

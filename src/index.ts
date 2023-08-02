@@ -1004,20 +1004,20 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
   return result;
 }
 
-function groupTerminals<root>(
-  terminals: { root: root; terminal: TerminalType }[],
+function groupTerminals(
+  terminals: { root: AbstractType; terminal: TerminalType }[],
 ): {
-  types: Map<InputType, root[]>;
-  literals: Map<unknown, root[]>;
-  unknowns: root[];
-  optionals: root[];
+  types: Map<InputType, AbstractType[]>;
+  literals: Map<unknown, AbstractType[]>;
+  unknowns: AbstractType[];
+  optionals: AbstractType[];
   expectedTypes: InputType[];
 } {
-  const order = new Map<root, number>();
-  const literals = new Map<unknown, root[]>();
-  const types = new Map<InputType, root[]>();
-  const unknowns = [] as root[];
-  const optionals = [] as root[];
+  const order = new Map<AbstractType, number>();
+  const literals = new Map<unknown, AbstractType[]>();
+  const types = new Map<InputType, AbstractType[]>();
+  const unknowns = [] as AbstractType[];
+  const optionals = [] as AbstractType[];
   const expectedTypes = [] as InputType[];
   terminals.forEach(({ root, terminal }) => {
     order.set(root, order.get(root) ?? order.size);
@@ -1049,7 +1049,7 @@ function groupTerminals<root>(
     }
   });
 
-  const byOrder = (a: root, b: root): number => {
+  const byOrder = (a: AbstractType, b: AbstractType): number => {
     return (order.get(a) ?? 0) - (order.get(b) ?? 0);
   };
   types.forEach((roots, type) =>
@@ -1081,19 +1081,19 @@ function createObjectKeyMatcher(
   if (unknowns.length > 0 || optionals.length > 1) {
     return undefined;
   }
-  for (const [_, found] of literals) {
-    if (found.length > 1) {
+  for (const roots of literals.values()) {
+    if (roots.length > 1) {
       return undefined;
     }
   }
-  for (const [_, found] of types) {
-    if (found.length > 1) {
+  for (const roots of types.values()) {
+    if (roots.length > 1) {
       return undefined;
     }
   }
 
   const missingValue: IssueNode = { code: "missing_value", path: key };
-  const invalidType: IssueNode =
+  const issue: IssueNode =
     types.size === 0
       ? {
           code: "invalid_literal",
@@ -1106,18 +1106,15 @@ function createObjectKeyMatcher(
           expected: expectedTypes,
         };
 
-  const byType = types.size ? ({} as Record<string, AbstractType>) : undefined;
-  if (byType) {
-    for (const [type, options] of types) {
-      byType[type] = options[0];
-    }
+  const litMap =
+    literals.size > 0 ? new Map<unknown, AbstractType>() : undefined;
+  for (const [literal, options] of literals) {
+    litMap!.set(literal, options[0]);
   }
-
-  const litMap = literals.size ? new Map<unknown, AbstractType>() : undefined;
-  if (litMap) {
-    for (const [literal, options] of literals) {
-      litMap.set(literal, options[0]);
-    }
+  const byType =
+    types.size > 0 ? ({} as Record<string, AbstractType>) : undefined;
+  for (const [type, options] of types) {
+    byType![type] = options[0];
   }
 
   return function (_obj: unknown, mode: FuncMode) {
@@ -1126,8 +1123,8 @@ function createObjectKeyMatcher(
     if (value === undefined && !(key in obj)) {
       return optionals.length > 0 ? optionals[0].func(obj, mode) : missingValue;
     }
-    const options = byType?.[toInputType(value)] ?? litMap?.get(value);
-    return options ? options.func(obj, mode) : invalidType;
+    const option = byType?.[toInputType(value)] ?? litMap?.get(value);
+    return option ? option.func(obj, mode) : issue;
   };
 }
 
@@ -1163,81 +1160,51 @@ function createUnionBaseMatcher(
   const { expectedTypes, literals, types, unknowns, optionals } =
     groupTerminals(terminals);
 
-  const invalidType: IssueNode = {
-    code: "invalid_type",
-    path: undefined,
-    expected: expectedTypes,
-  };
-  const invalidLiteral: IssueNode = {
-    code: "invalid_literal",
-    path: undefined,
-    expected: Array.from(literals.keys()) as Literal[],
-  };
+  const issue: IssueNode =
+    types.size === 0 && unknowns.length === 0
+      ? {
+          code: "invalid_literal",
+          path: undefined,
+          expected: Array.from(literals.keys()) as Literal[],
+        }
+      : {
+          code: "invalid_type",
+          path: undefined,
+          expected: expectedTypes,
+        };
 
-  const byType: {
-    [K in InputType]?: {
-      types: AbstractType[];
-      literals?: Map<unknown, AbstractType[]>;
-      defaultIssue: IssueNode;
-    };
-  } = {};
-  types.forEach((roots, type) => {
-    byType[type] = {
-      types: roots,
-      literals: undefined,
-      defaultIssue: invalidType,
-    };
-  });
-  literals.forEach((roots, value) => {
-    const type = toInputType(value);
-    let item = byType[type];
-    if (!item) {
-      item = { types: [], literals: new Map(), defaultIssue: invalidLiteral };
-      byType[type] = item;
+  const litMap = literals.size > 0 ? literals : undefined;
+  const byType =
+    types.size > 0 ? ({} as Record<string, AbstractType[]>) : undefined;
+  for (const [type, options] of types) {
+    byType![type] = options;
+  }
+
+  return function (value: unknown, mode: FuncMode) {
+    let options: undefined | AbstractType[];
+    if (value === Nothing) {
+      options = optionals;
+    } else {
+      options = byType?.[toInputType(value)] ?? litMap?.get(value) ?? unknowns;
     }
-    item.literals?.set(value, roots);
-  });
-  const fallback = {
-    types: unknowns,
-    literals: undefined,
-    defaultIssue: invalidType,
-  };
-  const optionalFallback = {
-    types: optionals,
-    literals: undefined,
-    defaultIssue: invalidType,
-  };
+    if (!options) {
+      return issue;
+    }
 
-  return (value, mode) => {
     let count = 0;
-    let issueTree: IssueTree | undefined;
-
-    const item =
-      value === Nothing
-        ? optionalFallback
-        : byType[toInputType(value)] ?? fallback;
-
-    const options =
-      item.literals === undefined
-        ? item.types
-        : item.literals.get(value) || unknowns;
-
+    let issueTree: IssueTree = issue;
     for (let i = 0; i < options.length; i++) {
       const r = options[i].func(value, mode);
       if (r === true || r.code === "ok") {
         return r;
       }
-      issueTree = joinIssues(issueTree, r);
+      issueTree = count > 0 ? joinIssues(issueTree, r) : r;
       count++;
     }
-
-    if (!issueTree) {
-      return item.defaultIssue;
-    } else if (count > 1) {
+    if (count > 1) {
       return { code: "invalid_union", path: undefined, tree: issueTree };
-    } else {
-      return issueTree;
     }
+    return issueTree;
   };
 }
 
