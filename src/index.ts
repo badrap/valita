@@ -289,14 +289,6 @@ function safeSet(
   }
 }
 
-function hasTerminal(type: AbstractType, name: TerminalType["name"]): boolean {
-  let has = false;
-  type.toTerminals((t) => {
-    has = has || t.name === name;
-  });
-  return has;
-}
-
 const Nothing = Symbol.for("valita.Nothing");
 
 const enum FuncMode {
@@ -648,7 +640,11 @@ function createObjectMatcher<
   const requiredKeys: string[] = [];
   const optionalKeys: string[] = [];
   for (const key in shape) {
-    if (hasTerminal(shape[key], "optional")) {
+    let hasOptional = false;
+    shape[key].toTerminals((t) => {
+      hasOptional ||= t.name === "optional";
+    });
+    if (hasOptional) {
       optionalKeys.push(key);
     } else {
       requiredKeys.push(key);
