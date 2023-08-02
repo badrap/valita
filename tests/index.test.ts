@@ -1707,6 +1707,13 @@ describe("union()", () => {
         expected: ["array"],
       });
   });
+  it("keeps transformed values", () => {
+    const t = v.union(
+      v.literal("test1").map(() => 1),
+      v.literal("test2").map(() => 2),
+    );
+    expect(t.parse("test1")).to.deep.equal(1);
+  });
   describe("of objects", () => {
     it("discriminates based on base types", () => {
       const t = v.union(
@@ -1842,6 +1849,13 @@ describe("union()", () => {
       expect(() => t.parse({ type: 4 }))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0].code", "invalid_union");
+    });
+    it("keeps transformed values", () => {
+      const t = v.union(
+        v.object({ type: v.literal("test1").map(() => 1) }),
+        v.object({ type: v.literal("test2").map(() => 2) }),
+      );
+      expect(t.parse({ type: "test1" })).to.deep.equal({ type: 1 });
     });
   });
 });
