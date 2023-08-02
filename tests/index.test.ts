@@ -1804,6 +1804,16 @@ describe("union()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({ code: "invalid_union" });
     });
+    it("allows mixing literals and non-literals as long as they don't overlap", () => {
+      const t = v.union(
+        v.object({ type: v.literal(1) }),
+        v.object({ type: v.literal(2) }),
+        v.object({ type: v.string() }),
+      );
+      expect(t.parse({ type: 1 })).toEqual({ type: 1 });
+      expect(t.parse({ type: 2 })).toEqual({ type: 2 });
+      expect(t.parse({ type: "test" })).toEqual({ type: "test" });
+    });
     it("folds multiple overlapping types together in same branch", () => {
       const t = v.union(
         v.object({

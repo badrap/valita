@@ -1078,10 +1078,7 @@ function createObjectKeyMatcher(
 
   const { types, literals, optionals, unknowns, expectedTypes } =
     groupTerminals(list);
-  if (unknowns.length > 0) {
-    return undefined;
-  }
-  if (optionals.length > 1) {
+  if (unknowns.length > 0 || optionals.length > 1) {
     return undefined;
   }
   for (const [_, found] of literals) {
@@ -1095,50 +1092,42 @@ function createObjectKeyMatcher(
     }
   }
 
-  const missingValue: IssueNode = {
-    code: "missing_value",
-    path: key,
-  };
-  const invalidType: IssueNode = {
-    code: "invalid_type",
-    path: key,
-    expected: expectedTypes,
-  };
-  const invalidLiteral: IssueNode = {
-    code: "invalid_literal",
-    path: key,
-    expected: Array.from(literals.keys()) as Literal[],
-  };
+  const missingValue: IssueNode = { code: "missing_value", path: key };
+  const invalidType: IssueNode =
+    types.size === 0
+      ? {
+          code: "invalid_literal",
+          path: key,
+          expected: Array.from(literals.keys()) as Literal[],
+        }
+      : {
+          code: "invalid_type",
+          path: key,
+          expected: expectedTypes,
+        };
 
-  if (types.size === 0) {
-    return function (_obj: unknown, mode: FuncMode) {
-      const obj = _obj as Record<string, unknown>;
-      const value = obj[key];
-      if (value === undefined && !(key in obj)) {
-        return optionals.length > 0
-          ? optionals[0].func(obj, mode)
-          : missingValue;
-      }
-      const options = literals.get(value);
-      return options ? options[0].func(obj, mode) : invalidLiteral;
-    };
+  const byType = types.size ? ({} as Record<string, AbstractType>) : undefined;
+  if (byType) {
+    for (const [type, options] of types) {
+      byType[type] = options[0];
+    }
   }
 
-  const byType: Partial<Record<InputType, AbstractType>> = {};
-  types.forEach((options, type) => {
-    byType[type] = options[0];
-  });
-  literals.forEach((options, literal) => {
-    byType[toInputType(literal)] = options[0];
-  });
+  const litMap = literals.size ? new Map<unknown, AbstractType>() : undefined;
+  if (litMap) {
+    for (const [literal, options] of literals) {
+      litMap.set(literal, options[0]);
+    }
+  }
+
   return function (_obj: unknown, mode: FuncMode) {
     const obj = _obj as Record<string, unknown>;
     const value = obj[key];
     if (value === undefined && !(key in obj)) {
       return optionals.length > 0 ? optionals[0].func(obj, mode) : missingValue;
     }
-    const option = byType[toInputType(value)];
-    return option ? option.func(obj, mode) : invalidType;
+    const options = byType?.[toInputType(value)] ?? litMap?.get(value);
+    return options ? options.func(obj, mode) : invalidType;
   };
 }
 
