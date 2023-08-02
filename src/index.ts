@@ -51,34 +51,30 @@ function prependPath(key: Key, tree: IssueTree): IssueTree {
   return { code: "prepend", key, tree };
 }
 
-function _collectIssues(tree: IssueTree, path: Key[], issues: Issue[]): void {
+function collectIssues(
+  tree: IssueTree,
+  path: Key[] = [],
+  issues: Issue[] = [],
+): Issue[] {
   if (tree.code === "join") {
-    _collectIssues(tree.left, path, issues);
-    _collectIssues(tree.right, path, issues);
+    collectIssues(tree.left, path.slice(), issues);
+    collectIssues(tree.right, path, issues);
   } else if (tree.code === "prepend") {
     path.push(tree.key);
-    _collectIssues(tree.tree, path, issues);
-    path.pop();
+    collectIssues(tree.tree, path, issues);
   } else {
-    const finalPath = path.slice();
     if (tree.path !== undefined) {
-      finalPath.push(tree.path);
+      path.push(tree.path);
     }
     if (
       tree.code === "custom_error" &&
       typeof tree.error === "object" &&
       tree.error.path !== undefined
     ) {
-      finalPath.push(...tree.error.path);
+      path.push(...tree.error.path);
     }
-    issues.push({ ...tree, path: finalPath });
+    issues.push({ ...tree, path });
   }
-}
-
-function collectIssues(tree: IssueTree): Issue[] {
-  const issues: Issue[] = [];
-  const path: Key[] = [];
-  _collectIssues(tree, path, issues);
   return issues;
 }
 
