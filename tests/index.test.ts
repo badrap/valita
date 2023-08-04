@@ -46,7 +46,7 @@ describe("Type", () => {
         _expectType<TypeOf<{ message: string }, typeof result>>(true);
       }
     });
-    it("returns { ok: true, value: ... } on success", () => {
+    it("returns { ok: true, value: ... } on success", () => {
       const result = v.number().try(1);
       expect(result.ok).to.equal(true);
       expect(result.ok && result.value).to.equal(1);

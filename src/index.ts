@@ -368,11 +368,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     func(this as TerminalType);
   }
 
-  try<T extends AbstractType>(
-    this: T,
-    v: unknown,
-    options?: Partial<ParseOptions>,
-  ): ValitaResult<Infer<T>> {
+  try(v: unknown, options?: Partial<ParseOptions>): ValitaResult<Infer<this>> {
     let mode: FuncMode = FuncMode.STRICT;
     if (options && options.mode === "passthrough") {
       mode = FuncMode.PASS;
@@ -382,19 +378,15 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
     const r = this.func(v, mode);
     if (r === true) {
-      return { ok: true, value: v as Infer<T> };
+      return { ok: true, value: v as Infer<this> };
     } else if (r.code === "ok") {
-      return { ok: true, value: r.value as Infer<T> };
+      return { ok: true, value: r.value as Infer<this> };
     } else {
       return new Err(r);
     }
   }
 
-  parse<T extends AbstractType>(
-    this: T,
-    v: unknown,
-    options?: Partial<ParseOptions>,
-  ): Infer<T> {
+  parse(v: unknown, options?: Partial<ParseOptions>): Infer<this> {
     let mode: FuncMode = FuncMode.STRICT;
     if (options && options.mode === "passthrough") {
       mode = FuncMode.PASS;
@@ -404,9 +396,9 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
     const r = this.func(v, mode);
     if (r === true) {
-      return v as Infer<T>;
+      return v as Infer<this>;
     } else if (r.code === "ok") {
-      return r.value as Infer<T>;
+      return r.value as Infer<this>;
     } else {
       throw new ValitaError(r);
     }
