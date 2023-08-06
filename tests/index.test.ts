@@ -715,6 +715,7 @@ describe("object()", () => {
     });
     expect(t.parse(o)).to.deep.equal({ a: 1, b: 3 });
   });
+
   it("safely sets __proto__ in a cloned output when __proto__ is transformed", () => {
     const o = Object.create(null);
     o.__proto__ = v.unknown().map(() => ({ a: 1 }));
@@ -769,6 +770,18 @@ describe("object()", () => {
       enumerable: true,
       configurable: true,
     });
+  });
+  it("safely sets __proto__ in a cloned output when the input is cloned in the 'strip' mode", () => {
+    const o = Object.create(null);
+    o.__proto__ = v.unknown().map(() => ({ a: 1 }));
+    const t = v.object(o);
+    const r = t.parse(JSON.parse('{ "x": 1, "__proto__": { "b": 2 } }'), {
+      mode: "strip",
+    });
+    expect(r).to.not.have.property("x");
+    expect(r).to.not.have.property("a");
+    expect(r).to.not.have.property("b");
+    expect(r).to.have.deep.own.property("__proto__", { a: 1 });
   });
   it("rejects other types", () => {
     const t = v.object({});

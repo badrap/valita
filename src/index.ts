@@ -272,23 +272,6 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function safeSet(
-  obj: Record<string, unknown>,
-  key: string,
-  value: unknown,
-): void {
-  if (key === "__proto__") {
-    Object.defineProperty(obj, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  } else {
-    obj[key] = value;
-  }
-}
-
 const Nothing = Symbol.for("valita.Nothing");
 
 const enum FuncMode {
@@ -583,6 +566,18 @@ class ObjectType<
   }
 }
 
+// When an object matcher needs to create a copied version of the input,
+// it initializes the new objects with Object.create(protoless).
+//
+// Using Object.create(protoless) instead of just {} makes setting
+// "__proto__" key safe. Previously we set object properties with a helper
+// function that special-cased "__proto__". Now we can just do
+// `output[key] = value` directly.
+//
+// Using Object.create(protoless) instead of Object.create(null) seems to
+// be faster on V8 at the time of writing this (2023-08-07).
+const protoless = Object.create(null);
+
 function createObjectMatcher(
   shape: ObjectShape,
   rest?: AbstractType,
@@ -657,6 +652,8 @@ function createObjectMatcher(
 
         let r: RawResult<unknown>;
         if (index >= 0) {
+          seenCount++;
+          seenBits = setBit(seenBits, index);
           r = types[index].func(value, mode);
         } else if (rest !== undefined) {
           r = rest.func(value, mode);
@@ -668,11 +665,11 @@ function createObjectMatcher(
               unrecognized.push(key);
             }
           } else if (mode === FuncMode.STRIP && result === true) {
-            result = { code: "ok", value: {} };
+            result = { code: "ok", value: Object.create(protoless) };
             for (let m = 0; m < keys.length; m++) {
               if (getBit(seenBits, m)) {
                 const k = keys[m];
-                safeSet(result.value, k, obj[k]);
+                result.value[k] = obj[k];
               }
             }
           }
@@ -681,32 +678,27 @@ function createObjectMatcher(
 
         if (r === true) {
           if (result !== true && result.code === "ok") {
-            safeSet(result.value, key, value);
+            result.value[key] = value;
           }
         } else if (r.code !== "ok") {
           result = prependIssue(prependPath(key, r), result);
         } else if (result === true) {
-          result = { code: "ok", value: {} };
+          result = { code: "ok", value: Object.create(protoless) };
           if (rest === undefined) {
             for (let m = 0; m < keys.length; m++) {
-              if (getBit(seenBits, m)) {
+              if (m !== index && getBit(seenBits, m)) {
                 const k = keys[m];
-                safeSet(result.value, k, obj[k]);
+                result.value[k] = obj[k];
               }
             }
           } else {
             for (const k in obj) {
-              safeSet(result.value, k, obj[k]);
+              result.value[k] = obj[k];
             }
           }
-          safeSet(result.value, key, r.value);
+          result.value[key] = r.value;
         } else if (result.code === "ok") {
-          safeSet(result.value, key, r.value);
-        }
-
-        if (index >= 0) {
-          seenCount++;
-          seenBits = setBit(seenBits, index);
+          result.value[key] = r.value;
         }
       }
     }
@@ -728,33 +720,33 @@ function createObjectMatcher(
         const r = types[i].func(value, mode);
         if (r === true) {
           if (result !== true && result.code === "ok" && value !== Nothing) {
-            safeSet(result.value, key, value);
+            result.value[key] = value;
           }
         } else if (r.code !== "ok") {
           result = prependIssue(prependPath(key, r), result);
         } else if (result === true) {
-          result = { code: "ok", value: {} };
+          result = { code: "ok", value: Object.create(protoless) };
           if (rest === undefined) {
             for (let m = 0; m < keys.length; m++) {
               if (m < i || getBit(seenBits, m)) {
                 const k = keys[m];
-                safeSet(result.value, k, obj[k]);
+                result.value[k] = obj[k];
               }
             }
           } else {
             for (const k in obj) {
-              safeSet(result.value, k, obj[k]);
+              result.value[k] = obj[k];
             }
             for (let m = 0; m < i; m++) {
               if (!getBit(seenBits, m)) {
                 const k = keys[m];
-                safeSet(result.value, k, obj[k]);
+                result.value[k] = obj[k];
               }
             }
           }
-          safeSet(result.value, key, r.value);
+          result.value[key] = r.value;
         } else if (result.code === "ok") {
-          safeSet(result.value, key, r.value);
+          result.value[key] = r.value;
         }
       }
     }
