@@ -453,45 +453,6 @@ function prependIssue(issue: IssueTree, result: RawResult<unknown>): IssueTree {
     ? issue
     : joinIssues(issue, result);
 }
-
-type Obj = Record<string, unknown>;
-
-function assignEnumerable(to: Obj, from: Obj): Obj {
-  for (const key in from) {
-    safeSet(to, key, from[key]);
-  }
-  return to;
-}
-
-function addResult(
-  objResult: RawResult<Obj>,
-  obj: Obj,
-  key: string,
-  value: unknown,
-  keyResult: RawResult<unknown>,
-  assign: (to: Obj, from: Obj) => Obj,
-): RawResult<Obj> {
-  if (keyResult === true) {
-    if (objResult !== true && objResult.code === "ok" && value !== Nothing) {
-      safeSet(objResult.value, key, value);
-    }
-    return objResult;
-  } else if (keyResult.code === "ok") {
-    if (objResult === true) {
-      const copy = assign({}, obj);
-      safeSet(copy, key, keyResult.value);
-      return { code: "ok", value: copy };
-    } else if (objResult.code === "ok") {
-      safeSet(objResult.value, key, keyResult.value);
-      return objResult;
-    } else {
-      return objResult;
-    }
-  } else {
-    return prependIssue(prependPath(key, keyResult), objResult);
-  }
-}
-
 // A bitset type, used for keeping track which known (required & optional) keys
 // the object validator has seen. Basically, when key `knownKey` is encountered,
 // the corresponding bit at index `keys.indexOf(knownKey)` gets flipped to 1.
@@ -537,7 +498,7 @@ class ObjectType<
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
-  private _func?: Func<ObjectOutput<Shape, Rest>>;
+  private _func?: Func<unknown>;
 
   constructor(
     readonly shape: Shape,
@@ -564,13 +525,13 @@ class ObjectType<
     ]);
   }
 
-  func(obj: Obj, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
+  func(v: unknown, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
     let func = this._func;
     if (func === undefined) {
       func = createObjectMatcher(this.shape, this.restType, this.checks);
       this._func = func;
     }
-    return func(obj, mode);
+    return func(v, mode) as RawResult<ObjectOutput<Shape, Rest>>;
   }
 
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
@@ -622,17 +583,14 @@ class ObjectType<
   }
 }
 
-function createObjectMatcher<
-  Shape extends ObjectShape = ObjectShape,
-  Rest extends AbstractType | undefined = AbstractType | undefined,
->(
-  shape: Shape,
-  restType: Rest,
+function createObjectMatcher(
+  shape: ObjectShape,
+  rest?: AbstractType,
   checks?: {
     func: (v: unknown) => boolean;
     issue: IssueNode;
   }[],
-): Func<ObjectOutput<Shape, Rest>> {
+): Func<unknown> {
   const requiredKeys: string[] = [];
   const optionalKeys: string[] = [];
   for (const key in shape) {
@@ -646,212 +604,173 @@ function createObjectMatcher<
       requiredKeys.push(key);
     }
   }
-
-  const requiredCount = requiredKeys.length | 0;
-  const optionalCount = optionalKeys.length | 0;
-  const totalCount = (requiredCount + optionalCount) | 0;
-
   const keys = [...requiredKeys, ...optionalKeys];
-  const types = keys.map((key) => shape[key]);
-
-  const invertedIndexes = Object.create(null);
-  keys.forEach((key, index) => {
-    invertedIndexes[key] = ~index;
-  });
-
   const invalidType: IssueNode = {
     code: "invalid_type",
     path: undefined,
     expected: ["object"],
   };
+
+  if (keys.length === 0 && rest === unknownSingleton) {
+    // A fast path for record(unknown())
+    return function (obj, _) {
+      if (!isObject(obj)) {
+        return invalidType;
+      }
+
+      if (checks !== undefined) {
+        for (let i = 0; i < checks.length; i++) {
+          if (!checks[i].func(obj)) {
+            return checks[i].issue;
+          }
+        }
+      }
+      return true;
+    };
+  }
+
+  const types = keys.map((key) => shape[key]);
+  const requiredCount = requiredKeys.length;
+  const invertedIndexes = Object.create(null);
+  keys.forEach((key, index) => {
+    invertedIndexes[key] = ~index;
+  });
   const missingValues: IssueNode[] = requiredKeys.map((key) => ({
     code: "missing_value",
     path: key,
   }));
 
-  function assignKnown(to: Obj, from: Obj): Obj {
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      const value = from[key];
-      if (i < requiredCount || value !== undefined || key in from) {
-        safeSet(to, key, value);
-      }
+  return function (obj, mode) {
+    if (!isObject(obj)) {
+      return invalidType;
     }
-    return to;
-  }
 
-  function assignAll(to: Obj, from: Obj): Obj {
-    return assignKnown(assignEnumerable(to, from), from);
-  }
-
-  function checkRemainingKeys(
-    initialResult: RawResult<Obj>,
-    obj: Obj,
-    mode: FuncMode,
-    bits: BitSet,
-    assign: (to: Obj, from: Obj) => Obj,
-  ): RawResult<Obj> {
-    let result = initialResult;
-    for (let i = 0; i < totalCount; i++) {
-      if (!getBit(bits, i)) {
-        const key = keys[i];
-        const value = key in obj ? obj[key] : Nothing;
-        if (i < requiredCount && value === Nothing) {
-          result = prependIssue(missingValues[i], result);
-        } else {
-          result = addResult(
-            result,
-            obj,
-            key,
-            value,
-            types[i].func(value, mode),
-            assign,
-          );
-        }
-      }
-    }
-    return result;
-  }
-
-  function pass(obj: Obj, mode: FuncMode): RawResult<Obj> {
-    let result: RawResult<Obj> = true;
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-
-      let value: unknown = obj[key];
-      if (value === undefined && !(key in obj)) {
-        if (i < requiredCount) {
-          result = prependIssue(missingValues[i], result);
-          continue;
-        }
-        value = Nothing;
-      }
-
-      result = addResult(
-        result,
-        obj,
-        key,
-        value,
-        types[i].func(value, mode),
-        assignKnown,
-      );
-    }
-    return result;
-  }
-
-  function strict(obj: Obj, mode: FuncMode): RawResult<Obj> {
-    let result: RawResult<Obj> = true;
+    let result: RawResult<Record<string, unknown>> = true;
     let unrecognized: Key[] | undefined = undefined;
     let seenBits: BitSet = 0;
     let seenCount = 0;
 
-    for (const key in obj) {
-      const value = obj[key];
-      const index = ~invertedIndexes[key];
-      if (index >= 0) {
-        seenCount++;
-        seenBits = setBit(seenBits, index);
-        result = addResult(
-          result,
-          obj,
-          key,
-          value,
-          types[index].func(value, mode),
-          assignKnown,
-        );
-      } else if (mode === FuncMode.STRIP) {
-        result =
-          result === true
-            ? { code: "ok", value: assignKnown({}, obj) }
-            : result;
-      } else if (unrecognized === undefined) {
-        unrecognized = [key];
-      } else {
-        unrecognized.push(key);
-      }
-    }
-
-    if (seenCount < totalCount) {
-      result = checkRemainingKeys(result, obj, mode, seenBits, assignKnown);
-    }
-
-    return unrecognized === undefined
-      ? result
-      : prependIssue(
-          {
-            code: "unrecognized_keys",
-            path: undefined,
-            keys: unrecognized,
-          },
-          result,
-        );
-  }
-
-  function withRest(
-    rest: AbstractType,
-    obj: Obj,
-    mode: FuncMode,
-  ): RawResult<Obj> {
-    if (totalCount === 0) {
-      if (rest.name === "unknown") {
-        return true;
-      }
-
-      let result: RawResult<Obj> = true;
+    if (mode !== FuncMode.PASS || rest !== undefined) {
       for (const key in obj) {
         const value = obj[key];
-        result = addResult(
-          result,
-          obj,
-          key,
-          value,
-          rest.func(value, mode),
-          assignEnumerable,
-        );
+        const index = ~invertedIndexes[key];
+
+        let r: RawResult<unknown>;
+        if (index >= 0) {
+          r = types[index].func(value, mode);
+        } else if (rest !== undefined) {
+          r = rest.func(value, mode);
+        } else {
+          if (mode === FuncMode.STRICT) {
+            if (unrecognized === undefined) {
+              unrecognized = [key];
+            } else {
+              unrecognized.push(key);
+            }
+          } else if (mode === FuncMode.STRIP && result === true) {
+            result = { code: "ok", value: {} };
+            for (let m = 0; m < keys.length; m++) {
+              if (getBit(seenBits, m)) {
+                const k = keys[m];
+                safeSet(result.value, k, obj[k]);
+              }
+            }
+          }
+          continue;
+        }
+
+        if (r === true) {
+          if (result !== true && result.code === "ok") {
+            safeSet(result.value, key, value);
+          }
+        } else if (r.code !== "ok") {
+          result = prependIssue(prependPath(key, r), result);
+        } else if (result === true) {
+          result = { code: "ok", value: {} };
+          if (rest === undefined) {
+            for (let m = 0; m < keys.length; m++) {
+              if (getBit(seenBits, m)) {
+                const k = keys[m];
+                safeSet(result.value, k, obj[k]);
+              }
+            }
+          } else {
+            for (const k in obj) {
+              safeSet(result.value, k, obj[k]);
+            }
+          }
+          safeSet(result.value, key, r.value);
+        } else if (result.code === "ok") {
+          safeSet(result.value, key, r.value);
+        }
+
+        if (index >= 0) {
+          seenCount++;
+          seenBits = setBit(seenBits, index);
+        }
       }
     }
 
-    let result: RawResult<Obj> = true;
-    let seenBits: BitSet = 0;
-    let seenCount = 0;
-
-    for (const key in obj) {
-      const value = obj[key];
-      const index = ~invertedIndexes[key];
-      if (index >= 0) {
-        seenCount++;
-        seenBits = setBit(seenBits, index);
-        result = addResult(
-          result,
-          obj,
-          key,
-          value,
-          types[index].func(value, mode),
-          assignEnumerable,
-        );
-      } else {
-        result = addResult(
-          result,
-          obj,
-          key,
-          value,
-          rest.func(value, mode),
-          assignEnumerable,
-        );
+    if (seenCount < keys.length) {
+      for (let i = 0; i < keys.length; i++) {
+        if (getBit(seenBits, i)) {
+          continue;
+        }
+        const key = keys[i];
+        let value = obj[key];
+        if (value === undefined && !(key in obj)) {
+          if (i < requiredCount) {
+            result = prependIssue(missingValues[i], result);
+            continue;
+          }
+          value = Nothing;
+        }
+        const r = types[i].func(value, mode);
+        if (r === true) {
+          if (result !== true && result.code === "ok" && value !== Nothing) {
+            safeSet(result.value, key, value);
+          }
+        } else if (r.code !== "ok") {
+          result = prependIssue(prependPath(key, r), result);
+        } else if (result === true) {
+          result = { code: "ok", value: {} };
+          if (rest === undefined) {
+            for (let m = 0; m < keys.length; m++) {
+              if (m < i || getBit(seenBits, m)) {
+                const k = keys[m];
+                safeSet(result.value, k, obj[k]);
+              }
+            }
+          } else {
+            for (const k in obj) {
+              safeSet(result.value, k, obj[k]);
+            }
+            for (let m = 0; m < i; m++) {
+              if (!getBit(seenBits, m)) {
+                const k = keys[m];
+                safeSet(result.value, k, obj[k]);
+              }
+            }
+          }
+          safeSet(result.value, key, r.value);
+        } else if (result.code === "ok") {
+          safeSet(result.value, key, r.value);
+        }
       }
     }
 
-    if (seenCount < totalCount) {
-      result = checkRemainingKeys(result, obj, mode, seenBits, assignAll);
+    if (unrecognized !== undefined) {
+      result = prependIssue(
+        {
+          code: "unrecognized_keys",
+          path: undefined,
+          keys: unrecognized,
+        },
+        result,
+      );
     }
-    return result;
-  }
 
-  function runChecks(
-    obj: Record<string, unknown>,
-    result: RawResult<Obj>,
-  ): RawResult<ObjectOutput<Shape, Rest>> {
-    if ((result === true || result.code === "ok") && checks) {
+    if ((result === true || result.code === "ok") && checks !== undefined) {
       const value = result === true ? obj : result.value;
       for (let i = 0; i < checks.length; i++) {
         if (!checks[i].func(value)) {
@@ -859,27 +778,8 @@ function createObjectMatcher<
         }
       }
     }
-    return result as RawResult<ObjectOutput<Shape, Rest>>;
-  }
-
-  function func(
-    obj: unknown,
-    mode: FuncMode,
-  ): RawResult<ObjectOutput<Shape, Rest>> {
-    if (!isObject(obj)) {
-      return invalidType;
-    }
-
-    if (restType) {
-      return runChecks(obj, withRest(restType, obj, mode));
-    } else if (mode === FuncMode.PASS) {
-      return runChecks(obj, pass(obj, mode));
-    } else {
-      return runChecks(obj, strict(obj, mode));
-    }
-  }
-
-  return func;
+    return result;
+  };
 }
 
 type TupleOutput<T extends Type[]> = {
