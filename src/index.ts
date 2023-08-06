@@ -266,7 +266,7 @@ function err(error?: CustomError): Err {
 export type { Ok, Err };
 export type ValitaResult<V> = Ok<V> | Err;
 
-type RawResult<T> = true | Readonly<{ code: "ok"; value: T }> | IssueTree;
+type RawResult<T> = undefined | Readonly<{ code: "ok"; value: T }> | IssueTree;
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -303,7 +303,7 @@ abstract class AbstractType<Output = unknown> {
       Exclude<Output, undefined> | T
     >;
     return new TransformType(this.optional(), (v) => {
-      return v === undefined ? defaultResult : true;
+      return v === undefined ? defaultResult : undefined;
     });
   }
 
@@ -312,7 +312,9 @@ abstract class AbstractType<Output = unknown> {
     error?: CustomError,
   ): Type<T> {
     const err: IssueNode = { code: "custom_error", path: undefined, error };
-    return new TransformType(this, (v) => (func(v as Output) ? true : err));
+    return new TransformType(this, (v) =>
+      func(v as Output) ? undefined : err,
+    );
   }
 
   map<T extends Literal>(func: (v: Output) => T): Type<T>;
@@ -362,7 +364,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     }
 
     const r = this.func(v, mode);
-    if (r === true) {
+    if (r === undefined) {
       return { ok: true, value: v as Infer<this> };
     } else if (r.code === "ok") {
       return { ok: true, value: r.value as Infer<this> };
@@ -382,7 +384,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     }
 
     const r = this.func(v, mode);
-    if (r === true) {
+    if (r === undefined) {
       return v as Infer<this>;
     } else if (r.code === "ok") {
       return r.value as Infer<this>;
@@ -400,7 +402,9 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
 
   func(v: unknown, mode: FuncMode): RawResult<Output | undefined> {
-    return v === undefined || v === Nothing ? true : this.type.func(v, mode);
+    return v === undefined || v === Nothing
+      ? undefined
+      : this.type.func(v, mode);
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
@@ -616,7 +620,7 @@ function createObjectMatcher(
           }
         }
       }
-      return true;
+      return undefined;
     };
   }
 
@@ -679,7 +683,7 @@ function createObjectMatcher(
           continue;
         }
 
-        if (r === true) {
+        if (r === undefined) {
           if (copied && issues === undefined) {
             output[key] = value;
           }
@@ -722,7 +726,7 @@ function createObjectMatcher(
           value = Nothing;
         }
         const r = types[i].func(value, mode);
-        if (r === true) {
+        if (r === undefined) {
           if (copied && issues === undefined && value !== Nothing) {
             output[key] = value;
           }
@@ -771,12 +775,11 @@ function createObjectMatcher(
         }
       }
     }
-    if (issues !== undefined) {
-      return issues;
-    } else if (copied) {
+
+    if (issues === undefined && copied) {
       return { code: "ok", value: output };
     } else {
-      return true;
+      return issues;
     }
   };
 }
@@ -845,7 +848,7 @@ class ArrayType<
     for (let i = 0; i < arr.length; i++) {
       const type = i < minLength ? this.head[i] : this.rest;
       const r = type.func(arr[i], mode);
-      if (r !== true) {
+      if (r !== undefined) {
         if (r.code === "ok") {
           if (output === arr) {
             output = arr.slice();
@@ -859,7 +862,7 @@ class ArrayType<
     if (issueTree) {
       return issueTree;
     } else if (arr === output) {
-      return true;
+      return undefined;
     } else {
       return { code: "ok", value: output as ArrayOutput<Head, Rest> };
     }
@@ -1090,7 +1093,7 @@ function createUnionBaseMatcher(
     let issueTree: IssueTree = issue;
     for (let i = 0; i < options.length; i++) {
       const r = options[i].func(value, mode);
-      if (r === true || r.code === "ok") {
+      if (r === undefined || r.code === "ok") {
         return r;
       }
       issueTree = count > 0 ? joinIssues(issueTree, r) : r;
@@ -1176,12 +1179,12 @@ class TransformType<Output> extends Type<Output> {
 
     // eslint-disable-next-line
     let result = this.transformRoot!.func(v, mode);
-    if (result !== true && result.code !== "ok") {
+    if (result !== undefined && result.code !== "ok") {
       return result;
     }
 
     let current: unknown;
-    if (result !== true) {
+    if (result !== undefined) {
       current = result.value;
     } else if (v === Nothing) {
       current = undefined;
@@ -1192,7 +1195,7 @@ class TransformType<Output> extends Type<Output> {
 
     for (let i = 0; i < chain.length; i++) {
       const r = chain[i](current, mode);
-      if (r !== true) {
+      if (r !== undefined) {
         if (r.code !== "ok") {
           return r;
         }
@@ -1259,7 +1262,7 @@ function never(): Type<never> {
 class UnknownType extends Type<unknown> {
   readonly name = "unknown";
   func(_: unknown, __: FuncMode): RawResult<unknown> {
-    return true;
+    return undefined;
   }
 }
 const unknownSingleton = new UnknownType();
@@ -1275,7 +1278,7 @@ class UndefinedType extends Type<undefined> {
     expected: ["undefined"],
   };
   func(v: unknown, _: FuncMode): RawResult<undefined> {
-    return v === undefined ? true : this.issue;
+    return v === undefined ? undefined : this.issue;
   }
 }
 const undefinedSingleton = new UndefinedType();
@@ -1291,7 +1294,7 @@ class NullType extends Type<null> {
     expected: ["null"],
   };
   func(v: unknown, _: FuncMode): RawResult<null> {
-    return v === null ? true : this.issue;
+    return v === null ? undefined : this.issue;
   }
 }
 const nullSingleton = new NullType();
@@ -1307,7 +1310,7 @@ class NumberType extends Type<number> {
     expected: ["number"],
   };
   func(v: unknown, _: FuncMode): RawResult<number> {
-    return typeof v === "number" ? true : this.issue;
+    return typeof v === "number" ? undefined : this.issue;
   }
 }
 const numberSingleton = new NumberType();
@@ -1323,7 +1326,7 @@ class BigIntType extends Type<bigint> {
     expected: ["bigint"],
   };
   func(v: unknown, _: FuncMode): RawResult<bigint> {
-    return typeof v === "bigint" ? true : this.issue;
+    return typeof v === "bigint" ? undefined : this.issue;
   }
 }
 const bigintSingleton = new BigIntType();
@@ -1339,7 +1342,7 @@ class StringType extends Type<string> {
     expected: ["string"],
   };
   func(v: unknown, _: FuncMode): RawResult<string> {
-    return typeof v === "string" ? true : this.issue;
+    return typeof v === "string" ? undefined : this.issue;
   }
 }
 const stringSingleton = new StringType();
@@ -1355,7 +1358,7 @@ class BooleanType extends Type<boolean> {
     expected: ["boolean"],
   };
   func(v: unknown, _: FuncMode): RawResult<boolean> {
-    return typeof v === "boolean" ? true : this.issue;
+    return typeof v === "boolean" ? undefined : this.issue;
   }
 }
 const booleanSingleton = new BooleanType();
@@ -1375,7 +1378,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
     };
   }
   func(v: unknown, _: FuncMode): RawResult<Out> {
-    return v === this.value ? true : this.issue;
+    return v === this.value ? undefined : this.issue;
   }
 }
 function literal<T extends Literal>(value: T): Type<T> {
