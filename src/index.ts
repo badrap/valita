@@ -370,10 +370,12 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
   try(v: unknown, options?: Partial<ParseOptions>): ValitaResult<Infer<this>> {
     let mode: FuncMode = FuncMode.STRICT;
-    if (options && options.mode === "passthrough") {
-      mode = FuncMode.PASS;
-    } else if (options && options.mode === "strip") {
-      mode = FuncMode.STRIP;
+    if (options !== undefined) {
+      if (options.mode === "passthrough") {
+        mode = FuncMode.PASS;
+      } else if (options.mode === "strip") {
+        mode = FuncMode.STRIP;
+      }
     }
 
     const r = this.func(v, mode);
@@ -388,10 +390,12 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
   parse(v: unknown, options?: Partial<ParseOptions>): Infer<this> {
     let mode: FuncMode = FuncMode.STRICT;
-    if (options && options.mode === "passthrough") {
-      mode = FuncMode.PASS;
-    } else if (options && options.mode === "strip") {
-      mode = FuncMode.STRIP;
+    if (options !== undefined) {
+      if (options.mode === "passthrough") {
+        mode = FuncMode.PASS;
+      } else if (options.mode === "strip") {
+        mode = FuncMode.STRIP;
+      }
     }
 
     const r = this.func(v, mode);
