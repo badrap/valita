@@ -431,11 +431,6 @@ type ObjectOutput<
       : unknown)
 >;
 
-function prependIssue(issue: IssueTree, result: RawResult<unknown>): IssueTree {
-  return result === true || result.code === "ok"
-    ? issue
-    : joinIssues(issue, result);
-}
 // A bitset type, used for keeping track which known (required & optional) keys
 // the object validator has seen. Basically, when key `knownKey` is encountered,
 // the corresponding bit at index `keys.indexOf(knownKey)` gets flipped to 1.
@@ -600,13 +595,14 @@ function createObjectMatcher(
     }
   }
   const keys = [...requiredKeys, ...optionalKeys];
+  const totalCount = keys.length;
   const invalidType: IssueNode = {
     code: "invalid_type",
     path: undefined,
     expected: ["object"],
   };
 
-  if (keys.length === 0 && rest === unknownSingleton) {
+  if (totalCount === 0 && rest === unknownSingleton) {
     // A fast path for record(unknown())
     return function (obj, _) {
       if (!isObject(obj)) {
@@ -640,7 +636,9 @@ function createObjectMatcher(
       return invalidType;
     }
 
-    let result: RawResult<Record<string, unknown>> = true;
+    let copied = false;
+    let output = obj;
+    let issues: IssueTree | undefined;
     let unrecognized: Key[] | undefined = undefined;
     let seenBits: BitSet = 0;
     let seenCount = 0;
@@ -664,12 +662,17 @@ function createObjectMatcher(
             } else {
               unrecognized.push(key);
             }
-          } else if (mode === FuncMode.STRIP && result === true) {
-            result = { code: "ok", value: Object.create(protoless) };
-            for (let m = 0; m < keys.length; m++) {
+          } else if (
+            mode === FuncMode.STRIP &&
+            issues === undefined &&
+            !copied
+          ) {
+            output = Object.create(protoless);
+            copied = true;
+            for (let m = 0; m < totalCount; m++) {
               if (getBit(seenBits, m)) {
                 const k = keys[m];
-                result.value[k] = obj[k];
+                output[k] = obj[k];
               }
             }
           }
@@ -677,34 +680,35 @@ function createObjectMatcher(
         }
 
         if (r === true) {
-          if (result !== true && result.code === "ok") {
-            result.value[key] = value;
+          if (copied && issues === undefined) {
+            output[key] = value;
           }
         } else if (r.code !== "ok") {
-          result = prependIssue(prependPath(key, r), result);
-        } else if (result === true) {
-          result = { code: "ok", value: Object.create(protoless) };
-          if (rest === undefined) {
-            for (let m = 0; m < keys.length; m++) {
-              if (m !== index && getBit(seenBits, m)) {
-                const k = keys[m];
-                result.value[k] = obj[k];
+          issues = joinIssues(issues, prependPath(key, r));
+        } else if (issues === undefined) {
+          if (!copied) {
+            output = Object.create(protoless);
+            copied = true;
+            if (rest === undefined) {
+              for (let m = 0; m < totalCount; m++) {
+                if (m !== index && getBit(seenBits, m)) {
+                  const k = keys[m];
+                  output[k] = obj[k];
+                }
+              }
+            } else {
+              for (const k in obj) {
+                output[k] = obj[k];
               }
             }
-          } else {
-            for (const k in obj) {
-              result.value[k] = obj[k];
-            }
           }
-          result.value[key] = r.value;
-        } else if (result.code === "ok") {
-          result.value[key] = r.value;
+          output[key] = r.value;
         }
       }
     }
 
-    if (seenCount < keys.length) {
-      for (let i = 0; i < keys.length; i++) {
+    if (seenCount < totalCount) {
+      for (let i = 0; i < totalCount; i++) {
         if (getBit(seenBits, i)) {
           continue;
         }
@@ -712,65 +716,68 @@ function createObjectMatcher(
         let value = obj[key];
         if (value === undefined && !(key in obj)) {
           if (i < requiredCount) {
-            result = prependIssue(missingValues[i], result);
+            issues = joinIssues(issues, missingValues[i]);
             continue;
           }
           value = Nothing;
         }
         const r = types[i].func(value, mode);
         if (r === true) {
-          if (result !== true && result.code === "ok" && value !== Nothing) {
-            result.value[key] = value;
+          if (copied && issues === undefined && value !== Nothing) {
+            output[key] = value;
           }
         } else if (r.code !== "ok") {
-          result = prependIssue(prependPath(key, r), result);
-        } else if (result === true) {
-          result = { code: "ok", value: Object.create(protoless) };
-          if (rest === undefined) {
-            for (let m = 0; m < keys.length; m++) {
-              if (m < i || getBit(seenBits, m)) {
-                const k = keys[m];
-                result.value[k] = obj[k];
+          issues = joinIssues(issues, prependPath(key, r));
+        } else if (issues === undefined) {
+          if (!copied) {
+            output = Object.create(protoless);
+            copied = true;
+            if (rest === undefined) {
+              for (let m = 0; m < totalCount; m++) {
+                if (m < i || getBit(seenBits, m)) {
+                  const k = keys[m];
+                  output[k] = obj[k];
+                }
               }
-            }
-          } else {
-            for (const k in obj) {
-              result.value[k] = obj[k];
-            }
-            for (let m = 0; m < i; m++) {
-              if (!getBit(seenBits, m)) {
-                const k = keys[m];
-                result.value[k] = obj[k];
+            } else {
+              for (const k in obj) {
+                output[k] = obj[k];
+              }
+              for (let m = 0; m < i; m++) {
+                if (!getBit(seenBits, m)) {
+                  const k = keys[m];
+                  output[k] = obj[k];
+                }
               }
             }
           }
-          result.value[key] = r.value;
-        } else if (result.code === "ok") {
-          result.value[key] = r.value;
+          output[key] = r.value;
         }
       }
     }
 
     if (unrecognized !== undefined) {
-      result = prependIssue(
-        {
-          code: "unrecognized_keys",
-          path: undefined,
-          keys: unrecognized,
-        },
-        result,
-      );
+      issues = joinIssues(issues, {
+        code: "unrecognized_keys",
+        path: undefined,
+        keys: unrecognized,
+      });
     }
 
-    if ((result === true || result.code === "ok") && checks !== undefined) {
-      const value = result === true ? obj : result.value;
+    if (issues === undefined && checks !== undefined) {
       for (let i = 0; i < checks.length; i++) {
-        if (!checks[i].func(value)) {
+        if (!checks[i].func(output)) {
           return checks[i].issue;
         }
       }
     }
-    return result;
+    if (issues !== undefined) {
+      return issues;
+    } else if (copied) {
+      return { code: "ok", value: output };
+    } else {
+      return true;
+    }
   };
 }
 
