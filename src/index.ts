@@ -571,7 +571,7 @@ class ObjectType<
 //
 // Using Object.create(protoless) instead of Object.create(null) seems to
 // be faster on V8 at the time of writing this (2023-08-07).
-const protoless = Object.create(null);
+const protoless = Object.freeze(Object.create(null));
 
 function createObjectMatcher(
   shape: ObjectShape,
