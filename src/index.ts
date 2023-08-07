@@ -331,11 +331,7 @@ abstract class AbstractType<Output = unknown> {
   chain<T>(func: (v: Output) => ValitaResult<T>): Type<T> {
     return new TransformType(this, (v) => {
       const r = func(v as Output);
-      if (r.ok) {
-        return { ok: true, value: r.value };
-      } else {
-        return (r as unknown as { issueTree: IssueTree }).issueTree;
-      }
+      return r.ok ? r : (r as unknown as { issueTree: IssueTree }).issueTree;
     });
   }
 }
