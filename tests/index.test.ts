@@ -2030,8 +2030,8 @@ describe("ValitaResult", () => {
 
 describe("ValitaError", () => {
   const error = new v.ValitaError({
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["bigint"],
   });
   it("is derived from Error", () => {
@@ -2052,18 +2052,20 @@ describe("ValitaError", () => {
     });
     it("supports multiple issues", () => {
       const error = new v.ValitaError({
+        ok: false,
         code: "join",
         left: {
+          ok: false,
           code: "invalid_type",
-          path: undefined,
           expected: ["bigint"],
         },
         right: {
+          ok: false,
           code: "prepend",
           key: "first",
           tree: {
+            ok: false,
             code: "invalid_type",
-            path: undefined,
             expected: ["string"],
           },
         },
@@ -2091,18 +2093,20 @@ describe("ValitaError", () => {
     });
     it("describes the leftmost issue when there are two issues", () => {
       const error = new v.ValitaError({
+        ok: false,
         code: "join",
         left: {
+          ok: false,
           code: "invalid_type",
-          path: undefined,
           expected: ["bigint"],
         },
         right: {
+          ok: false,
           code: "prepend",
           key: "first",
           tree: {
+            ok: false,
             code: "invalid_type",
-            path: undefined,
             expected: ["string"],
           },
         },
@@ -2113,25 +2117,28 @@ describe("ValitaError", () => {
     });
     it("describes the leftmost issue when there are more than two issues", () => {
       const error = new v.ValitaError({
+        ok: false,
         code: "join",
         left: {
+          ok: false,
           code: "invalid_type",
-          path: undefined,
           expected: ["bigint"],
         },
         right: {
+          ok: false,
           code: "join",
           left: {
+            ok: false,
             code: "invalid_type",
-            path: undefined,
             expected: ["bigint"],
           },
           right: {
+            ok: false,
             code: "prepend",
             key: "first",
             tree: {
+              ok: false,
               code: "invalid_type",
-              path: undefined,
               expected: ["string"],
             },
           },
