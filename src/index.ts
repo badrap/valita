@@ -21,34 +21,42 @@ type CustomError =
       path?: Key[];
     };
 
-type IssueNode<PathType = Key | undefined> = Readonly<
-  | { code: "invalid_type"; path: PathType; expected: InputType[] }
-  | { code: "missing_value"; path: PathType }
-  | { code: "invalid_literal"; path: PathType; expected: Literal[] }
-  | {
-      code: "invalid_length";
-      path: PathType;
-      minLength: number;
-      maxLength: number;
-    }
-  | { code: "unrecognized_keys"; path: PathType; keys: Key[] }
-  | { code: "invalid_union"; path: PathType; tree: IssueTree }
-  | { code: "custom_error"; path: PathType; error: CustomError }
+type IssueNode = Readonly<
+  | { ok: false; code: "custom_error"; error: CustomError }
+  | { ok: false; code: "invalid_type"; expected: InputType[] }
+  | { ok: false; code: "missing_value" }
+  | { ok: false; code: "invalid_literal"; expected: Literal[] }
+  | { ok: false; code: "unrecognized_keys"; keys: Key[] }
+  | { ok: false; code: "invalid_union"; tree: IssueTree }
+  | { ok: false; code: "invalid_length"; minLength: number; maxLength: number }
 >;
 
 type IssueTree =
-  | Readonly<{ code: "prepend"; key: Key; tree: IssueTree }>
-  | Readonly<{ code: "join"; left: IssueTree; right: IssueTree }>
+  | Readonly<{ ok: false; code: "prepend"; key: Key; tree: IssueTree }>
+  | Readonly<{ ok: false; code: "join"; left: IssueTree; right: IssueTree }>
   | IssueNode;
 
-type Issue = IssueNode<Key[]>;
+type Issue = Readonly<
+  | { code: "custom_error"; path: Key[]; error: CustomError }
+  | { code: "invalid_type"; path: Key[]; expected: InputType[] }
+  | { code: "missing_value"; path: Key[] }
+  | { code: "invalid_literal"; path: Key[]; expected: Literal[] }
+  | { code: "unrecognized_keys"; path: Key[]; keys: Key[] }
+  | { code: "invalid_union"; path: Key[]; tree: IssueTree }
+  | {
+      code: "invalid_length";
+      path: Key[];
+      minLength: number;
+      maxLength: number;
+    }
+>;
 
 function joinIssues(left: IssueTree | undefined, right: IssueTree): IssueTree {
-  return left ? { code: "join", left, right } : right;
+  return left ? { ok: false, code: "join", left, right } : right;
 }
 
 function prependPath(key: Key, tree: IssueTree): IssueTree {
-  return { code: "prepend", key, tree };
+  return { ok: false, code: "prepend", key, tree };
 }
 
 function cloneIssueWithPath(tree: IssueNode, path: Key[]): Issue {
@@ -87,9 +95,6 @@ function collectIssues(
     path.push(tree.key);
     collectIssues(tree.tree, path, issues);
   } else {
-    if (tree.path !== undefined) {
-      path.push(tree.path);
-    }
     if (
       tree.code === "custom_error" &&
       typeof tree.error === "object" &&
@@ -124,9 +129,6 @@ function findOneIssue(tree: IssueTree, path: Key[] = []): Issue {
     path.push(tree.key);
     return findOneIssue(tree.tree, path);
   } else {
-    if (tree.path !== undefined) {
-      path.push(tree.path);
-    }
     if (
       tree.code === "custom_error" &&
       typeof tree.error === "object" &&
@@ -260,13 +262,13 @@ function ok<T>(value: T): Ok<T> {
 }
 
 function err(error?: CustomError): Err {
-  return new Err({ code: "custom_error", path: undefined, error });
+  return new Err({ ok: false, code: "custom_error", error });
 }
 
 export type { Ok, Err };
 export type ValitaResult<V> = Ok<V> | Err;
 
-type RawResult<T> = undefined | Readonly<{ code: "ok"; value: T }> | IssueTree;
+type RawResult<T> = undefined | Ok<T> | IssueTree;
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -299,9 +301,7 @@ abstract class AbstractType<Output = unknown> {
   ): Type<Exclude<Output, undefined> | T>;
   default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
   default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
-    const defaultResult = { code: "ok", value: defaultValue } as RawResult<
-      Exclude<Output, undefined> | T
-    >;
+    const defaultResult = ok(defaultValue);
     return new TransformType(this.optional(), (v) => {
       return v === undefined ? defaultResult : undefined;
     });
@@ -311,7 +311,7 @@ abstract class AbstractType<Output = unknown> {
     func: ((v: Output) => v is T) | ((v: Output) => boolean),
     error?: CustomError,
   ): Type<T> {
-    const err: IssueNode = { code: "custom_error", path: undefined, error };
+    const err: IssueNode = { ok: false, code: "custom_error", error };
     return new TransformType(this, (v) =>
       func(v as Output) ? undefined : err,
     );
@@ -321,7 +321,7 @@ abstract class AbstractType<Output = unknown> {
   map<T>(func: (v: Output) => T): Type<T>;
   map<T>(func: (v: Output) => T): Type<T> {
     return new TransformType(this, (v) => ({
-      code: "ok",
+      ok: true,
       value: func(v as Output),
     }));
   }
@@ -332,7 +332,7 @@ abstract class AbstractType<Output = unknown> {
     return new TransformType(this, (v) => {
       const r = func(v as Output);
       if (r.ok) {
-        return { code: "ok", value: r.value };
+        return { ok: true, value: r.value };
       } else {
         return (r as unknown as { issueTree: IssueTree }).issueTree;
       }
@@ -366,7 +366,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     const r = this.func(v, mode);
     if (r === undefined) {
       return { ok: true, value: v as Infer<this> };
-    } else if (r.code === "ok") {
+    } else if (r.ok) {
       return { ok: true, value: r.value as Infer<this> };
     } else {
       return new Err(r);
@@ -386,7 +386,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     const r = this.func(v, mode);
     if (r === undefined) {
       return v as Infer<this>;
-    } else if (r.code === "ok") {
+    } else if (r.ok) {
       return r.value as Infer<this>;
     } else {
       throw new ValitaError(r);
@@ -497,7 +497,7 @@ class ObjectType<
     func: (v: ObjectOutput<Shape, Rest>) => boolean,
     error?: CustomError,
   ): ObjectType<Shape, Rest> {
-    const issue: IssueNode = { code: "custom_error", path: undefined, error };
+    const issue: IssueNode = { ok: false, code: "custom_error", error };
     return new ObjectType(this.shape, this.restType, [
       ...(this.checks ?? []),
       {
@@ -601,8 +601,8 @@ function createObjectMatcher(
   const keys = [...requiredKeys, ...optionalKeys];
   const totalCount = keys.length;
   const invalidType: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["object"],
   };
 
@@ -630,10 +630,12 @@ function createObjectMatcher(
   keys.forEach((key, index) => {
     invertedIndexes[key] = ~index;
   });
-  const missingValues: IssueNode[] = requiredKeys.map((key) => ({
-    code: "missing_value",
-    path: key,
-  }));
+  const missingValues = requiredKeys.map((key) =>
+    prependPath(key, {
+      ok: false,
+      code: "missing_value",
+    }),
+  );
 
   return function (obj, mode) {
     if (!isObject(obj)) {
@@ -687,7 +689,7 @@ function createObjectMatcher(
           if (copied && issues === undefined) {
             output[key] = value;
           }
-        } else if (r.code !== "ok") {
+        } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(key, r));
         } else if (issues === undefined) {
           if (!copied) {
@@ -730,7 +732,7 @@ function createObjectMatcher(
           if (copied && issues === undefined && value !== Nothing) {
             output[key] = value;
           }
-        } else if (r.code !== "ok") {
+        } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(key, r));
         } else if (issues === undefined) {
           if (!copied) {
@@ -762,8 +764,8 @@ function createObjectMatcher(
 
     if (unrecognized !== undefined) {
       issues = joinIssues(issues, {
+        ok: false,
         code: "unrecognized_keys",
-        path: undefined,
         keys: unrecognized,
       });
     }
@@ -777,7 +779,7 @@ function createObjectMatcher(
     }
 
     if (issues === undefined && copied) {
-      return { code: "ok", value: output };
+      return { ok: true, value: output };
     } else {
       return issues;
     }
@@ -815,13 +817,13 @@ class ArrayType<
     this.minLength = this.head.length;
     this.maxLength = rest ? Infinity : this.minLength;
     this.invalidType = {
+      ok: false,
       code: "invalid_type",
-      path: undefined,
       expected: ["array"],
     };
     this.invalidLength = {
+      ok: false,
       code: "invalid_length",
-      path: undefined,
       minLength: this.minLength,
       maxLength: this.maxLength,
     };
@@ -849,7 +851,7 @@ class ArrayType<
       const type = i < minLength ? this.head[i] : this.rest;
       const r = type.func(arr[i], mode);
       if (r !== undefined) {
-        if (r.code === "ok") {
+        if (r.ok) {
           if (output === arr) {
             output = arr.slice();
           }
@@ -864,7 +866,7 @@ class ArrayType<
     } else if (arr === output) {
       return undefined;
     } else {
-      return { code: "ok", value: output as ArrayOutput<Head, Rest> };
+      return { ok: true, value: output as ArrayOutput<Head, Rest> };
     }
   }
 }
@@ -990,19 +992,21 @@ function createObjectKeyMatcher(
     }
   }
 
-  const missingValue: IssueNode = { code: "missing_value", path: key };
-  const issue: IssueNode =
+  const missingValue = prependPath(key, { ok: false, code: "missing_value" });
+  const issue = prependPath(
+    key,
     types.size === 0
       ? {
+          ok: false,
           code: "invalid_literal",
-          path: key,
           expected: Array.from(literals.keys()) as Literal[],
         }
       : {
+          ok: false,
           code: "invalid_type",
-          path: key,
           expected: expectedTypes,
-        };
+        },
+  );
 
   const litMap =
     literals.size > 0 ? new Map<unknown, AbstractType>() : undefined;
@@ -1061,13 +1065,13 @@ function createUnionBaseMatcher(
   const issue: IssueNode =
     types.size === 0 && unknowns.length === 0
       ? {
+          ok: false,
           code: "invalid_literal",
-          path: undefined,
           expected: Array.from(literals.keys()) as Literal[],
         }
       : {
+          ok: false,
           code: "invalid_type",
-          path: undefined,
           expected: expectedTypes,
         };
 
@@ -1093,14 +1097,14 @@ function createUnionBaseMatcher(
     let issueTree: IssueTree = issue;
     for (let i = 0; i < options.length; i++) {
       const r = options[i].func(value, mode);
-      if (r === undefined || r.code === "ok") {
+      if (r === undefined || r.ok) {
         return r;
       }
       issueTree = count > 0 ? joinIssues(issueTree, r) : r;
       count++;
     }
     if (count > 1) {
-      return { code: "invalid_union", path: undefined, tree: issueTree };
+      return { ok: false, code: "invalid_union", tree: issueTree };
     }
     return issueTree;
   };
@@ -1150,7 +1154,7 @@ class TransformType<Output> extends Type<Output> {
 
   private transformChain?: Func<unknown>[];
   private transformRoot?: AbstractType;
-  private readonly undef: RawResult<unknown> = { code: "ok", value: undefined };
+  private readonly undef = ok(undefined);
 
   constructor(
     protected readonly transformed: AbstractType,
@@ -1179,7 +1183,7 @@ class TransformType<Output> extends Type<Output> {
 
     // eslint-disable-next-line
     let result = this.transformRoot!.func(v, mode);
-    if (result !== undefined && result.code !== "ok") {
+    if (result !== undefined && !result.ok) {
       return result;
     }
 
@@ -1196,7 +1200,7 @@ class TransformType<Output> extends Type<Output> {
     for (let i = 0; i < chain.length; i++) {
       const r = chain[i](current, mode);
       if (r !== undefined) {
-        if (r.code !== "ok") {
+        if (!r.ok) {
           return r;
         }
         current = r.value;
@@ -1246,8 +1250,8 @@ class LazyType<T> extends Type<T> {
 class NeverType extends Type<never> {
   readonly name = "never";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: [],
   };
   func(_: unknown, __: FuncMode): RawResult<never> {
@@ -1273,8 +1277,8 @@ function unknown(): Type<unknown> {
 class UndefinedType extends Type<undefined> {
   readonly name = "undefined";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["undefined"],
   };
   func(v: unknown, _: FuncMode): RawResult<undefined> {
@@ -1289,8 +1293,8 @@ function undefined_(): Type<undefined> {
 class NullType extends Type<null> {
   readonly name = "null";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["null"],
   };
   func(v: unknown, _: FuncMode): RawResult<null> {
@@ -1305,8 +1309,8 @@ function null_(): Type<null> {
 class NumberType extends Type<number> {
   readonly name = "number";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["number"],
   };
   func(v: unknown, _: FuncMode): RawResult<number> {
@@ -1321,8 +1325,8 @@ function number(): Type<number> {
 class BigIntType extends Type<bigint> {
   readonly name = "bigint";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["bigint"],
   };
   func(v: unknown, _: FuncMode): RawResult<bigint> {
@@ -1337,8 +1341,8 @@ function bigint(): Type<bigint> {
 class StringType extends Type<string> {
   readonly name = "string";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["string"],
   };
   func(v: unknown, _: FuncMode): RawResult<string> {
@@ -1353,8 +1357,8 @@ function string(): Type<string> {
 class BooleanType extends Type<boolean> {
   readonly name = "boolean";
   private readonly issue: IssueNode = {
+    ok: false,
     code: "invalid_type",
-    path: undefined,
     expected: ["boolean"],
   };
   func(v: unknown, _: FuncMode): RawResult<boolean> {
@@ -1372,8 +1376,8 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   constructor(readonly value: Out) {
     super();
     this.issue = {
+      ok: false,
       code: "invalid_literal",
-      path: undefined,
       expected: [value],
     };
   }
