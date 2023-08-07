@@ -21,7 +21,7 @@ type CustomError =
       path?: Key[];
     };
 
-type IssueNode = Readonly<
+type IssueLeaf = Readonly<
   | { ok: false; code: "custom_error"; error: CustomError }
   | { ok: false; code: "invalid_type"; expected: InputType[] }
   | { ok: false; code: "missing_value" }
@@ -34,7 +34,7 @@ type IssueNode = Readonly<
 type IssueTree =
   | Readonly<{ ok: false; code: "prepend"; key: Key; tree: IssueTree }>
   | Readonly<{ ok: false; code: "join"; left: IssueTree; right: IssueTree }>
-  | IssueNode;
+  | IssueLeaf;
 
 type Issue = Readonly<
   | { code: "custom_error"; path: Key[]; error: CustomError }
@@ -59,7 +59,7 @@ function prependPath(key: Key, tree: IssueTree): IssueTree {
   return { ok: false, code: "prepend", key, tree };
 }
 
-function cloneIssueWithPath(tree: IssueNode, path: Key[]): Issue {
+function cloneIssueWithPath(tree: IssueLeaf, path: Key[]): Issue {
   switch (tree.code) {
     case "invalid_type":
       return { code: "invalid_type", path, expected: tree.expected };
@@ -88,23 +88,25 @@ function collectIssues(
   path: Key[] = [],
   issues: Issue[] = [],
 ): Issue[] {
-  if (tree.code === "join") {
-    collectIssues(tree.left, path.slice(), issues);
-    collectIssues(tree.right, path, issues);
-  } else if (tree.code === "prepend") {
-    path.push(tree.key);
-    collectIssues(tree.tree, path, issues);
-  } else {
-    if (
-      tree.code === "custom_error" &&
-      typeof tree.error === "object" &&
-      tree.error.path !== undefined
-    ) {
-      path.push(...tree.error.path);
+  for (;;) {
+    if (tree.code === "join") {
+      collectIssues(tree.left, path.slice(), issues);
+      tree = tree.right;
+    } else if (tree.code === "prepend") {
+      path.push(tree.key);
+      tree = tree.tree;
+    } else {
+      if (
+        tree.code === "custom_error" &&
+        typeof tree.error === "object" &&
+        tree.error.path !== undefined
+      ) {
+        path.push(...tree.error.path);
+      }
+      issues.push(cloneIssueWithPath(tree, path));
+      return issues;
     }
-    issues.push(cloneIssueWithPath(tree, path));
   }
-  return issues;
 }
 
 function separatedList(list: string[], separator: "or" | "and"): string {
@@ -122,37 +124,35 @@ function formatLiteral(value: Literal): string {
   return typeof value === "bigint" ? `${value}n` : JSON.stringify(value);
 }
 
-function findOneIssue(tree: IssueTree, path: Key[] = []): Issue {
-  if (tree.code === "join") {
-    return findOneIssue(tree.left, path);
-  } else if (tree.code === "prepend") {
-    path.push(tree.key);
-    return findOneIssue(tree.tree, path);
-  } else {
-    if (
-      tree.code === "custom_error" &&
-      typeof tree.error === "object" &&
-      tree.error.path !== undefined
-    ) {
-      path.push(...tree.error.path);
-    }
-    return cloneIssueWithPath(tree, path);
-  }
-}
-
 function countIssues(tree: IssueTree): number {
-  if (tree.code === "join") {
-    return countIssues(tree.left) + countIssues(tree.right);
-  } else if (tree.code === "prepend") {
-    return countIssues(tree.tree);
-  } else {
-    return 1;
+  let count = 0;
+  for (;;) {
+    if (tree.code === "join") {
+      count += countIssues(tree.left);
+      tree = tree.right;
+    } else if (tree.code === "prepend") {
+      tree = tree.tree;
+    } else {
+      return count + 1;
+    }
   }
 }
 
 function formatIssueTree(issueTree: IssueTree): string {
   const count = countIssues(issueTree);
-  const issue = findOneIssue(issueTree);
+  const path = [];
+
+  let issue = issueTree;
+  for (;;) {
+    if (issue.code === "join") {
+      issue = issue.left;
+    } else if (issue.code === "prepend") {
+      path.push(issue.key);
+      issue = issue.tree;
+    } else {
+      break;
+    }
+  }
 
   let message = "validation failed";
   if (issue.code === "invalid_type") {
@@ -189,12 +189,17 @@ function formatIssueTree(issueTree: IssueTree): string {
     const error = issue.error;
     if (typeof error === "string") {
       message = error;
-    } else if (error && error.message === "string") {
-      message = error.message;
+    } else if (error) {
+      if (error.message !== undefined) {
+        message = error.message;
+      }
+      if (error.path !== undefined) {
+        path.push(...error.path);
+      }
     }
   }
 
-  let msg = `${issue.code} at .${issue.path.join(".")} (${message})`;
+  let msg = `${issue.code} at .${path.join(".")} (${message})`;
   if (count === 2) {
     msg += ` (+ 1 other issue)`;
   } else if (count > 2) {
@@ -311,7 +316,7 @@ abstract class AbstractType<Output = unknown> {
     func: ((v: Output) => v is T) | ((v: Output) => boolean),
     error?: CustomError,
   ): Type<T> {
-    const err: IssueNode = { ok: false, code: "custom_error", error };
+    const err: IssueLeaf = { ok: false, code: "custom_error", error };
     return new TransformType(this, (v) =>
       func(v as Output) ? undefined : err,
     );
@@ -483,7 +488,7 @@ class ObjectType<
     private readonly restType: Rest,
     private readonly checks?: {
       func: (v: unknown) => boolean;
-      issue: IssueNode;
+      issue: IssueLeaf;
     }[],
   ) {
     super();
@@ -493,7 +498,7 @@ class ObjectType<
     func: (v: ObjectOutput<Shape, Rest>) => boolean,
     error?: CustomError,
   ): ObjectType<Shape, Rest> {
-    const issue: IssueNode = { ok: false, code: "custom_error", error };
+    const issue: IssueLeaf = { ok: false, code: "custom_error", error };
     return new ObjectType(this.shape, this.restType, [
       ...(this.checks ?? []),
       {
@@ -578,7 +583,7 @@ function createObjectMatcher(
   rest?: AbstractType,
   checks?: {
     func: (v: unknown) => boolean;
-    issue: IssueNode;
+    issue: IssueLeaf;
   }[],
 ): Func<unknown> {
   const requiredKeys: string[] = [];
@@ -596,7 +601,7 @@ function createObjectMatcher(
   }
   const keys = [...requiredKeys, ...optionalKeys];
   const totalCount = keys.length;
-  const invalidType: IssueNode = {
+  const invalidType: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["object"],
@@ -798,8 +803,8 @@ class ArrayType<
   readonly name = "array";
 
   private readonly rest: Type;
-  private readonly invalidType: IssueNode;
-  private readonly invalidLength: IssueNode;
+  private readonly invalidType: IssueLeaf;
+  private readonly invalidLength: IssueLeaf;
   private readonly minLength: number;
   private readonly maxLength: number;
 
@@ -1058,7 +1063,7 @@ function createUnionBaseMatcher(
   const { expectedTypes, literals, types, unknowns, optionals } =
     groupTerminals(terminals);
 
-  const issue: IssueNode =
+  const issue: IssueLeaf =
     types.size === 0 && unknowns.length === 0
       ? {
           ok: false,
@@ -1245,7 +1250,7 @@ class LazyType<T> extends Type<T> {
 
 class NeverType extends Type<never> {
   readonly name = "never";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: [],
@@ -1272,7 +1277,7 @@ function unknown(): Type<unknown> {
 
 class UndefinedType extends Type<undefined> {
   readonly name = "undefined";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["undefined"],
@@ -1288,7 +1293,7 @@ function undefined_(): Type<undefined> {
 
 class NullType extends Type<null> {
   readonly name = "null";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["null"],
@@ -1304,7 +1309,7 @@ function null_(): Type<null> {
 
 class NumberType extends Type<number> {
   readonly name = "number";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["number"],
@@ -1320,7 +1325,7 @@ function number(): Type<number> {
 
 class BigIntType extends Type<bigint> {
   readonly name = "bigint";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["bigint"],
@@ -1336,7 +1341,7 @@ function bigint(): Type<bigint> {
 
 class StringType extends Type<string> {
   readonly name = "string";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["string"],
@@ -1352,7 +1357,7 @@ function string(): Type<string> {
 
 class BooleanType extends Type<boolean> {
   readonly name = "boolean";
-  private readonly issue: IssueNode = {
+  private readonly issue: IssueLeaf = {
     ok: false,
     code: "invalid_type",
     expected: ["boolean"],
@@ -1368,7 +1373,7 @@ function boolean(): Type<boolean> {
 
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
-  private readonly issue: IssueNode;
+  private readonly issue: IssueLeaf;
   constructor(readonly value: Out) {
     super();
     this.issue = {
