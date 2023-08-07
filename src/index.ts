@@ -109,15 +109,14 @@ function collectIssues(
   }
 }
 
-function separatedList(list: string[], separator: "or" | "and"): string {
+function separatedList(list: string[], sep: "or" | "and"): string {
   if (list.length === 0) {
     return "nothing";
+  } else if (list.length === 1) {
+    return list[0];
+  } else {
+    return `${list.slice(0, -1).join(", ")} ${sep} ${list[list.length - 1]}`;
   }
-  const last = list[list.length - 1];
-  if (list.length < 2) {
-    return last;
-  }
-  return `${list.slice(0, -1).join(", ")} ${separator} ${last}`;
 }
 
 function formatLiteral(value: Literal): string {
@@ -138,40 +137,39 @@ function countIssues(tree: IssueTree): number {
   }
 }
 
-function formatIssueTree(issueTree: IssueTree): string {
-  const count = countIssues(issueTree);
-  const path = [];
-
-  let issue = issueTree;
+function formatIssueTree(tree: IssueTree): string {
+  let path = "";
+  let count = 0;
   for (;;) {
-    if (issue.code === "join") {
-      issue = issue.left;
-    } else if (issue.code === "prepend") {
-      path.push(issue.key);
-      issue = issue.tree;
+    if (tree.code === "join") {
+      count += countIssues(tree.right);
+      tree = tree.left;
+    } else if (tree.code === "prepend") {
+      path += "." + tree.key;
+      tree = tree.tree;
     } else {
       break;
     }
   }
 
   let message = "validation failed";
-  if (issue.code === "invalid_type") {
-    message = `expected ${separatedList(issue.expected, "or")}`;
-  } else if (issue.code === "invalid_literal") {
+  if (tree.code === "invalid_type") {
+    message = `expected ${separatedList(tree.expected, "or")}`;
+  } else if (tree.code === "invalid_literal") {
     message = `expected ${separatedList(
-      issue.expected.map(formatLiteral),
+      tree.expected.map(formatLiteral),
       "or",
     )}`;
-  } else if (issue.code === "missing_value") {
+  } else if (tree.code === "missing_value") {
     message = `missing value`;
-  } else if (issue.code === "unrecognized_keys") {
-    const keys = issue.keys;
+  } else if (tree.code === "unrecognized_keys") {
+    const keys = tree.keys;
     message = `unrecognized ${
       keys.length === 1 ? "key" : "keys"
     } ${separatedList(keys.map(formatLiteral), "and")}`;
-  } else if (issue.code === "invalid_length") {
-    const min = issue.minLength;
-    const max = issue.maxLength;
+  } else if (tree.code === "invalid_length") {
+    const min = tree.minLength;
+    const max = tree.maxLength;
     message = `expected an array with `;
     if (min > 0) {
       if (max === min) {
@@ -185,25 +183,25 @@ function formatIssueTree(issueTree: IssueTree): string {
       message += `at most ${max}`;
     }
     message += ` item(s)`;
-  } else if (issue.code === "custom_error") {
-    const error = issue.error;
+  } else if (tree.code === "custom_error") {
+    const error = tree.error;
     if (typeof error === "string") {
       message = error;
-    } else if (error) {
+    } else if (error !== undefined) {
       if (error.message !== undefined) {
         message = error.message;
       }
       if (error.path !== undefined) {
-        path.push(...error.path);
+        path += "." + error.path.join(".");
       }
     }
   }
 
-  let msg = `${issue.code} at .${path.join(".")} (${message})`;
-  if (count === 2) {
+  let msg = `${tree.code} at .${path.slice(1)} (${message})`;
+  if (count === 1) {
     msg += ` (+ 1 other issue)`;
-  } else if (count > 2) {
-    msg += ` (+ ${count - 1} other issues)`;
+  } else if (count > 1) {
+    msg += ` (+ ${count} other issues)`;
   }
   return msg;
 }
