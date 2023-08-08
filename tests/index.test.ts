@@ -1331,6 +1331,27 @@ describe("object()", () => {
         });
     });
   });
+
+  describe("shape", () => {
+    it("returns .shape", () => {
+      const schema = v.object({
+        name: v.string(),
+      });
+
+      expect(schema.shape).toHaveProperty("name");
+      expectType(schema.shape.name).toBeAssignableTo<v.Type<string>>(true);
+    });
+    it("returns .shape even with .assert", () => {
+      const schema = v
+        .object({
+          name: v.string(),
+        })
+        .assert((value) => Boolean(value.name), "must_have_name");
+
+      expect(schema.shape).toHaveProperty("name");
+      expectType(schema.shape.name).toBeAssignableTo<v.Type<string>>(true);
+    });
+  });
 });
 
 describe("record()", () => {
