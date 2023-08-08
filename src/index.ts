@@ -605,7 +605,7 @@ function createObjectMatcher(
     expected: ["object"],
   };
 
-  if (totalCount === 0 && rest === unknownSingleton) {
+  if (totalCount === 0 && rest?.name === "unknown") {
     // A fast path for record(unknown())
     return function (obj, _) {
       if (!isObject(obj)) {
