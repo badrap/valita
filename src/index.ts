@@ -828,10 +828,6 @@ class ArrayType<
     };
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
-    func(this);
-  }
-
   func(arr: unknown, mode: FuncMode): RawResult<ArrayOutput<Head, Rest>> {
     if (!Array.isArray(arr)) {
       return this.invalidType;
