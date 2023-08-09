@@ -301,6 +301,34 @@ const schema = v.object({
 });
 ```
 
+### Object validation caveats
+
+With the `.shape` property, you can validate the properties of an object using a previously defined scheme.
+
+```js
+const userSchema = v.object({
+  name: v.string(),
+});
+
+const name = userSchema.shape.name.parse('me')
+```
+
+However, if you use `userSchema.assert(...)`, then you lose the ability to validate properties. This is intentional because `.assert(...)` can change the output type, but `.shape` cannot reflect this at runtime. For example:
+
+```ts
+function isAdmin(x: unknown): x is { name: 'admin'; weirdExtraKey: boolean } {
+	return true
+}
+const schema = userSchema.assert(isAdmin);
+
+// @ts-expect-error Property 'shape' does not exist on type 'Type<{ name: "admin"; weirdExtraKey: boolean; }>
+schema.shape === undefined;
+```
+
+For this case, object types have a special method `.check(...)`, which acts similarly to `.assert(...)`, but cannot change the output type and thus preserves `.shape`
+
+*Please note* that `.check(...)` also has caveats. For example, `.omit(...)`, `.pick(...)`, `.partial()`, and `.extend(...)` do not preserve checks.
+
 ### Recursive Types
 
 One strong suit of valita is its ability to parse types that references itself, like `type T = string | T[]`. We can express such a shape with valita using the `.lazy()` method.
