@@ -303,7 +303,7 @@ const schema = v.object({
 
 ### Object validation caveats
 
-With the `.shape` properties, you can validate the properties of an object using a previously defined scheme.
+With the `.shape` property, you can validate the properties of an object using a previously defined scheme.
 
 ```js
 const userSchema = v.object({
@@ -322,8 +322,8 @@ function isName(x: string): x is { veryStrangeObject: boolean } {
 
 const schema = userSchema.assert(isName);
 
-// @ts-expect-error breaks .shape type
-// schema['shape] is unknown
+// @ts-expect-error no .shape property
+// schema.shape
 ```
 
 For this case, object types have a special method `.check(...)`, which acts similarly to `.assert(...)`, but cannot change the output type and thus preserves `.shape`
