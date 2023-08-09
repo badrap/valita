@@ -316,7 +316,7 @@ const name = userSchema.shape.name.parse('me')
 However, if you use `userSchema.assert(...)`, then you lose the ability to validate properties. This is intentional because `.assert(...)` can change the output type, but ``.shape`` cannot reflect this at runtime. For example:
 
 ```ts
-function isName(x: string): x is { veryStrangeObject: boolean } {
+function isName(x: unknown): x is { veryStrangeObject: boolean } {
   return true;
 }
 
