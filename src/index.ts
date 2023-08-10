@@ -493,6 +493,9 @@ class ObjectType<
     super();
   }
 
+  /**
+   * @deprecated Avoid using .check(...). It will be deprecated in future releases.
+   */
   check(
     func: (v: ObjectOutput<Shape, Rest>) => boolean,
     error?: CustomError,
