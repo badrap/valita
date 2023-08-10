@@ -301,23 +301,22 @@ const schema = v.object({
 });
 ```
 
-### Object validation caveats
+### Type composition tips
 
-With the `.shape` property, you can validate the properties of an object using a previously defined scheme.
+You can get access to the property validator with the `.shape` property.
 
 ```js
 const userSchema = v.object({
   name: v.string(),
 });
-
-const name = userSchema.shape.name.parse('me')
+const name = userSchema.shape.name.parse("me");
 ```
 
 However, if you use `userSchema.assert(...)`, then you lose the ability to validate properties. This is intentional because `.assert(...)` can change the output type, but `.shape` cannot reflect this at runtime. For example:
 
 ```ts
-function isAdmin(x: unknown): x is { name: 'admin'; weirdExtraKey: boolean } {
-	return true
+function isAdmin(x: unknown): x is { name: "admin"; weirdExtraKey: boolean } {
+  return true;
 }
 const schema = userSchema.assert(isAdmin);
 
@@ -325,9 +324,18 @@ const schema = userSchema.assert(isAdmin);
 schema.shape === undefined;
 ```
 
-For this case, object types have a special method `.check(...)`, which acts similarly to `.assert(...)`, but cannot change the output type and thus preserves `.shape`
+But that's not a problem! Just declare your property validator outside the object schema.
 
-*Please note* that `.check(...)` also has caveats. For example, `.omit(...)`, `.pick(...)`, `.partial()`, and `.extend(...)` do not preserve checks.
+```JS
+function isAdmin(x: unknown): boolean {
+	return true;
+}
+const adminNameSchema = v.string(isAdmin).assert(isAdmin, 'error_message');
+const useSchema = v.object({
+  name: adminNameSchema
+});
+const name = adminNameSchema.parse('admin');
+```
 
 ### Recursive Types
 
