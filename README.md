@@ -303,20 +303,19 @@ const schema = v.object({
 
 ### Object validation caveats
 
-> Avoid using .shape. Instead, use composition.
+__Avoid using `.shape`. Instead, use composition.__
 
 ```JS
 function isAdmin(x: unknown): boolean {
-	return true
+	return true;
 }
 
-const adminNameSchema = v.string(isAdmin).assert(isAdmin, 'error_message')
+const adminNameSchema = v.string(isAdmin).assert(isAdmin, 'error_message');
 
 const useSchema = v.object({
   name: adminNameSchema
-})
-
-const name = adminNameSchema.parse('admin') // returns admin 
+});
+const name = adminNameSchema.parse('admin'); // returns admin 
 ```
 
 With the `.shape` property, you can validate the properties of an object using a previously defined scheme.
@@ -325,15 +324,14 @@ With the `.shape` property, you can validate the properties of an object using a
 const userSchema = v.object({
   name: v.string(),
 });
-
-const name = userSchema.shape.name.parse('me')
+const name = userSchema.shape.name.parse('me');
 ```
 
 However, if you use `userSchema.assert(...)`, then you lose the ability to validate properties. This is intentional because `.assert(...)` can change the output type, but `.shape` cannot reflect this at runtime. For example:
 
 ```ts
 function isAdmin(x: unknown): x is { name: 'admin'; weirdExtraKey: boolean } {
-	return true
+	return true;
 }
 const schema = userSchema.assert(isAdmin);
 
