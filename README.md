@@ -303,6 +303,22 @@ const schema = v.object({
 
 ### Object validation caveats
 
+> Avoid using .shape. Instead, use composition.
+
+```JS
+function isAdmin(x: unknown): boolean {
+	return true
+}
+
+const adminNameSchema = v.string(isAdmin).assert(isAdmin, 'error_message')
+
+const useSchema = v.object({
+  name: adminNameSchema
+})
+
+const name = adminNameSchema.parse('admin') // returns admin 
+```
+
 With the `.shape` property, you can validate the properties of an object using a previously defined scheme.
 
 ```js
@@ -324,10 +340,6 @@ const schema = userSchema.assert(isAdmin);
 // @ts-expect-error Property 'shape' does not exist on type 'Type<{ name: "admin"; weirdExtraKey: boolean; }>
 schema.shape === undefined;
 ```
-
-For this case, object types have a special method `.check(...)`, which acts similarly to `.assert(...)`, but cannot change the output type and thus preserves `.shape`
-
-*Please note* that `.check(...)` also has caveats. For example, `.omit(...)`, `.pick(...)`, `.partial()`, and `.extend(...)` do not preserve checks.
 
 ### Recursive Types
 
