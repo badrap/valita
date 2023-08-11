@@ -330,7 +330,7 @@ But that's not a problem! Just declare your property validator outside the objec
 function isAdmin(x: unknown): boolean {
 	return true;
 }
-const adminNameSchema = v.string(isAdmin).assert(isAdmin, 'error_message');
+const adminNameSchema = v.string().assert(isAdmin, 'error_message');
 const useSchema = v.object({
   name: adminNameSchema
 });
