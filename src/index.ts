@@ -331,10 +331,10 @@ abstract class AbstractType<Output = unknown> {
   }
 
   chain<T extends Literal>(func: (v: Output) => ValitaResult<T>): Type<T>;
-  chain<T>(func: (v: Output) => ValitaResult<T>): Type<T>;
+  chain<T extends Type>(type: T): T;
   chain<T>(func: (v: Output) => ValitaResult<T>): Type<T> {
     return new TransformType(this, (v) => {
-      const r = func(v as Output);
+      const r = func instanceof Type ? func.try(v) : func(v as Output);
       return r.ok ? r : (r as unknown as { issueTree: IssueTree }).issueTree;
     });
   }

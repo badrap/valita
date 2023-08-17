@@ -288,6 +288,13 @@ describe("Type", () => {
       expect(t.parse("a")).to.equal("a");
       expect(() => t.parse(1)).to.throw(v.ValitaError);
     });
+    it("works just by passing another type", () => {
+      const a = v.unknown();
+      const b = a.chain(v.number());
+
+      expectType(b).toImply<number>(true);
+      expect(b.try("hello").ok).toBe(true);
+    });
   });
   describe("optional()", () => {
     it("accepts missing values", () => {
