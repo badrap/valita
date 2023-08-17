@@ -2,8 +2,6 @@
 
 A TypeScript library for validating & parsing structured objects. The API is _heavily_ influenced by [Zod's](https://github.com/colinhacks/zod/tree/v3) excellent API, while the implementation side aims for the impressive performance of [simple-runtypes](https://github.com/hoeck/simple-runtypes).
 
-We also pay special attention for providing descriptive validation error messages:
-
 ```ts
 const vehicle = v.union(
   v.object({ type: v.literal("plane"), airline: v.string() }),
@@ -13,6 +11,18 @@ const vehicle = v.union(
 vehicle.parse({ type: "bike" });
 // ValitaError: invalid_literal at .type (expected "plane", "train" or "automobile")
 ```
+
+## Goals and Non-Goals
+
+### Goals
+1. **Input Validation & Parsing**: The fundamental goal of the library is to ensure that incoming data, which might not be from a trusted source, aligns with the predetermined format.
+2. **Minimalism**: Deliver a streamlined and concentrated library that offers just the essentials.
+3. **Extensibility**: Allow users to create their own validators and parsers that cater to specific validation scenarios.
+
+### Non-Goals:
+1. **Data Definition**: The library is designed to validate and parse input data as it enters the program, rather than serving as an exhaustive tool for defining all types within the program after obtaining input.
+2. **Extensive Built-In Formats**: The library does not prioritize having a large array of built-in validation formats out of the box.
+3. **Asynchronous Parsing**: Asynchronous operations are outside the scope for this library.
 
 ## Installation
 
