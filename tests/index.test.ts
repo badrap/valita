@@ -308,6 +308,10 @@ describe("Type", () => {
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
+    it("can be used without object", () => {
+      const schema = v.string().optional();
+      expect(schema.try(undefined).ok).toBe(true);
+    });
     it("adds undefined to output", () => {
       const t = v.string().optional();
       expectType(t).toImply<string | undefined>(true);

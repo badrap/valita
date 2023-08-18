@@ -296,21 +296,6 @@ abstract class AbstractType<Output = unknown> {
   abstract toTerminals(func: (t: TerminalType) => void): void;
   abstract func(v: unknown, mode: FuncMode): RawResult<Output>;
 
-  optional(): Optional<Output> {
-    return new Optional(this);
-  }
-
-  default<T extends Literal>(
-    defaultValue: T,
-  ): Type<Exclude<Output, undefined> | T>;
-  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
-  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
-    const defaultResult = ok(defaultValue);
-    return new TransformType(this.optional(), (v) => {
-      return v === undefined ? defaultResult : undefined;
-    });
-  }
-
   assert<T extends Output>(
     func: ((v: Output) => v is T) | ((v: Output) => boolean),
     error?: CustomError,
@@ -349,8 +334,23 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     return union(nullSingleton, this);
   }
 
+  optional(): Optional<Output> {
+    return new Optional(this);
+  }
+
   toTerminals(func: (t: TerminalType) => void): void {
     func(this as TerminalType);
+  }
+
+  default<T extends Literal>(
+    defaultValue: T,
+  ): Type<Exclude<Output, undefined> | T>;
+  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
+  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
+    const defaultResult = ok(defaultValue);
+    return new TransformType(this.optional(), (v) => {
+      return v === undefined ? defaultResult : undefined;
+    });
   }
 
   try(v: unknown, options?: Partial<ParseOptions>): ValitaResult<Infer<this>> {
@@ -394,10 +394,10 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   }
 }
 
-class Optional<Output = unknown> extends AbstractType<Output | undefined> {
+class Optional<Output = unknown> extends Type<Output | undefined> {
   readonly name = "optional";
 
-  constructor(private readonly type: AbstractType<Output>) {
+  constructor(private readonly type: Type<Output>) {
     super();
   }
 
@@ -418,11 +418,11 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
 }
 
-type ObjectShape = Record<string, AbstractType>;
+type ObjectShape = Record<string, Type>;
 
 type ObjectOutput<
   T extends ObjectShape,
-  R extends AbstractType | undefined,
+  R extends Type | undefined,
 > = PrettyIntersection<
   {
     [K in keyof T as T[K] extends Optional ? K : never]?: Infer<T[K]>;
@@ -476,7 +476,7 @@ function getBit(bits: BitSet, index: number): number {
 
 class ObjectType<
   Shape extends ObjectShape = ObjectShape,
-  Rest extends AbstractType | undefined = AbstractType | undefined,
+  Rest extends Type | undefined = Type | undefined,
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
