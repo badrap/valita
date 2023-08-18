@@ -12,6 +12,9 @@ vehicle.parse({ type: "bike" });
 // ValitaError: invalid_literal at .type (expected "plane", "train" or "automobile")
 ```
 
+> [!NOTE]
+> While this package is still evolving, we're currently not accepting any new feature requests or suggestions. Please use the issue tracker for bug reports and security concerns, which we highly value and welcome. Thank you for your understanding ❤️
+
 ## Goals and Non-Goals
 
 ### Goals
