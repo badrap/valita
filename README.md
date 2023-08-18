@@ -12,6 +12,9 @@ vehicle.parse({ type: "bike" });
 // ValitaError: invalid_literal at .type (expected "plane", "train" or "automobile")
 ```
 
+> [!NOTE]
+> While this package is still evolving, we're currently not accepting any new feature requests or suggestions. Please use the issue tracker for bug reports and security concerns, which we highly value and welcome. Thank you for your understanding ❤️
+
 ## Goals and Non-Goals
 
 ### Goals
@@ -23,9 +26,6 @@ vehicle.parse({ type: "bike" });
 1. **Data Definition**: The library is designed to validate and parse input data as it enters the program, rather than serving as an exhaustive tool for defining all types within the program after obtaining input.
 2. **Extensive Built-In Formats**: The library does not prioritize having a large array of built-in validation formats out of the box.
 3. **Asynchronous Parsing**: Asynchronous operations are outside the scope for this library.
-
-> [!NOTE]
-> While this package is still evolving, we're currently not accepting any new feature requests or suggestions. Please use the issue tracker for bug reports and security concerns, which we highly value and welcome. Thank you for your understanding ❤️
 
 ## Installation
 
