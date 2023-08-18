@@ -24,6 +24,9 @@ vehicle.parse({ type: "bike" });
 2. **Extensive Built-In Formats**: The library does not prioritize having a large array of built-in validation formats out of the box.
 3. **Asynchronous Parsing**: Asynchronous operations are outside the scope for this library.
 
+> [!NOTE]
+> While this package is still evolving, we're currently not accepting any new feature requests or suggestions. Please use the issue tracker for bug reports and security concerns, which we highly value and welcome. Thank you for your understanding ❤️
+
 ## Installation
 
 ### For Node.js
