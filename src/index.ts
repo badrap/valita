@@ -565,18 +565,6 @@ class ObjectType<
   }
 }
 
-// When an object matcher needs to create a copied version of the input,
-// it initializes the new objects with Object.create(protoless).
-//
-// Using Object.create(protoless) instead of just {} makes setting
-// "__proto__" key safe. Previously we set object properties with a helper
-// function that special-cased "__proto__". Now we can just do
-// `output[key] = value` directly.
-//
-// Using Object.create(protoless) instead of Object.create(null) seems to
-// be faster on V8 at the time of writing this (2023-08-07).
-const protoless = Object.freeze(Object.create(null));
-
 function createObjectMatcher(
   shape: ObjectShape,
   rest?: AbstractType,
@@ -637,6 +625,23 @@ function createObjectMatcher(
     }),
   );
 
+  function set(
+    obj: Record<string, unknown>,
+    key: string,
+    value: unknown,
+  ): void {
+    if (key === "__proto__") {
+      Object.defineProperty(obj, key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    } else {
+      obj[key] = value;
+    }
+  }
+
   return function (obj, mode) {
     if (!isObject(obj)) {
       return invalidType;
@@ -673,12 +678,12 @@ function createObjectMatcher(
             issues === undefined &&
             !copied
           ) {
-            output = Object.create(protoless);
+            output = {};
             copied = true;
             for (let m = 0; m < totalCount; m++) {
               if (getBit(seenBits, m)) {
                 const k = keys[m];
-                output[k] = obj[k];
+                set(output, k, obj[k]);
               }
             }
           }
@@ -687,28 +692,29 @@ function createObjectMatcher(
 
         if (r === undefined) {
           if (copied && issues === undefined) {
-            output[key] = value;
+            set(output, key, value);
           }
         } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(key, r));
         } else if (issues === undefined) {
           if (!copied) {
-            output = Object.create(protoless);
+            output = {};
             copied = true;
             if (rest === undefined) {
               for (let m = 0; m < totalCount; m++) {
                 if (m !== index && getBit(seenBits, m)) {
                   const k = keys[m];
-                  output[k] = obj[k];
+                  set(output, k, obj[k]);
                 }
               }
             } else {
               for (const k in obj) {
-                output[k] = obj[k];
+                if (k === "__proto__") output.__proto__ = null;
+                set(output, k, obj[k]);
               }
             }
           }
-          output[key] = r.value;
+          set(output, key, r.value);
         }
       }
     }
@@ -730,34 +736,34 @@ function createObjectMatcher(
         const r = types[i].func(value, mode);
         if (r === undefined) {
           if (copied && issues === undefined && value !== Nothing) {
-            output[key] = value;
+            set(output, key, value);
           }
         } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(key, r));
         } else if (issues === undefined) {
           if (!copied) {
-            output = Object.create(protoless);
+            output = {};
             copied = true;
             if (rest === undefined) {
               for (let m = 0; m < totalCount; m++) {
                 if (m < i || getBit(seenBits, m)) {
                   const k = keys[m];
-                  output[k] = obj[k];
+                  set(output, k, obj[k]);
                 }
               }
             } else {
               for (const k in obj) {
-                output[k] = obj[k];
+                set(output, k, obj[k]);
               }
               for (let m = 0; m < i; m++) {
                 if (!getBit(seenBits, m)) {
                   const k = keys[m];
-                  output[k] = obj[k];
+                  set(output, k, obj[k]);
                 }
               }
             }
           }
-          output[key] = r.value;
+          set(output, key, r.value);
         }
       }
     }

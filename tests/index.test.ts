@@ -715,7 +715,18 @@ describe("object()", () => {
     });
     expect(t.parse(o)).to.deep.equal({ a: 1, b: 3 });
   });
-
+  it("sets cloned output's prototype to Object.prototype when data doesn't contain __proto__", () => {
+    const t = v.object({ a: v.unknown().map(() => 1) });
+    const r = t.parse({ a: "test" });
+    expect(Object.getPrototypeOf(r)).toBe(Object.prototype);
+  });
+  it("sets cloned output's prototype to Object.prototype when the data contains __proto__", () => {
+    const o = Object.create(null);
+    o.__proto__ = v.unknown().map(() => ({ a: 1 }));
+    const t = v.object(o);
+    const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
+    expect(Object.getPrototypeOf(r)).toBe(Object.prototype);
+  });
   it("safely sets __proto__ in a cloned output when __proto__ is transformed", () => {
     const o = Object.create(null);
     o.__proto__ = v.unknown().map(() => ({ a: 1 }));
