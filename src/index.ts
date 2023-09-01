@@ -709,7 +709,6 @@ function createObjectMatcher(
               }
             } else {
               for (const k in obj) {
-                if (k === "__proto__") output.__proto__ = null;
                 set(output, k, obj[k]);
               }
             }
