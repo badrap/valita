@@ -5,6 +5,7 @@
   "main": "./dist/cjs/index.js",
   "module": "./dist/mjs/index.mjs",
   "exports": {
+    "bun": "./src/index.ts",
     "node": {
       "module": "./dist/node-mjs/index.mjs",
       "import": "./dist/node-mjs/index.mjs",
