@@ -1036,24 +1036,16 @@ describe("object()", () => {
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
     it("makes rest accept undefined as well as the original type", () => {
-      it("makes all keys optional", () => {
-        const t = v
-          .object({ a: v.literal(1) })
-          .rest(v.number())
-          .partial();
-        expectType(t).toImply<Partial<{ a: 1; [K: string]: number }>>(true);
-        expect(t.parse({ a: 1, x: undefined, y: 1000 })).to.deep.equal({
-          a: 1,
-          x: undefined,
-          y: 1000,
-        });
-      });
       const t = v
-        .object({ a: v.literal(1), b: v.literal(2) })
+        .object({ a: v.literal(1) })
         .rest(v.number())
-        .omit("b");
-      expectType(t).toImply<{ a: 1; [K: string]: number }>(true);
-      expect(t.parse({ a: 1, b: 1000 })).to.deep.equal({ a: 1, b: 1000 });
+        .partial();
+      expectType(t).toImply<Partial<{ a: 1; [K: string]: number }>>(true);
+      expect(t.parse({ a: 1, x: undefined, y: 1000 })).to.deep.equal({
+        a: 1,
+        x: undefined,
+        y: 1000,
+      });
     });
     it("removes checks", () => {
       const t = v
