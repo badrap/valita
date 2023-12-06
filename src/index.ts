@@ -431,8 +431,8 @@ type ObjectOutput<
   } & (R extends Type<infer I>
       ? { [K: string]: I }
       : R extends Optional<infer J>
-      ? Partial<{ [K: string]: J }>
-      : unknown)
+        ? Partial<{ [K: string]: J }>
+        : unknown)
 >;
 
 // A bitset type, used for keeping track which known (required & optional) keys
