@@ -287,9 +287,8 @@ const enum FuncMode {
 }
 type Func<T> = (v: unknown, mode: FuncMode) => RawResult<T>;
 
-export type Infer<T extends AbstractType> = T extends AbstractType<infer I>
-  ? I
-  : never;
+export type Infer<T extends AbstractType> =
+  T extends AbstractType<infer I> ? I : never;
 
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
