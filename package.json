@@ -21,7 +21,7 @@
     "node": ">= 16"
   },
   "scripts": {
-    "lint": "eslint --ignore-path .gitignore --max-warnings 0 --ext=.js,.ts .",
+    "lint": "eslint --max-warnings 0 .",
     "typecheck": "tsc --skipLibCheck --noEmit",
     "test": "vitest run",
     "build": "rm -rf dist/* && npm run build:cjs && npm run build:mjs && npm run build:node-mjs && npm run build:node-cjs",
