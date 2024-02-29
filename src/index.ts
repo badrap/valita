@@ -231,6 +231,7 @@ function formatIssueTree(tree: IssueTree): string {
  * The `.message` property gives a short overview of the encountered issues,
  * while the `.issue` property can be used to get a more detailed list.
  *
+ * @example
  * ```ts
  * const t = v.object({ a: v.null(), b: v.null() });
  *
@@ -266,12 +267,59 @@ export class ValitaError extends Error {
   }
 }
 
-interface Ok<T> {
+/**
+ * A successful validation/parsing result.
+ *
+ * Used in situations where both the parsing success and failure
+ * cases are returned as values.
+ */
+export type Ok<T> = {
   readonly ok: true;
   readonly value: T;
-}
+};
 
-class Err {
+/**
+ * A validation/parsing failure.
+ *
+ * Used in situations where both the parsing success and failure
+ * cases are returned as values.
+ */
+export type Err = {
+  readonly ok: false;
+  readonly issues: readonly Issue[];
+  readonly message: string;
+  throw(): never;
+};
+
+/**
+ * A validation/parsing success or failure.
+ *
+ * Used by parsing-related methods where and both success and failure
+ * cases are returned as values (instead of raising an exception on failure).
+ * The most notable example is the `Type.try(...)` method.
+ *
+ * The `.ok` property can to assert whether the value represents a success or
+ * failure and access further information in a typesafe way.
+ *
+ * @example
+ * ```ts
+ * const t = v.string();
+ *
+ * // Make parsing fail or succeed about equally.
+ * const result = t.try(Math.random() < 0.5 ? "hello" : null);
+ *
+ * if (result.ok) {
+ *   // TypeScript allows accessing .value within this code block.
+ *   console.log(`Success: ${result.value}`);
+ * } else {
+ *   // TypeScript allows accessing .message within this code block.
+ *   console.log(`Failed: ${result.message}`);
+ * }
+ * ```
+ */
+export type ValitaResult<V> = Ok<V> | Err;
+
+class ErrImpl implements Err {
   readonly ok = false;
   private _issues?: Issue[];
   private _message?: string;
@@ -331,11 +379,8 @@ function ok<T>(value: T): Ok<T> {
  * ```
  */
 function err(error?: CustomError): Err {
-  return new Err({ ok: false, code: "custom_error", error });
+  return new ErrImpl({ ok: false, code: "custom_error", error });
 }
-
-export type { Ok, Err };
-export type ValitaResult<V> = Ok<V> | Err;
 
 type RawResult<T> = undefined | Ok<T> | IssueTree;
 
@@ -444,7 +489,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     } else if (r.ok) {
       return { ok: true, value: r.value as Infer<this> };
     } else {
-      return new Err(r);
+      return new ErrImpl(r);
     }
   }
 
