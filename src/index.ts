@@ -464,6 +464,9 @@ type ParseOptions = {
   mode: "passthrough" | "strict" | "strip";
 };
 
+/**
+ * A base class for all concreate validators/parsers.
+ */
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   nullable(): Type<null | Output> {
     return union(nullSingleton, this);
@@ -514,6 +517,13 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   }
 }
 
+/**
+ * A validator/parser marked as "optional", signifying that their value can
+ * be missing from the parsed object.
+ *
+ * As such optionals can only be used as property validators within
+ * object validators.
+ */
 class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   readonly name = "optional";
 
