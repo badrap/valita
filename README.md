@@ -6,7 +6,7 @@ A TypeScript library for validating & parsing structured objects. The API is _he
 const vehicle = v.union(
   v.object({ type: v.literal("plane"), airline: v.string() }),
   v.object({ type: v.literal("train") }),
-  v.object({ type: v.literal("automobile"), make: v.string() })
+  v.object({ type: v.literal("automobile"), make: v.string() }),
 );
 vehicle.parse({ type: "bike" });
 // ValitaError: invalid_literal at .type (expected "plane", "train" or "automobile")
@@ -18,11 +18,13 @@ vehicle.parse({ type: "bike" });
 ## Goals and Non-Goals
 
 ### Goals
+
 1. **Input Validation & Parsing**: The fundamental goal of the library is to ensure that incoming data, which might not be from a trusted source, aligns with the predetermined format.
 2. **Minimalism**: Deliver a streamlined and concentrated library that offers just the essentials.
 3. **Extensibility**: Allow users to create their own validators and parsers that cater to specific validation scenarios.
 
 ### Non-Goals:
+
 1. **Data Definition**: The library is designed to validate and parse input data as it enters the program, rather than serving as an exhaustive tool for defining all types within the program after obtaining input.
 2. **Extensive Built-In Formats**: The library does not prioritize having a large array of built-in validation formats out of the box.
 3. **Asynchronous Parsing**: Asynchronous operations are outside the scope for this library.
@@ -361,7 +363,7 @@ type T = string | T[];
 const myType: v.Type<T> = v.lazy(() => v.union(v.string(), v.array(myType)));
 ```
 
-_Note that TypeScript needs an explicit type cast as it cannot interfere return types of recursive functions. That's why the variable is typed as `v.Type<T>`._
+_Note that TypeScript needs an explicit type cast as it cannot infer return types of recursive functions. That's why the variable is typed as `v.Type<T>`._
 
 ### Validating Self-Referencing Schemas
 
