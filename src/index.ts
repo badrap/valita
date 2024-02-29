@@ -1,3 +1,21 @@
+/**
+ * @module
+ * A typesafe validation & parsing library for TypeScript.
+ *
+ * @example
+ * ```ts
+ * import * as v from "@badrap/valita";
+ *
+ * const vehicle = v.union(
+ *   v.object({ type: v.literal("plane"), airline: v.string() }),
+ *   v.object({ type: v.literal("train") }),
+ *   v.object({ type: v.literal("automobile"), make: v.string() })
+ * );
+ * vehicle.parse({ type: "bike" });
+ * // ValitaError: invalid_literal at .type (expected "plane", "train" or "automobile")
+ * ```
+ */
+
 // This is magic that turns object intersections to nicer-looking types.
 type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
 
