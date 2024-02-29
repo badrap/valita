@@ -43,56 +43,6 @@ npm i @badrap/valita
 import * as v from "https://deno.land/x/valita/mod.ts";
 ```
 
-## Docs aren't my forté
-
-A motivating example in lack of any better documentation:
-
-```ts
-import * as v from "@badrap/valita";
-
-const Pet = v.object({
-  type: v.union(v.literal("dog"), v.literal("cat")),
-  name: v.string(),
-});
-
-const Person = v.object({
-  name: v.string(),
-  age: v.number(),
-  pets: v.array(Pet).optional(),
-});
-```
-
-Now `Person.parse(value)` returns `value` if it matches the Person schema - or throws an error otherwise.
-
-```ts
-const grizzlor = Person.parse({
-  name: "Grizzlor",
-  age: 101,
-  pets: [
-    { type: "cat", name: "Mittens" },
-    { type: "cat", name: "Parsley" },
-    { type: "cat", name: "Lulu" },
-    { type: "cat", name: "Thomas Percival Meowther III" },
-  ],
-});
-```
-
-The real magic here comes from TypeScript's type inference. The inferred type for `grizzlor` is:
-
-```ts
-const grizzlor: {
-  name: string;
-  age: number;
-  pets?: { type: "dog" | "cat"; name: string }[] | undefined;
-};
-```
-
-You can use `Infer<T>` to get your mitts on the inferred type in your code:
-
-```ts
-type PersonType = v.Infer<typeof Person>;
-```
-
 ## API Reference
 
 This section contains an overview of all validation methods.
