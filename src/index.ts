@@ -225,6 +225,29 @@ function formatIssueTree(tree: IssueTree): string {
   return msg;
 }
 
+/**
+ * An error type representing one or more validation/parsing errors.
+ *
+ * The `.message` property gives a short overview of the encountered issues,
+ * while the `.issue` property can be used to get a more detailed list.
+ *
+ * ```ts
+ * const t = v.object({ a: v.null(), b: v.null() });
+ *
+ * try {
+ *   t.parse({ a: 1 });
+ * } catch (err) {
+ *   err.message;
+ *   // "invalid_type at .a (expected null) (+ 1 other issue)"
+ *
+ *   err.issues;
+ *   // [
+ *   //   { code: 'invalid_type', path: [ 'a' ], expected: [ 'null' ] },
+ *   //   { code: 'missing_value', path: [ 'b' ] }
+ *   // ]
+ * }
+ * ```
+ */
 export class ValitaError extends Error {
   private _issues?: Issue[];
 
@@ -277,12 +300,36 @@ class Err {
   }
 }
 
+/**
+ * Create a value for returning a successful parsing result from chain().
+ *
+ * @example
+ * ```ts
+ * const t = v.string().chain((s) => v.ok(s + ", world!"));
+ *
+ * t.parse("Hello");
+ * // "Hello, world!"
+ * ```
+ */
 function ok<T extends Literal>(value: T): Ok<T>;
 function ok<T>(value: T): Ok<T>;
 function ok<T>(value: T): Ok<T> {
   return { ok: true, value };
 }
 
+/**
+ * Create a value for returning a parsing error from chain().
+ *
+ * An optional error message can be provided.
+ *
+ * @example
+ * ```ts
+ * const t = v.string().chain(() => v.err("bad value"));
+ *
+ * t.parse("hello");
+ * // ValitaError: custom_error at . (bad value)
+ * ```
+ */
 function err(error?: CustomError): Err {
   return new Err({ ok: false, code: "custom_error", error });
 }
@@ -305,6 +352,17 @@ const enum FuncMode {
 }
 type Func<T> = (v: unknown, mode: FuncMode) => RawResult<T>;
 
+/**
+ * Return the inferred output type of a validator.
+ *
+ * @example
+ * ```ts
+ * const t = v.union(v.literal(1), v.string());
+ *
+ * type T = v.Infer<typeof t>;
+ * // type T = 1 | string;
+ * ```
+ */
 export type Infer<T extends AbstractType> =
   T extends AbstractType<infer I> ? I : never;
 
@@ -1277,6 +1335,11 @@ class NeverType extends Type<never> {
   }
 }
 const neverSingleton = new NeverType();
+
+/**
+ * Create a validator that never matches any value,
+ * analogous to the TypeScript type `never`.
+ */
 function never(): Type<never> {
   return neverSingleton;
 }
@@ -1288,6 +1351,11 @@ class UnknownType extends Type<unknown> {
   }
 }
 const unknownSingleton = new UnknownType();
+
+/**
+ * Create a validator that matches any value,
+ * analogous to the TypeScript type `unknown`.
+ */
 function unknown(): Type<unknown> {
   return unknownSingleton;
 }
@@ -1304,6 +1372,10 @@ class UndefinedType extends Type<undefined> {
   }
 }
 const undefinedSingleton = new UndefinedType();
+
+/**
+ * Create a validator that matches `undefined`.
+ */
 function undefined_(): Type<undefined> {
   return undefinedSingleton;
 }
@@ -1320,6 +1392,10 @@ class NullType extends Type<null> {
   }
 }
 const nullSingleton = new NullType();
+
+/**
+ * Create a validator that matches `null`.
+ */
 function null_(): Type<null> {
   return nullSingleton;
 }
@@ -1336,6 +1412,10 @@ class NumberType extends Type<number> {
   }
 }
 const numberSingleton = new NumberType();
+
+/**
+ * Create a validator that matches any number value.
+ */
 function number(): Type<number> {
   return numberSingleton;
 }
@@ -1352,6 +1432,10 @@ class BigIntType extends Type<bigint> {
   }
 }
 const bigintSingleton = new BigIntType();
+
+/**
+ * Create a validator that matches any bigint value.
+ */
 function bigint(): Type<bigint> {
   return bigintSingleton;
 }
@@ -1368,6 +1452,10 @@ class StringType extends Type<string> {
   }
 }
 const stringSingleton = new StringType();
+
+/**
+ * Create a validator that matches any string value.
+ */
 function string(): Type<string> {
   return stringSingleton;
 }
@@ -1384,6 +1472,10 @@ class BooleanType extends Type<boolean> {
   }
 }
 const booleanSingleton = new BooleanType();
+
+/**
+ * Create a validator that matches any boolean value.
+ */
 function boolean(): Type<boolean> {
   return booleanSingleton;
 }
@@ -1403,36 +1495,75 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
     return v === this.value ? undefined : this.issue;
   }
 }
+
+/**
+ * Create a validator for a specific string, number, bigint or boolean value.
+ */
 function literal<T extends Literal>(value: T): Type<T> {
   return new LiteralType(value);
 }
 
+/**
+ * Create a validator for an object type.
+ */
 function object<T extends Record<string, Type | Optional>>(
   obj: T,
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
 }
 
+/**
+ * Create a validator for a record type `Record<string, T>`,
+ * where `T` is the output type of the given subvalidator.
+ */
 function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
   return new ObjectType({}, valueType ?? unknown()) as Type<
     Record<string, Infer<T>>
   >;
 }
 
+/**
+ * Create a validator for an array type `T[]`,
+ * where `T` is the output type of the given subvalidator.
+ */
 function array<T extends Type>(item: T): ArrayType<[], T> {
   return new ArrayType([], item);
 }
 
+/**
+ * Create a validator for an array type `[T1, T2, ..., Tn]`,
+ * where `T1`, `T2`, ..., `Tn` are the output types of the given subvalidators.
+ */
 function tuple<T extends [] | [Type, ...Type[]]>(
   items: T,
 ): ArrayType<T, undefined> {
   return new ArrayType(items);
 }
 
+/**
+ * Create a validator that matches any type `T1 | T2 | ... | Tn`,
+ * where `T1`, `T2`, ..., `Tn` are the output types of the given subvalidators.
+ *
+ * This is analogous to how TypeScript's union types are constructed.
+ */
 function union<T extends Type[]>(...options: T): UnionType<T> {
   return new UnionType(options);
 }
 
+/**
+ * Create a validator that can reference itself, directly or indirectly.
+ *
+ * In most cases an explicit type annotation is also needed, as TypeScript
+ * cannot infer return types of recursive functions.
+ *
+ * @example
+ * ```ts
+ * import * as v from "@badrap/valita";
+ *
+ * type T = string | T[];
+ * const type: v.Type<T> = v.lazy(() => v.union(v.string(), v.array(type)));
+ * ```
+ */
 function lazy<T>(definer: () => Type<T>): Type<T> {
   return new LazyType(definer);
 }
