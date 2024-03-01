@@ -78,7 +78,7 @@ const something = v.object({
 
 ### Nullable Type
 
-When working with APIs/DBs some types are nullable. Valita can validate those types via the `.nullable()` method:
+When working with APIs or databases some types may be nullable. Valita can validate those types via the `.nullable()` method:
 
 ```ts
 import * as v from "@badrap/valita";
@@ -87,7 +87,7 @@ import * as v from "@badrap/valita";
 const name = v.string().nullable();
 
 // Passes
-name.parse("Jane Doe");
+name.parse("Example McExampleface");
 // Passes
 name.parse(null);
 ```
@@ -207,7 +207,7 @@ import * as v from "@badrap/valita";
 
 const schema = v
   .number()
-  .assert((v) => v >= 0 && v <= 255, "Must be in between 0 or 255");
+  .assert((v) => v >= 0 && v <= 255, "not between 0 and 255");
 ```
 
 ### Composing custom validation functions
@@ -218,11 +218,10 @@ A core strength of valita is that validation functions are composable by nature.
 import * as v from "@badrap/valita";
 
 // Reusable custom schema for a Person type
-const personSchema = v
-  .object({
-    name: v.string()
-    age: v.number(),
-  })
+const personSchema = v.object({
+  name: v.string(),
+  age: v.number(),
+});
 
 // Reuse the custom schema times
 const schema = v.object({
@@ -291,15 +290,15 @@ schema.shape === undefined;
 
 But that's not a problem! Just declare your property validator outside the object schema.
 
-```JS
+```ts
 function isAdmin(x: unknown): boolean {
-	return true;
+  return true;
 }
-const adminNameSchema = v.string().assert(isAdmin, 'error_message');
+const adminNameSchema = v.string().assert(isAdmin, "not an admin");
 const useSchema = v.object({
-  name: adminNameSchema
+  name: adminNameSchema,
 });
-const name = adminNameSchema.parse('admin');
+const name = adminNameSchema.parse("admin");
 ```
 
 ### Recursive Types
