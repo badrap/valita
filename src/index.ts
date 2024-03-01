@@ -275,6 +275,10 @@ export class ValitaError extends Error {
  */
 export type Ok<T> = {
   readonly ok: true;
+
+  /**
+   * The successfully parsed value.
+   */
   readonly value: T;
 };
 
@@ -286,8 +290,20 @@ export type Ok<T> = {
  */
 export type Err = {
   readonly ok: false;
-  readonly issues: readonly Issue[];
+
+  /**
+   * A condensed overview of the parsing issues.
+   */
   readonly message: string;
+
+  /**
+   * A detailed list of the parsing issues.
+   */
+  readonly issues: readonly Issue[];
+
+  /**
+   * Throw a new ValitaError representing the parsing issues.
+   */
   throw(): never;
 };
 
