@@ -468,14 +468,20 @@ type ParseOptions = {
  * A base class for all concreate validators/parsers.
  */
 abstract class Type<Output = unknown> extends AbstractType<Output> {
+  /**
+   * Return new validator that accepts both the original type and `null`.
+   */
   nullable(): Type<null | Output> {
-    return union(nullSingleton, this);
+    return new Nullable(this);
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
     func(this as TerminalType);
   }
 
+  /**
+   * Parse a value without throwing.
+   */
   try(v: unknown, options?: Partial<ParseOptions>): ValitaResult<Infer<this>> {
     let mode: FuncMode = FuncMode.STRICT;
     if (options !== undefined) {
@@ -496,6 +502,9 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     }
   }
 
+  /**
+   * Parse a value. Throw a ValitaError on failure.
+   */
   parse(v: unknown, options?: Partial<ParseOptions>): Infer<this> {
     let mode: FuncMode = FuncMode.STRICT;
     if (options !== undefined) {
@@ -514,6 +523,27 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     } else {
       throw new ValitaError(r);
     }
+  }
+}
+
+class Nullable<Output = unknown> extends Type<Output | null> {
+  readonly name = "nullable";
+
+  constructor(private readonly type: Type<Output>) {
+    super();
+  }
+
+  func(v: unknown, mode: FuncMode): RawResult<Output | null> {
+    return v === null ? undefined : this.type.func(v, mode);
+  }
+
+  toTerminals(func: (t: TerminalType) => void): void {
+    func(nullSingleton);
+    this.type.toTerminals(func);
+  }
+
+  nullable(): Type<Output | null> {
+    return this;
   }
 }
 
