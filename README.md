@@ -39,8 +39,8 @@ npm i @badrap/valita
 
 ### For Deno
 
-```ts
-import * as v from "https://deno.land/x/valita/mod.ts";
+```sh
+deno add @badrap/valita
 ```
 
 ## API Reference
