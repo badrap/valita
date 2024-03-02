@@ -404,9 +404,10 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-const Nothing = Symbol.for("valita.Nothing");
-
-type Func<T> = (v: unknown, mode: FuncOptions) => RawResult<T>;
+const FLAG_FORBID_EXTRA_KEYS = 0x1;
+const FLAG_STRIP_EXTRA_KEYS = 0x2;
+const FLAG_MISSING_VALUE = 0x4;
+type Func<T> = (v: unknown, flags: number) => RawResult<T>;
 
 /**
  * Return the inferred output type of a validator.
@@ -422,10 +423,14 @@ type Func<T> = (v: unknown, mode: FuncOptions) => RawResult<T>;
 export type Infer<T extends AbstractType> =
   T extends AbstractType<infer I> ? I : never;
 
+type ParseOptions = {
+  mode?: "passthrough" | "strict" | "strip";
+};
+
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
   abstract toTerminals(func: (t: TerminalType) => void): void;
-  abstract func(v: unknown, mode: FuncOptions): RawResult<Output>;
+  abstract func(v: unknown, flags: number): RawResult<Output>;
 
   optional(): Optional<Output> {
     return new Optional(this);
@@ -481,20 +486,6 @@ abstract class AbstractType<Output = unknown> {
   }
 }
 
-// Define ParseOptions and FuncOptions in a way that places that expect
-// ParseOptions (Type.parse and Type.try) also accept FuncOptions,
-// but places expecting FuncOptions (e.g. AbstractType.func) won't accept
-// ParseOptions.
-type ParseOptions = {
-  mode?: "passthrough" | "strict" | "strip";
-};
-type FuncOptions = {
-  mode: "passthrough" | "strict" | "strip";
-};
-const STRICT = Object.freeze({ mode: "strict" }) as FuncOptions;
-const STRIP = Object.freeze({ mode: "strip" }) as FuncOptions;
-const PASSTHROUGH = Object.freeze({ mode: "passthrough" }) as FuncOptions;
-
 /**
  * A base class for all concreate validators/parsers.
  */
@@ -514,16 +505,14 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value without throwing.
    */
   try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
-    let opts = STRICT;
-    if (options !== undefined) {
-      if (options.mode === "passthrough") {
-        opts = PASSTHROUGH;
-      } else if (options.mode === "strip") {
-        opts = STRIP;
-      }
+    let flags = FLAG_FORBID_EXTRA_KEYS;
+    if (options?.mode === "passthrough") {
+      flags = 0;
+    } else if (options?.mode === "strip") {
+      flags = FLAG_STRIP_EXTRA_KEYS;
     }
 
-    const r = this.func(v, opts);
+    const r = this.func(v, flags);
     if (r === undefined) {
       return { ok: true, value: v as Infer<this> };
     } else if (r.ok) {
@@ -537,16 +526,14 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value. Throw a ValitaError on failure.
    */
   parse(v: unknown, options?: ParseOptions): Infer<this> {
-    let opts = STRICT;
-    if (options !== undefined) {
-      if (options.mode === "passthrough") {
-        opts = PASSTHROUGH;
-      } else if (options.mode === "strip") {
-        opts = STRIP;
-      }
+    let flags = FLAG_FORBID_EXTRA_KEYS;
+    if (options?.mode === "passthrough") {
+      flags = 0;
+    } else if (options?.mode === "strip") {
+      flags = FLAG_STRIP_EXTRA_KEYS;
     }
 
-    const r = this.func(v, opts);
+    const r = this.func(v, flags);
     if (r === undefined) {
       return v as Infer<this>;
     } else if (r.ok) {
@@ -564,8 +551,8 @@ class Nullable<Output = unknown> extends Type<Output | null> {
     super();
   }
 
-  func(v: unknown, mode: FuncOptions): RawResult<Output | null> {
-    return v === null ? undefined : this.type.func(v, mode);
+  func(v: unknown, flags: number): RawResult<Output | null> {
+    return v === null ? undefined : this.type.func(v, flags);
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
@@ -592,10 +579,10 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     super();
   }
 
-  func(v: unknown, mode: FuncOptions): RawResult<Output | undefined> {
-    return v === undefined || v === Nothing
+  func(v: unknown, flags: number): RawResult<Output | undefined> {
+    return v === undefined || flags & FLAG_MISSING_VALUE
       ? undefined
-      : this.type.func(v, mode);
+      : this.type.func(v, flags);
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
@@ -698,13 +685,13 @@ class ObjectType<
     ]);
   }
 
-  func(v: unknown, mode: FuncOptions): RawResult<ObjectOutput<Shape, Rest>> {
+  func(v: unknown, flags: number): RawResult<ObjectOutput<Shape, Rest>> {
     let func = this._func;
     if (func === undefined) {
       func = createObjectMatcher(this.shape, this.restType, this.checks);
       this._func = func;
     }
-    return func(v, mode) as RawResult<ObjectOutput<Shape, Rest>>;
+    return func(v, flags) as RawResult<ObjectOutput<Shape, Rest>>;
   }
 
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
@@ -833,7 +820,7 @@ function createObjectMatcher(
     }
   }
 
-  return function (obj, mode) {
+  return function (obj, flags) {
     if (!isObject(obj)) {
       return invalidType;
     }
@@ -845,7 +832,11 @@ function createObjectMatcher(
     let seenBits: BitSet = 0;
     let seenCount = 0;
 
-    if (mode !== PASSTHROUGH || rest !== undefined) {
+    if (
+      flags & FLAG_FORBID_EXTRA_KEYS ||
+      flags & FLAG_STRIP_EXTRA_KEYS ||
+      rest !== undefined
+    ) {
       for (const key in obj) {
         const value = obj[key];
         const index = ~invertedIndexes[key];
@@ -854,17 +845,21 @@ function createObjectMatcher(
         if (index >= 0) {
           seenCount++;
           seenBits = setBit(seenBits, index);
-          r = types[index].func(value, mode);
+          r = types[index].func(value, flags);
         } else if (rest !== undefined) {
-          r = rest.func(value, mode);
+          r = rest.func(value, flags);
         } else {
-          if (mode === STRICT) {
+          if (flags & FLAG_FORBID_EXTRA_KEYS) {
             if (unrecognized === undefined) {
               unrecognized = [key];
             } else {
               unrecognized.push(key);
             }
-          } else if (mode === STRIP && issues === undefined && !copied) {
+          } else if (
+            flags & FLAG_STRIP_EXTRA_KEYS &&
+            issues === undefined &&
+            !copied
+          ) {
             output = {};
             copied = true;
             for (let m = 0; m < totalCount; m++) {
@@ -911,17 +906,24 @@ function createObjectMatcher(
           continue;
         }
         const key = keys[i];
-        let value = obj[key];
+        const value = obj[key];
+
+        let keyFlags = flags & ~FLAG_MISSING_VALUE;
         if (value === undefined && !(key in obj)) {
           if (i < requiredCount) {
             issues = joinIssues(issues, missingValues[i]);
             continue;
           }
-          value = Nothing;
+          keyFlags |= FLAG_MISSING_VALUE;
         }
-        const r = types[i].func(value, mode);
+
+        const r = types[i].func(value, keyFlags);
         if (r === undefined) {
-          if (copied && issues === undefined && value !== Nothing) {
+          if (
+            copied &&
+            issues === undefined &&
+            !(keyFlags & FLAG_MISSING_VALUE)
+          ) {
             set(output, key, value);
           }
         } else if (!r.ok) {
@@ -1021,7 +1023,7 @@ class ArrayType<
     };
   }
 
-  func(arr: unknown, mode: FuncOptions): RawResult<ArrayOutput<Head, Rest>> {
+  func(arr: unknown, flags: number): RawResult<ArrayOutput<Head, Rest>> {
     if (!Array.isArray(arr)) {
       return this.invalidType;
     }
@@ -1037,7 +1039,7 @@ class ArrayType<
     let output: unknown[] = arr;
     for (let i = 0; i < arr.length; i++) {
       const type = i < minLength ? this.head[i] : this.rest;
-      const r = type.func(arr[i], mode);
+      const r = type.func(arr[i], flags);
       if (r !== undefined) {
         if (r.ok) {
           if (output === arr) {
@@ -1207,14 +1209,16 @@ function createObjectKeyMatcher(
     byType![type] = options[0];
   }
 
-  return function (_obj: unknown, mode: FuncOptions) {
+  return function (_obj: unknown, flags: number) {
     const obj = _obj as Record<string, unknown>;
     const value = obj[key];
     if (value === undefined && !(key in obj)) {
-      return optionals.length > 0 ? optionals[0].func(obj, mode) : missingValue;
+      return optionals.length > 0
+        ? optionals[0].func(obj, flags)
+        : missingValue;
     }
     const option = byType?.[toInputType(value)] ?? litMap?.get(value);
-    return option ? option.func(obj, mode) : issue;
+    return option ? option.func(obj, flags) : issue;
   };
 }
 
@@ -1270,9 +1274,9 @@ function createUnionBaseMatcher(
     byType![type] = options;
   }
 
-  return function (value: unknown, mode: FuncOptions) {
+  return function (value: unknown, flags: number) {
     let options: undefined | AbstractType[];
-    if (value === Nothing) {
+    if (flags & FLAG_MISSING_VALUE) {
       options = optionals;
     } else {
       options = byType?.[toInputType(value)] ?? litMap?.get(value) ?? unknowns;
@@ -1284,7 +1288,7 @@ function createUnionBaseMatcher(
     let count = 0;
     let issueTree: IssueTree = issue;
     for (let i = 0; i < options.length; i++) {
-      const r = options[i].func(value, mode);
+      const r = options[i].func(value, flags);
       if (r === undefined || r.ok) {
         return r;
       }
@@ -1310,7 +1314,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     this.options.forEach((o) => o.toTerminals(func));
   }
 
-  func(v: unknown, mode: FuncOptions): RawResult<Infer<T[number]>> {
+  func(v: unknown, flags: number): RawResult<Infer<T[number]>> {
     let func = this._func;
     if (func === undefined) {
       const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
@@ -1324,36 +1328,45 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
       if (!object) {
         func = base as Func<Infer<T[number]>>;
       } else {
-        func = function (v, mode) {
+        func = function (v, f) {
           if (isObject(v)) {
-            return object(v, mode) as RawResult<Infer<T[number]>>;
+            return object(v, f) as RawResult<Infer<T[number]>>;
           }
-          return base(v, mode) as RawResult<Infer<T[number]>>;
+          return base(v, f) as RawResult<Infer<T[number]>>;
         };
       }
       this._func = func;
     }
-    return func(v, mode);
+    return func(v, flags);
   }
 }
+
+type TransformFunc = (
+  value: unknown,
+  options: ParseOptions,
+) => RawResult<unknown>;
+
+const STRICT = Object.freeze({ mode: "strict" }) as ParseOptions;
+const STRIP = Object.freeze({ mode: "strip" }) as ParseOptions;
+const PASSTHROUGH = Object.freeze({ mode: "passthrough" }) as ParseOptions;
 
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
 
-  private transformChain?: Func<unknown>[];
+  private transformChain?: TransformFunc[];
   private transformRoot?: AbstractType;
   private readonly undef = ok(undefined);
 
   constructor(
     protected readonly transformed: AbstractType,
-    protected readonly transform: Func<unknown>,
+    protected readonly transform: TransformFunc,
   ) {
     super();
     this.transformChain = undefined;
     this.transformRoot = undefined;
   }
 
-  func(v: unknown, mode: FuncOptions): RawResult<Output> {
+  func(v: unknown, flags: number): RawResult<Output> {
     let chain = this.transformChain;
     if (!chain) {
       chain = [];
@@ -1370,7 +1383,7 @@ class TransformType<Output> extends Type<Output> {
     }
 
     // eslint-disable-next-line
-    let result = this.transformRoot!.func(v, mode);
+    let result = this.transformRoot!.func(v, flags);
     if (result !== undefined && !result.ok) {
       return result;
     }
@@ -1378,15 +1391,21 @@ class TransformType<Output> extends Type<Output> {
     let current: unknown;
     if (result !== undefined) {
       current = result.value;
-    } else if (v === Nothing) {
+    } else if (flags & FLAG_MISSING_VALUE) {
       current = undefined;
       result = this.undef;
     } else {
       current = v;
     }
 
+    const options =
+      flags & FLAG_FORBID_EXTRA_KEYS
+        ? STRICT
+        : flags & FLAG_STRIP_EXTRA_KEYS
+          ? STRIP
+          : PASSTHROUGH;
     for (let i = 0; i < chain.length; i++) {
-      const r = chain[i](current, mode);
+      const r = chain[i](current, options);
       if (r !== undefined) {
         if (!r.ok) {
           return r;
@@ -1412,11 +1431,11 @@ class LazyType<T> extends Type<T> {
     super();
   }
 
-  func(v: unknown, mode: FuncOptions): RawResult<T> {
+  func(v: unknown, flags: number): RawResult<T> {
     if (!this.type) {
       this.type = this.definer();
     }
-    return this.type.func(v, mode);
+    return this.type.func(v, flags);
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
@@ -1442,7 +1461,7 @@ class NeverType extends Type<never> {
     code: "invalid_type",
     expected: [],
   };
-  func(_: unknown, __: FuncOptions): RawResult<never> {
+  func(_: unknown, __: number): RawResult<never> {
     return this.issue;
   }
 }
@@ -1458,7 +1477,7 @@ function never(): Type<never> {
 
 class UnknownType extends Type<unknown> {
   readonly name = "unknown";
-  func(_: unknown, __: FuncOptions): RawResult<unknown> {
+  func(_: unknown, __: number): RawResult<unknown> {
     return undefined;
   }
 }
@@ -1479,7 +1498,7 @@ class UndefinedType extends Type<undefined> {
     code: "invalid_type",
     expected: ["undefined"],
   };
-  func(v: unknown, _: FuncOptions): RawResult<undefined> {
+  func(v: unknown, _: number): RawResult<undefined> {
     return v === undefined ? undefined : this.issue;
   }
 }
@@ -1499,7 +1518,7 @@ class NullType extends Type<null> {
     code: "invalid_type",
     expected: ["null"],
   };
-  func(v: unknown, _: FuncOptions): RawResult<null> {
+  func(v: unknown, _: number): RawResult<null> {
     return v === null ? undefined : this.issue;
   }
 }
@@ -1519,7 +1538,7 @@ class NumberType extends Type<number> {
     code: "invalid_type",
     expected: ["number"],
   };
-  func(v: unknown, _: FuncOptions): RawResult<number> {
+  func(v: unknown, _: number): RawResult<number> {
     return typeof v === "number" ? undefined : this.issue;
   }
 }
@@ -1539,7 +1558,7 @@ class BigIntType extends Type<bigint> {
     code: "invalid_type",
     expected: ["bigint"],
   };
-  func(v: unknown, _: FuncOptions): RawResult<bigint> {
+  func(v: unknown, _: number): RawResult<bigint> {
     return typeof v === "bigint" ? undefined : this.issue;
   }
 }
@@ -1559,7 +1578,7 @@ class StringType extends Type<string> {
     code: "invalid_type",
     expected: ["string"],
   };
-  func(v: unknown, _: FuncOptions): RawResult<string> {
+  func(v: unknown, _: number): RawResult<string> {
     return typeof v === "string" ? undefined : this.issue;
   }
 }
@@ -1579,7 +1598,7 @@ class BooleanType extends Type<boolean> {
     code: "invalid_type",
     expected: ["boolean"],
   };
-  func(v: unknown, _: FuncOptions): RawResult<boolean> {
+  func(v: unknown, _: number): RawResult<boolean> {
     return typeof v === "boolean" ? undefined : this.issue;
   }
 }
@@ -1603,7 +1622,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
       expected: [value],
     };
   }
-  func(v: unknown, _: FuncOptions): RawResult<Out> {
+  func(v: unknown, _: number): RawResult<Out> {
     return v === this.value ? undefined : this.issue;
   }
 }
