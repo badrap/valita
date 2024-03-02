@@ -115,6 +115,21 @@ describe("Type", () => {
       t.parse(1000);
       expect(value).to.equal(1000);
     });
+    it("passes in normalized parse options", () => {
+      let options: unknown;
+      const t = v.number().assert((n, opts) => {
+        options = opts;
+        return true;
+      });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+      t.parse(1, { mode: "strip" });
+      expect(options).to.deep.equal({ mode: "strip" });
+      t.parse(1, { mode: "passthrough" });
+      expect(options).to.deep.equal({ mode: "passthrough" });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+    });
     it("passes the value through on success", () => {
       const t = v.number().assert(() => true);
       expect(t.parse(1000)).to.equal(1000);
@@ -201,6 +216,20 @@ describe("Type", () => {
       t.parse(1000);
       expect(value).to.equal(1000);
     });
+    it("passes in normalized parse options", () => {
+      let options: unknown;
+      const t = v.number().map((n, opts) => {
+        options = opts;
+      });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+      t.parse(1, { mode: "strip" });
+      expect(options).to.deep.equal({ mode: "strip" });
+      t.parse(1, { mode: "passthrough" });
+      expect(options).to.deep.equal({ mode: "passthrough" });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+    });
     it("passes on the return value", () => {
       const t = v.number().map(() => "test");
       expect(t.parse(1000)).to.equal("test");
@@ -230,6 +259,21 @@ describe("Type", () => {
       });
       t.parse(1000);
       expect(value).to.equal(1000);
+    });
+    it("passes in normalized parse options", () => {
+      let options: unknown;
+      const t = v.number().chain((n, opts) => {
+        options = opts;
+        return v.ok("test");
+      });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+      t.parse(1, { mode: "strip" });
+      expect(options).to.deep.equal({ mode: "strip" });
+      t.parse(1, { mode: "passthrough" });
+      expect(options).to.deep.equal({ mode: "passthrough" });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
     });
     it("passes on the success value", () => {
       const t = v.number().chain(() => v.ok("test"));

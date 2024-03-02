@@ -406,12 +406,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 const Nothing = Symbol.for("valita.Nothing");
 
-const enum FuncMode {
-  PASS = 0,
-  STRICT = 1,
-  STRIP = 2,
-}
-type Func<T> = (v: unknown, mode: FuncMode) => RawResult<T>;
+type Func<T> = (v: unknown, mode: FuncOptions) => RawResult<T>;
 
 /**
  * Return the inferred output type of a validator.
@@ -430,7 +425,7 @@ export type Infer<T extends AbstractType> =
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
   abstract toTerminals(func: (t: TerminalType) => void): void;
-  abstract func(v: unknown, mode: FuncMode): RawResult<Output>;
+  abstract func(v: unknown, mode: FuncOptions): RawResult<Output>;
 
   optional(): Optional<Output> {
     return new Optional(this);
@@ -448,37 +443,57 @@ abstract class AbstractType<Output = unknown> {
   }
 
   assert<T extends Output>(
-    func: ((v: Output) => v is T) | ((v: Output) => boolean),
+    func:
+      | ((v: Output, options: ParseOptions) => v is T)
+      | ((v: Output, options: ParseOptions) => boolean),
     error?: CustomError,
   ): Type<T> {
     const err: IssueLeaf = { ok: false, code: "custom_error", error };
-    return new TransformType(this, (v) =>
-      func(v as Output) ? undefined : err,
+    return new TransformType(this, (v, options) =>
+      func(v as Output, options) ? undefined : err,
     );
   }
 
-  map<T extends Literal>(func: (v: Output) => T): Type<T>;
-  map<T>(func: (v: Output) => T): Type<T>;
-  map<T>(func: (v: Output) => T): Type<T> {
-    return new TransformType(this, (v) => ({
+  map<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => T,
+  ): Type<T>;
+  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
+  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T> {
+    return new TransformType(this, (v, options) => ({
       ok: true,
-      value: func(v as Output),
+      value: func(v as Output, options),
     }));
   }
 
-  chain<T extends Literal>(func: (v: Output) => ValitaResult<T>): Type<T>;
-  chain<T>(func: (v: Output) => ValitaResult<T>): Type<T>;
-  chain<T>(func: (v: Output) => ValitaResult<T>): Type<T> {
-    return new TransformType(this, (v) => {
-      const r = func(v as Output);
+  chain<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
+  chain<T>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
+  chain<T>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T> {
+    return new TransformType(this, (v, options) => {
+      const r = func(v as Output, options);
       return r.ok ? r : (r as unknown as { issueTree: IssueTree }).issueTree;
     });
   }
 }
 
+// Define ParseOptions and FuncOptions in a way that places that expect
+// ParseOptions (Type.parse and Type.try) also accept FuncOptions,
+// but places expecting FuncOptions (e.g. AbstractType.func) won't accept
+// ParseOptions.
 type ParseOptions = {
+  mode?: "passthrough" | "strict" | "strip";
+};
+type FuncOptions = {
   mode: "passthrough" | "strict" | "strip";
 };
+const STRICT = Object.freeze({ mode: "strict" }) as FuncOptions;
+const STRIP = Object.freeze({ mode: "strip" }) as FuncOptions;
+const PASSTHROUGH = Object.freeze({ mode: "passthrough" }) as FuncOptions;
 
 /**
  * A base class for all concreate validators/parsers.
@@ -498,17 +513,17 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   /**
    * Parse a value without throwing.
    */
-  try(v: unknown, options?: Partial<ParseOptions>): ValitaResult<Infer<this>> {
-    let mode: FuncMode = FuncMode.STRICT;
+  try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
+    let opts = STRICT;
     if (options !== undefined) {
       if (options.mode === "passthrough") {
-        mode = FuncMode.PASS;
+        opts = PASSTHROUGH;
       } else if (options.mode === "strip") {
-        mode = FuncMode.STRIP;
+        opts = STRIP;
       }
     }
 
-    const r = this.func(v, mode);
+    const r = this.func(v, opts);
     if (r === undefined) {
       return { ok: true, value: v as Infer<this> };
     } else if (r.ok) {
@@ -521,17 +536,17 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   /**
    * Parse a value. Throw a ValitaError on failure.
    */
-  parse(v: unknown, options?: Partial<ParseOptions>): Infer<this> {
-    let mode: FuncMode = FuncMode.STRICT;
+  parse(v: unknown, options?: ParseOptions): Infer<this> {
+    let opts = STRICT;
     if (options !== undefined) {
       if (options.mode === "passthrough") {
-        mode = FuncMode.PASS;
+        opts = PASSTHROUGH;
       } else if (options.mode === "strip") {
-        mode = FuncMode.STRIP;
+        opts = STRIP;
       }
     }
 
-    const r = this.func(v, mode);
+    const r = this.func(v, opts);
     if (r === undefined) {
       return v as Infer<this>;
     } else if (r.ok) {
@@ -549,7 +564,7 @@ class Nullable<Output = unknown> extends Type<Output | null> {
     super();
   }
 
-  func(v: unknown, mode: FuncMode): RawResult<Output | null> {
+  func(v: unknown, mode: FuncOptions): RawResult<Output | null> {
     return v === null ? undefined : this.type.func(v, mode);
   }
 
@@ -577,7 +592,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     super();
   }
 
-  func(v: unknown, mode: FuncMode): RawResult<Output | undefined> {
+  func(v: unknown, mode: FuncOptions): RawResult<Output | undefined> {
     return v === undefined || v === Nothing
       ? undefined
       : this.type.func(v, mode);
@@ -683,7 +698,7 @@ class ObjectType<
     ]);
   }
 
-  func(v: unknown, mode: FuncMode): RawResult<ObjectOutput<Shape, Rest>> {
+  func(v: unknown, mode: FuncOptions): RawResult<ObjectOutput<Shape, Rest>> {
     let func = this._func;
     if (func === undefined) {
       func = createObjectMatcher(this.shape, this.restType, this.checks);
@@ -830,7 +845,7 @@ function createObjectMatcher(
     let seenBits: BitSet = 0;
     let seenCount = 0;
 
-    if (mode !== FuncMode.PASS || rest !== undefined) {
+    if (mode !== PASSTHROUGH || rest !== undefined) {
       for (const key in obj) {
         const value = obj[key];
         const index = ~invertedIndexes[key];
@@ -843,17 +858,13 @@ function createObjectMatcher(
         } else if (rest !== undefined) {
           r = rest.func(value, mode);
         } else {
-          if (mode === FuncMode.STRICT) {
+          if (mode === STRICT) {
             if (unrecognized === undefined) {
               unrecognized = [key];
             } else {
               unrecognized.push(key);
             }
-          } else if (
-            mode === FuncMode.STRIP &&
-            issues === undefined &&
-            !copied
-          ) {
+          } else if (mode === STRIP && issues === undefined && !copied) {
             output = {};
             copied = true;
             for (let m = 0; m < totalCount; m++) {
@@ -1010,7 +1021,7 @@ class ArrayType<
     };
   }
 
-  func(arr: unknown, mode: FuncMode): RawResult<ArrayOutput<Head, Rest>> {
+  func(arr: unknown, mode: FuncOptions): RawResult<ArrayOutput<Head, Rest>> {
     if (!Array.isArray(arr)) {
       return this.invalidType;
     }
@@ -1196,7 +1207,7 @@ function createObjectKeyMatcher(
     byType![type] = options[0];
   }
 
-  return function (_obj: unknown, mode: FuncMode) {
+  return function (_obj: unknown, mode: FuncOptions) {
     const obj = _obj as Record<string, unknown>;
     const value = obj[key];
     if (value === undefined && !(key in obj)) {
@@ -1259,7 +1270,7 @@ function createUnionBaseMatcher(
     byType![type] = options;
   }
 
-  return function (value: unknown, mode: FuncMode) {
+  return function (value: unknown, mode: FuncOptions) {
     let options: undefined | AbstractType[];
     if (value === Nothing) {
       options = optionals;
@@ -1299,7 +1310,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     this.options.forEach((o) => o.toTerminals(func));
   }
 
-  func(v: unknown, mode: FuncMode): RawResult<Infer<T[number]>> {
+  func(v: unknown, mode: FuncOptions): RawResult<Infer<T[number]>> {
     let func = this._func;
     if (func === undefined) {
       const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
@@ -1342,7 +1353,7 @@ class TransformType<Output> extends Type<Output> {
     this.transformRoot = undefined;
   }
 
-  func(v: unknown, mode: FuncMode): RawResult<Output> {
+  func(v: unknown, mode: FuncOptions): RawResult<Output> {
     let chain = this.transformChain;
     if (!chain) {
       chain = [];
@@ -1401,7 +1412,7 @@ class LazyType<T> extends Type<T> {
     super();
   }
 
-  func(v: unknown, mode: FuncMode): RawResult<T> {
+  func(v: unknown, mode: FuncOptions): RawResult<T> {
     if (!this.type) {
       this.type = this.definer();
     }
@@ -1431,7 +1442,7 @@ class NeverType extends Type<never> {
     code: "invalid_type",
     expected: [],
   };
-  func(_: unknown, __: FuncMode): RawResult<never> {
+  func(_: unknown, __: FuncOptions): RawResult<never> {
     return this.issue;
   }
 }
@@ -1447,7 +1458,7 @@ function never(): Type<never> {
 
 class UnknownType extends Type<unknown> {
   readonly name = "unknown";
-  func(_: unknown, __: FuncMode): RawResult<unknown> {
+  func(_: unknown, __: FuncOptions): RawResult<unknown> {
     return undefined;
   }
 }
@@ -1468,7 +1479,7 @@ class UndefinedType extends Type<undefined> {
     code: "invalid_type",
     expected: ["undefined"],
   };
-  func(v: unknown, _: FuncMode): RawResult<undefined> {
+  func(v: unknown, _: FuncOptions): RawResult<undefined> {
     return v === undefined ? undefined : this.issue;
   }
 }
@@ -1488,7 +1499,7 @@ class NullType extends Type<null> {
     code: "invalid_type",
     expected: ["null"],
   };
-  func(v: unknown, _: FuncMode): RawResult<null> {
+  func(v: unknown, _: FuncOptions): RawResult<null> {
     return v === null ? undefined : this.issue;
   }
 }
@@ -1508,7 +1519,7 @@ class NumberType extends Type<number> {
     code: "invalid_type",
     expected: ["number"],
   };
-  func(v: unknown, _: FuncMode): RawResult<number> {
+  func(v: unknown, _: FuncOptions): RawResult<number> {
     return typeof v === "number" ? undefined : this.issue;
   }
 }
@@ -1528,7 +1539,7 @@ class BigIntType extends Type<bigint> {
     code: "invalid_type",
     expected: ["bigint"],
   };
-  func(v: unknown, _: FuncMode): RawResult<bigint> {
+  func(v: unknown, _: FuncOptions): RawResult<bigint> {
     return typeof v === "bigint" ? undefined : this.issue;
   }
 }
@@ -1548,7 +1559,7 @@ class StringType extends Type<string> {
     code: "invalid_type",
     expected: ["string"],
   };
-  func(v: unknown, _: FuncMode): RawResult<string> {
+  func(v: unknown, _: FuncOptions): RawResult<string> {
     return typeof v === "string" ? undefined : this.issue;
   }
 }
@@ -1568,7 +1579,7 @@ class BooleanType extends Type<boolean> {
     code: "invalid_type",
     expected: ["boolean"],
   };
-  func(v: unknown, _: FuncMode): RawResult<boolean> {
+  func(v: unknown, _: FuncOptions): RawResult<boolean> {
     return typeof v === "boolean" ? undefined : this.issue;
   }
 }
@@ -1592,7 +1603,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
       expected: [value],
     };
   }
-  func(v: unknown, _: FuncMode): RawResult<Out> {
+  func(v: unknown, _: FuncOptions): RawResult<Out> {
     return v === this.value ? undefined : this.issue;
   }
 }
