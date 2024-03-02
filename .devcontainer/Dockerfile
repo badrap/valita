@@ -1,6 +1,7 @@
 FROM node:20-alpine
 RUN apk add --no-cache \
   git \
+  gpg \
   openssh \
   ripgrep
 RUN mkdir -p /workspace && chown node:node /workspace
