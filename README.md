@@ -106,7 +106,7 @@ v.literal(1n); // must be bigint 1n
 v.literal(true); // must be true
 ```
 
-For more complex values you can use the `.assert()`-method. Check out the [Custom validation functions](#user-content-custom-validation-functions) to learn more about it.
+For more complex values you can use the `.assert()`-method. Check out [Custom Validators](#custom-validators) to learn more about it.
 
 ### Allow Any / Forbid All
 
