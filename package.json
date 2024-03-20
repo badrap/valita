@@ -14,7 +14,10 @@
     "default": "./dist/mjs/index.mjs"
   },
   "sideEffects": false,
-  "repository": "badrap/valita",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/badrap/valita.git"
+  },
   "author": "Joachim Viide <jviide@iki.fi>",
   "license": "MIT",
   "publishConfig": {
