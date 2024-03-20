@@ -1,8 +1,11 @@
-name: publish
+name: Publish
 
 on:
-  release:
-    types: [created]
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   check:
@@ -17,12 +20,14 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-  publish-npm:
+  publish:
     needs: check
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
+      pull-requests: write
+      issues: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,19 +35,12 @@ jobs:
           node-version: 20
           cache: npm
           registry-url: https://registry.npmjs.org/
-      - run: npm publish --provenance --access=public
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-  publish-jsr:
-    needs: check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
         with:
-          node-version: 20
-          cache: npm
-      - run: npx jsr publish
+          version: npm run version
+          publish: npm run publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
