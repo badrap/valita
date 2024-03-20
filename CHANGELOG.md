@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.3.8
+
+### Patch Changes
+
+- [`d2f85db`](https://github.com/badrap/valita/commit/d2f85dbd08da70f572b67c63cbe754a265d3b49f) Thanks [@jviide](https://github.com/jviide)! - Fix release automation, name scripts bump/release instead of version/publish
+
 ## 0.3.7
 
 ### Patch Changes
