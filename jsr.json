@@ -1,5 +1,5 @@
 {
   "name": "@badrap/valita",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "exports": "./src/index.ts"
 }
