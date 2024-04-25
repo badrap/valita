@@ -1601,13 +1601,12 @@ describe("union()", () => {
     const a = v.literal(1).map(() => "literal");
     const b = v.number().map(() => "number");
     const c = v.unknown().map(() => "unknown");
-    const u = v.union;
-    expect(u(a, b, c).parse(1)).to.equal("literal");
-    expect(u(a, c, b).parse(1)).to.equal("literal");
-    expect(u(b, a, c).parse(1)).to.equal("number");
-    expect(u(b, c, a).parse(1)).to.equal("number");
-    expect(u(c, b, a).parse(1)).to.equal("unknown");
-    expect(u(c, a, b).parse(1)).to.equal("unknown");
+    expect(v.union(a, b, c).parse(1)).to.equal("literal");
+    expect(v.union(a, c, b).parse(1)).to.equal("literal");
+    expect(v.union(b, a, c).parse(1)).to.equal("number");
+    expect(v.union(b, c, a).parse(1)).to.equal("number");
+    expect(v.union(c, b, a).parse(1)).to.equal("unknown");
+    expect(v.union(c, a, b).parse(1)).to.equal("unknown");
   });
   it("deduplicates strictly equal parsers", () => {
     const a = v.unknown().assert(() => false, "test");
@@ -1635,6 +1634,18 @@ describe("union()", () => {
     expect(t.parse(undefined)).to.equal(undefined);
     expect(t.parse(true)).to.equal(true);
     expect(() => t.parse({})).to.throw(v.ValitaError);
+  });
+  it("accepts optional input if it maps to non-optional output", () => {
+    const t = v.object({
+      a: v.union(
+        v.undefined(),
+        v
+          .unknown()
+          .optional()
+          .map(() => 1),
+      ),
+    });
+    expect(t.parse({})).toEqual({ a: 1 });
   });
   it("reports the expected type even for literals when the base type doesn't match", () => {
     const t = v.union(v.literal(1), v.literal("test"));
