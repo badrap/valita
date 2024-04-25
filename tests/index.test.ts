@@ -22,6 +22,13 @@ function expectType<T extends v.Type | v.Optional>(
 }
 
 describe("Type", () => {
+  it("is not assignable from Optional", () => {
+    expectType(v.unknown().optional()).toBeAssignableTo<v.Type>(false);
+  });
+  it("is not assignable to Optional", () => {
+    expectType(v.unknown()).toBeAssignableTo<v.Optional>(false);
+  });
+
   describe("try", () => {
     it("returns ValitaResult<T> when called for v.Type<T>", () => {
       function _<T>(type: v.Type<T>, value: unknown): v.ValitaResult<T> {
@@ -334,6 +341,10 @@ describe("Type", () => {
     });
   });
   describe("optional()", () => {
+    it("returns an Optional", () => {
+      expectType(v.unknown().optional()).toBeAssignableTo<v.Optional>(true);
+      expectType(v.unknown().optional()).toBeAssignableTo<v.Type>(false);
+    });
     it("accepts missing values", () => {
       const t = v.object({
         a: v.string().optional(),
