@@ -1,6 +1,6 @@
 # @badrap/valita [![CI](https://github.com/badrap/valita/actions/workflows/ci.yml/badge.svg)](https://github.com/badrap/valita/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/@badrap/valita.svg)](https://www.npmjs.com/package/@badrap/valita) [![JSR](https://jsr.io/badges/@badrap/valita)](https://jsr.io/@badrap/valita)
 
-A TypeScript library for validating & parsing structured objects. The API is _heavily_ influenced by [Zod's](https://github.com/colinhacks/zod/tree/v3) excellent API, while the implementation side aims for the impressive performance of [simple-runtypes](https://github.com/hoeck/simple-runtypes).
+A TypeScript library for validating & parsing structured objects. The API is _heavily_ influenced by [Zod's](https://zod.dev/) excellent API, while the implementation side aims for the impressive performance of [simple-runtypes](https://github.com/hoeck/simple-runtypes).
 
 ```ts
 const vehicle = v.union(
