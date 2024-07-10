@@ -35,10 +35,9 @@
     "build:mjs": "tsc -p ./tsconfig.build.json --target es2015 --module es2015 --outDir ./dist/mjs && mv ./dist/mjs/index.js ./dist/mjs/index.mjs && mv ./dist/mjs/index.d.ts ./dist/mjs/index.d.mts",
     "build:node-mjs": "tsc -p ./tsconfig.build.json --target es2021 --module es2015 --outDir ./dist/node-mjs && mv ./dist/node-mjs/index.js ./dist/node-mjs/index.mjs && mv ./dist/node-mjs/index.d.ts ./dist/node-mjs/index.d.mts",
     "build:node-cjs": "tsc -p ./tsconfig.build.json --target es2021 --module commonjs --outDir ./dist/node-cjs",
-    "prepack": "npm run build",
     "changeset": "changeset",
     "bump": "changeset version && sed --in-place \"s/\\\"version\\\": \\\".*\\\"/\\\"version\\\": \\\"$(sed -n 's/^\\s*\\\"version\\\": \\\"\\([^\\\"/]*\\)\\\".*/\\1/p' package.json)\\\"/\" jsr.json",
-    "release": "changeset publish && jsr publish"
+    "release": "npm run build && changeset publish && jsr publish"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.0",
