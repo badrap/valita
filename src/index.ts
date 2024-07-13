@@ -658,7 +658,16 @@ class ObjectType<
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
-  private _func?: Func<unknown>;
+  private _func?: (
+    obj: Record<string, unknown>,
+    flags: number,
+  ) => RawResult<unknown>;
+
+  private _invalidType: IssueLeaf = {
+    ok: false,
+    code: "invalid_type",
+    expected: ["object"],
+  };
 
   constructor(
     readonly shape: Shape,
@@ -686,6 +695,10 @@ class ObjectType<
   }
 
   func(v: unknown, flags: number): RawResult<ObjectOutput<Shape, Rest>> {
+    if (!isObject(v)) {
+      return this._invalidType;
+    }
+
     let func = this._func;
     if (func === undefined) {
       func = createObjectMatcher(this.shape, this.restType, this.checks);
@@ -750,7 +763,7 @@ function createObjectMatcher(
     func: (v: unknown) => boolean;
     issue: IssueLeaf;
   }[],
-): Func<unknown> {
+): (v: Record<string, unknown>, flags: number) => RawResult<unknown> {
   const requiredKeys: string[] = [];
   const optionalKeys: string[] = [];
   for (const key in shape) {
@@ -766,19 +779,9 @@ function createObjectMatcher(
   }
   const keys = [...requiredKeys, ...optionalKeys];
   const totalCount = keys.length;
-  const invalidType: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["object"],
-  };
-
   if (totalCount === 0 && rest?.name === "unknown") {
     // A fast path for record(unknown())
     return function (obj, _) {
-      if (!isObject(obj)) {
-        return invalidType;
-      }
-
       if (checks !== undefined) {
         for (let i = 0; i < checks.length; i++) {
           if (!checks[i].func(obj)) {
@@ -821,10 +824,6 @@ function createObjectMatcher(
   }
 
   return function (obj, flags) {
-    if (!isObject(obj)) {
-      return invalidType;
-    }
-
     let copied = false;
     let output = obj;
     let issues: IssueTree | undefined;
