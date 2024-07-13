@@ -1,32 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { expectType as _expectType, TypeEqual, TypeOf } from "ts-expect";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import * as v from "../src";
-
-// A helper for checking whether the given validator's
-// inferred output type is _exactly_ the same as given one.
-// For example the following are valid:
-//  expectType(v.number()).toImply<number>(true);
-//  expectType(v.number()).toImply<1>(false);
-//  expectType(v.number()).toImply<string>(false);
-//  expectType(v.number()).toImply<string | number>(false);
-//  expectType(v.number()).toImply<unknown>(false);
-//  expectType(v.number()).toImply<any>(false);
-//  expectType(v.number()).toImply<never>(false);
-function expectType<T extends v.Type | v.Optional>(
-  _type: T,
-): {
-  toImply<M>(_truth: TypeEqual<v.Infer<T>, M>): void;
-  toBeAssignableTo<M>(_truth: TypeOf<T, M>): void;
-} {
-  return { toImply: () => void {}, toBeAssignableTo: () => void {} };
-}
 
 describe("Type", () => {
   it("is not assignable from Optional", () => {
-    expectType(v.unknown().optional()).toBeAssignableTo<v.Type>(false);
+    expectTypeOf(v.unknown().optional()).not.toMatchTypeOf<v.Type>();
   });
   it("is not assignable to Optional", () => {
-    expectType(v.unknown()).toBeAssignableTo<v.Optional>(false);
+    expectTypeOf(v.unknown()).not.toMatchTypeOf<v.Optional>();
   });
 
   describe("try", () => {
@@ -46,11 +26,11 @@ describe("Type", () => {
     it("returns type discriminated by .ok", () => {
       const result = v.number().try(1);
       if (result.ok) {
-        _expectType<TypeOf<{ value: number }, typeof result>>(true);
-        _expectType<TypeOf<{ message: string }, typeof result>>(false);
+        expectTypeOf(result).toMatchTypeOf<{ value: number }>();
+        expectTypeOf(result).not.toMatchTypeOf<{ message: string }>();
       } else {
-        _expectType<TypeOf<{ value: number }, typeof result>>(false);
-        _expectType<TypeOf<{ message: string }, typeof result>>(true);
+        expectTypeOf(result).not.toMatchTypeOf<{ value: number }>();
+        expectTypeOf(result).toMatchTypeOf<{ message: string }>();
       }
     });
     it("returns { ok: true, value: ... } on success", () => {
@@ -91,7 +71,7 @@ describe("Type", () => {
   describe("assert", () => {
     it("passes the type through by default", () => {
       const t = v.number().assert(() => true);
-      expectType(t).toImply<number>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<number>();
     });
     it("turns optional input into non-optional output", () => {
       const t = v.object({
@@ -101,17 +81,19 @@ describe("Type", () => {
           .assert(() => true),
       });
       expect(t.parse({})).to.deep.equal({ a: undefined });
-      expectType(t).toImply<{ a: number | undefined }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
+        a: number | undefined;
+      }>();
     });
     it("accepts type predicates", () => {
       type Branded = number & { readonly brand: unique symbol };
       const t = v.number().assert((n): n is Branded => true);
-      expectType(t).toImply<Branded>(true);
-      expectType(t).toImply<number>(false);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<Branded>();
+      expectTypeOf<v.Infer<typeof t>>().not.toEqualTypeOf<number>();
     });
     it("accepts type parameters", () => {
       const t = v.number().assert<1>((n) => n === 1);
-      expectType(t).toImply<1>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<1>();
     });
     it("passes in the parsed value", () => {
       let value: unknown;
@@ -211,11 +193,11 @@ describe("Type", () => {
   describe("map", () => {
     it("changes the output type to the function's return type", () => {
       const t = v.number().map(String);
-      expectType(t).toImply<string>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string>();
     });
     it("infers literals when possible", () => {
       const t = v.number().map(() => "test");
-      expectType(t).toImply<"test">(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<"test">();
     });
     it("passes in the parsed value", () => {
       let value: unknown;
@@ -252,11 +234,11 @@ describe("Type", () => {
   describe("chain", () => {
     it("changes the output type to the function's return type", () => {
       const t = v.number().chain((n) => v.ok(String(n)));
-      expectType(t).toImply<string>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string>();
     });
     it("infers literals when possible", () => {
       const t = v.number().chain(() => ({ ok: true, value: "test" }));
-      expectType(t).toImply<"test">(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<"test">();
     });
     it("passes in the parsed value", () => {
       let value: unknown;
@@ -335,15 +317,15 @@ describe("Type", () => {
     it("works together with .try()", () => {
       const s = v.string();
       const t = v.unknown().chain((x) => s.try(x));
-      expectType(t).toImply<string>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string>();
       expect(t.parse("a")).to.equal("a");
       expect(() => t.parse(1)).to.throw(v.ValitaError);
     });
   });
   describe("optional()", () => {
     it("returns an Optional", () => {
-      expectType(v.unknown().optional()).toBeAssignableTo<v.Optional>(true);
-      expectType(v.unknown().optional()).toBeAssignableTo<v.Type>(false);
+      expectTypeOf(v.unknown().optional()).toMatchTypeOf<v.Optional>();
+      expectTypeOf(v.unknown().optional()).not.toMatchTypeOf<v.Type>();
     });
     it("accepts missing values", () => {
       const t = v.object({
@@ -365,11 +347,13 @@ describe("Type", () => {
     });
     it("adds undefined to output", () => {
       const t = v.string().optional();
-      expectType(t).toImply<string | undefined>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string | undefined>();
     });
     it("makes the output type optional", () => {
-      const t1 = v.object({ a: v.number().optional() });
-      expectType(t1).toImply<{ a?: number | undefined }>(true);
+      const t = v.object({ a: v.number().optional() });
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
+        a?: number | undefined;
+      }>();
     });
     it("short-circuits previous optionals", () => {
       const t = v.object({
@@ -380,7 +364,7 @@ describe("Type", () => {
           .optional(),
       });
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
-      expectType(t).toImply<{ a?: 1 | undefined }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a?: 1 | undefined }>();
     });
     it("short-circuits undefined()", () => {
       const t = v.object({
@@ -390,7 +374,7 @@ describe("Type", () => {
           .optional(),
       });
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
-      expectType(t).toImply<{ a?: 1 | undefined }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a?: 1 | undefined }>();
     });
     it("passes undefined to assert() for missing values", () => {
       let value: unknown = null;
@@ -449,11 +433,11 @@ describe("Type", () => {
     });
     it("adds null to output", () => {
       const t = v.string().nullable();
-      expectType(t).toImply<string | null>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string | null>();
     });
     it("makes the output type nullable", () => {
-      const t1 = v.object({ a: v.number().nullable() });
-      expectType(t1).toImply<{ a: number | null }>(true);
+      const t = v.object({ a: v.number().nullable() });
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: number | null }>();
     });
     it("short-circuits previous nulls", () => {
       const t = v.object({
@@ -464,7 +448,7 @@ describe("Type", () => {
           .nullable(),
       });
       expect(t.parse({ a: null })).to.deep.equal({ a: null });
-      expectType(t).toImply<{ a: 1 | null }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 | null }>();
     });
     it("short-circuits null()", () => {
       const t = v.object({
@@ -474,7 +458,7 @@ describe("Type", () => {
           .nullable(),
       });
       expect(t.parse({ a: null })).to.deep.equal({ a: null });
-      expectType(t).toImply<{ a: 1 | null }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 | null }>();
     });
   });
   describe("default", () => {
@@ -497,11 +481,11 @@ describe("Type", () => {
     });
     it("infers literals when possible", () => {
       const t = v.undefined().default(2);
-      expectType(t).toImply<2>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<2>();
     });
     it("removes undefined from the return type", () => {
       const t = v.union(v.string(), v.undefined()).default(2);
-      expectType(t).toImply<string | 2>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string | 2>();
     });
   });
 });
@@ -515,7 +499,7 @@ describe("never()", () => {
   });
   it("has output type 'never'", () => {
     const t = v.never();
-    expectType(t).toImply<never>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<never>();
   });
   it("never propagates to assert()", () => {
     let called = false;
@@ -558,7 +542,7 @@ describe("string()", () => {
   });
   it("has output type 'string'", () => {
     const t = v.string();
-    expectType(t).toImply<string>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string>();
   });
 });
 
@@ -571,7 +555,7 @@ describe("unknown()", () => {
   });
   it("has output type 'unknown'", () => {
     const t = v.unknown();
-    expectType(t).toImply<unknown>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<unknown>();
   });
 });
 
@@ -588,7 +572,7 @@ describe("number()", () => {
   });
   it("has output type 'number'", () => {
     const t = v.number();
-    expectType(t).toImply<number>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<number>();
   });
 });
 
@@ -605,7 +589,7 @@ describe("bigint()", () => {
   });
   it("has output type 'bigint'", () => {
     const t = v.bigint();
-    expectType(t).toImply<bigint>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<bigint>();
   });
 });
 
@@ -622,7 +606,7 @@ describe("boolean()", () => {
   });
   it("has output type 'boolean'", () => {
     const t = v.boolean();
-    expectType(t).toImply<boolean>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<boolean>();
   });
 });
 
@@ -639,7 +623,7 @@ describe("null()", () => {
   });
   it("has output type 'null'", () => {
     const t = v.null();
-    expectType(t).toImply<null>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<null>();
   });
 });
 
@@ -656,7 +640,7 @@ describe("undefined()", () => {
   });
   it("has output type 'undefined'", () => {
     const t = v.undefined();
-    expectType(t).toImply<undefined>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<undefined>();
   });
 });
 
@@ -665,38 +649,38 @@ describe("object()", () => {
     const t = v.object({});
     expect(t.parse({})).to.deep.equal({});
     // eslint-disable-next-line @typescript-eslint/ban-types
-    expectType(t).toImply<{}>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
   });
   it("infers required keys object({})", () => {
     const t = v.object({
       a: v.object({}),
     });
     // eslint-disable-next-line @typescript-eslint/ban-types
-    expectType(t).toImply<{ a: {} }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: {} }>();
   });
   it("infers optional keys for optional()", () => {
     const t = v.object({
       a: v.undefined().optional(),
     });
-    expectType(t).toImply<{ a?: undefined }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a?: undefined }>();
   });
   it("infers required keys for never()", () => {
     const t = v.object({
       a: v.never(),
     });
-    expectType(t).toImply<{ a: never }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: never }>();
   });
   it("infers required keys for undefined()", () => {
     const t = v.object({
       a: v.undefined(),
     });
-    expectType(t).toImply<{ a: undefined }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: undefined }>();
   });
   it("infers required keys for unknown()", () => {
     const t = v.object({
       a: v.unknown(),
     });
-    expectType(t).toImply<{ a: unknown }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: unknown }>();
   });
   it("throws on missing required keys", () => {
     const t = v.object({ a: v.string() });
@@ -1012,19 +996,19 @@ describe("object()", () => {
   describe("omit", () => {
     it("omits given keys", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).omit("b");
-      expectType(t).toImply<{ a: 1 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
     it("allows zero arguments", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).omit();
-      expectType(t).toImply<{ a: 1; b: 2 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1; b: 2 }>();
       expect(t.parse({ a: 1, b: 2 })).to.deep.equal({ a: 1, b: 2 });
     });
     it("allows multiple", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2), c: v.literal(3) })
         .omit("a", "b");
-      expectType(t).toImply<{ c: 3 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ c: 3 }>();
       expect(t.parse({ c: 3 })).to.deep.equal({ c: 3 });
     });
     it("keeps rest", () => {
@@ -1032,7 +1016,10 @@ describe("object()", () => {
         .object({ a: v.literal(1), b: v.literal(2) })
         .rest(v.number())
         .omit("b");
-      expectType(t).toImply<{ a: 1; [K: string]: number }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
+        a: 1;
+        [K: string]: number;
+      }>();
       expect(t.parse({ a: 1, b: 1000 })).to.deep.equal({ a: 1, b: 1000 });
     });
     it("removes checks", () => {
@@ -1040,7 +1027,7 @@ describe("object()", () => {
         .object({ a: v.literal(1), b: v.literal(2) })
         .check(() => false)
         .omit("b");
-      expectType(t).toImply<{ a: 1 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
   });
@@ -1048,20 +1035,20 @@ describe("object()", () => {
   describe("pick", () => {
     it("omits given keys", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick("a");
-      expectType(t).toImply<{ a: 1 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
     it("allows zero arguments", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick();
       // eslint-disable-next-line @typescript-eslint/ban-types
-      expectType(t).toImply<{}>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
       expect(t.parse({})).to.deep.equal({});
     });
     it("allows multiple", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2), c: v.literal(3) })
         .pick("a", "b");
-      expectType(t).toImply<{ a: 1; b: 2 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1; b: 2 }>();
       expect(t.parse({ a: 1, b: 2 })).to.deep.equal({ a: 1, b: 2 });
     });
     it("removes rest", () => {
@@ -1069,7 +1056,7 @@ describe("object()", () => {
         .object({ a: v.literal(1), b: v.literal(2) })
         .rest(v.string())
         .pick("a");
-      expectType(t).toImply<{ a: 1 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(() => t.parse({ a: 1, b: "test" }, { mode: "strict" })).to.throw(
         v.ValitaError,
       );
@@ -1079,7 +1066,7 @@ describe("object()", () => {
         .object({ a: v.literal(1), b: v.literal(2) })
         .check(() => false)
         .pick("a");
-      expectType(t).toImply<{ a: 1 }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
   });
@@ -1087,7 +1074,9 @@ describe("object()", () => {
   describe("partial", () => {
     it("makes all keys optional", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).partial();
-      expectType(t).toImply<Partial<{ a: 1; b: 2 }>>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<
+        Partial<{ a: 1; b: 2 }>
+      >();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
     it("makes rest accept undefined as well as the original type", () => {
@@ -1095,7 +1084,9 @@ describe("object()", () => {
         .object({ a: v.literal(1) })
         .rest(v.number())
         .partial();
-      expectType(t).toImply<Partial<{ a: 1; [K: string]: number }>>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<
+        Partial<{ a: 1; [K: string]: number }>
+      >();
       expect(t.parse({ a: 1, x: undefined, y: 1000 })).to.deep.equal({
         a: 1,
         x: undefined,
@@ -1107,7 +1098,9 @@ describe("object()", () => {
         .object({ a: v.literal(1), b: v.literal(2) })
         .check(() => false)
         .partial();
-      expectType(t).toImply<Partial<{ a: 1; b: 2 }>>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<
+        Partial<{ a: 1; b: 2 }>
+      >();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
   });
@@ -1130,8 +1123,11 @@ describe("object()", () => {
     });
     it("adds an index signature to the inferred type", () => {
       const t = v.object({ a: v.literal(1) }).rest(v.number());
-      expectType(t).toImply<{ a: 1; [K: string]: number }>(true);
-      expectType(t).toImply<{ a: string }>(false);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
+        a: 1;
+        [K: string]: number;
+      }>();
+      expectTypeOf<v.Infer<typeof t>>().not.toEqualTypeOf<{ a: string }>();
     });
     it("accepts matching unexpected key values", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
@@ -1274,13 +1270,16 @@ describe("object()", () => {
     it("extends the base shape", () => {
       const t = v.object({ a: v.string() }).extend({ b: v.number() });
       expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
-      expectType(t).toImply<{ a: string; b: number }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
+        a: string;
+        b: number;
+      }>();
     });
     it("overwrites already existing keys", () => {
       const t = v.object({ a: v.string() }).extend({ a: v.number() });
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
       expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
-      expectType(t).toImply<{ a: number }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: number }>();
     });
   });
   describe("check()", () => {
@@ -1290,7 +1289,7 @@ describe("object()", () => {
     });
     it("doesn't affect the base shape", () => {
       const t = v.object({ a: v.string() }).check((v): boolean => Boolean(v));
-      expectType(t).toImply<{ a: string }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: string }>();
     });
     it("skips all checks if any property fails to parse", () => {
       let didRun = false;
@@ -1345,7 +1344,10 @@ describe("object()", () => {
         .check((v): boolean => Boolean(v))
         .extend({ b: v.number() });
       expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
-      expectType(t).toImply<{ a: string; b: number }>(true);
+      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
+        a: string;
+        b: number;
+      }>();
     });
     it("creates a custom error on failure", () => {
       const t = v.object({ a: v.string() }).check(() => false);
@@ -1395,7 +1397,7 @@ describe("record()", () => {
   it("acceps empty objects", () => {
     const t = v.record(v.unknown());
     expect(t.parse({})).to.deep.equal({});
-    expectType(t).toImply<{ [K: string]: unknown }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ [K: string]: unknown }>();
   });
   it("does not accept arrays", () => {
     const t = v.record(v.unknown());
@@ -1404,12 +1406,12 @@ describe("record()", () => {
   it("acceps the defined types of values", () => {
     const t = v.record(v.number());
     expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
-    expectType(t).toImply<{ [K: string]: number }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ [K: string]: number }>();
   });
   it("defaults to Record<string, unknown>", () => {
     const t = v.record();
     expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
-    expectType(t).toImply<{ [K: string]: unknown }>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ [K: string]: unknown }>();
   });
   it("rejects values other than the defined type", () => {
     const t = v.record(v.number());
@@ -1522,7 +1524,7 @@ describe("array()", () => {
   });
   it("infers array", () => {
     const t = v.array(v.number());
-    expectType(t).toImply<number[]>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<number[]>();
   });
 });
 
@@ -1571,7 +1573,7 @@ describe("tuple()", () => {
   });
   it("infers tuple", () => {
     const t = v.tuple([v.number(), v.string()]);
-    expectType(t).toImply<[number, string]>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<[number, string]>();
   });
   it("returns the original array instance if possible", () => {
     const t = v.tuple([v.number(), v.number()]);
@@ -1596,7 +1598,7 @@ describe("union()", () => {
     const t = v.union(v.string(), v.never());
     expect(t.parse("test")).to.equal("test");
     expect(() => t.parse(1)).to.throw(v.ValitaError);
-    expectType(t).toImply<string>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string>();
   });
   it("picks the first successful parse", () => {
     const t = v.union(
@@ -1960,7 +1962,7 @@ describe("lazy()", () => {
           t: T;
         };
     const t: v.Type<T> = v.lazy(() => v.union(v.undefined(), v.object({ t })));
-    expectType(t).toImply<T>(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<T>();
   });
   it("allows mutually recursive type definitions", () => {
     type A =
@@ -1971,8 +1973,8 @@ describe("lazy()", () => {
     type B = undefined | A[];
     const a: v.Type<A> = v.lazy(() => v.union(v.undefined(), v.object({ b })));
     const b: v.Type<B> = v.lazy(() => v.union(v.undefined(), v.array(a)));
-    expectType(a).toImply<A>(true);
-    expectType(b).toImply<B>(true);
+    expectTypeOf<v.Infer<typeof a>>().toEqualTypeOf<A>();
+    expectTypeOf<v.Infer<typeof b>>().toEqualTypeOf<B>();
   });
   it("allows referencing object matchers that are defined later", () => {
     const a: v.Type = v.lazy(() => v.union(v.undefined(), b));
@@ -1990,9 +1992,9 @@ describe("lazy()", () => {
       | {
           t: T;
         };
-    expectType(
+    expectTypeOf(
       v.lazy(() => v.union(v.undefined(), v.object({ t: v.number() }))),
-    ).toBeAssignableTo<v.Type<T>>(false);
+    ).not.toMatchTypeOf<v.Type<T>>();
   });
   it("parses recursively", () => {
     type T =
@@ -2027,7 +2029,7 @@ describe("lazy()", () => {
 describe("ok()", () => {
   it("infers literals when possible", () => {
     const t = v.number().chain(() => v.ok("test"));
-    expectType(t).toImply<"test">(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<"test">();
   });
 });
 
