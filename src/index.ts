@@ -795,7 +795,7 @@ function createObjectMatcher(
 
   const types = keys.map((key) => shape[key]);
   const requiredCount = requiredKeys.length;
-  const invertedIndexes = Object.create(null);
+  const invertedIndexes = Object.create(null) as Record<string, number>;
   keys.forEach((key, index) => {
     invertedIndexes[key] = ~index;
   });
