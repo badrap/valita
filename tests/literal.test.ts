@@ -1,22 +1,26 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import * as v from "../src";
 
 describe("literal()", () => {
   it("accepts string literals", () => {
     const t = v.literal("test");
     expect(t.parse("test")).to.equal("test");
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<"test">();
   });
   it("accepts number literals", () => {
     const t = v.literal(1);
     expect(t.parse(1)).to.equal(1);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<1>();
   });
   it("accepts bigint literals", () => {
     const t = v.literal(1n);
     expect(t.parse(1n)).to.equal(1n);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<1n>();
   });
   it("accepts boolean literals", () => {
     const t = v.literal(true);
     expect(t.parse(true)).to.equal(true);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<true>();
   });
   it("rejects other literals when expecting a string literal", () => {
     const t = v.literal("test");
