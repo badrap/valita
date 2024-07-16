@@ -8,7 +8,7 @@
     "bun": "./src/index.ts",
     "node": {
       "module": "./dist/node-mjs/index.mjs",
-      "import": "./dist/node-mjs/index.mjs",
+      "import": "./dist/node-cjs/index.esm.mjs",
       "require": "./dist/node-cjs/index.js"
     },
     "default": "./dist/mjs/index.mjs"
@@ -31,10 +31,10 @@
     "typecheck": "tsc --skipLibCheck --noEmit",
     "test": "vitest run",
     "build": "rm -rf dist/* && npm run build:cjs && npm run build:mjs && npm run build:node-mjs && npm run build:node-cjs",
-    "build:cjs": "tsc -p ./tsconfig.build.json --target es2015 --module commonjs --outDir ./dist/cjs",
-    "build:mjs": "tsc -p ./tsconfig.build.json --target es2015 --module es2015 --outDir ./dist/mjs && mv ./dist/mjs/index.js ./dist/mjs/index.mjs && mv ./dist/mjs/index.d.ts ./dist/mjs/index.d.mts",
-    "build:node-mjs": "tsc -p ./tsconfig.build.json --target es2021 --module es2015 --outDir ./dist/node-mjs && mv ./dist/node-mjs/index.js ./dist/node-mjs/index.mjs && mv ./dist/node-mjs/index.d.ts ./dist/node-mjs/index.d.mts",
-    "build:node-cjs": "tsc -p ./tsconfig.build.json --target es2021 --module commonjs --outDir ./dist/node-cjs",
+    "build:cjs": "tsc -p ./tsconfig.cjs.json --outDir ./dist/cjs",
+    "build:node-cjs": "tsc -p ./tsconfig.cjs.json --target es2021 --outDir ./dist/node-cjs",
+    "build:mjs": "tsc -p ./tsconfig.esm.json --outDir ./dist/mjs && mv ./dist/mjs/index.js ./dist/mjs/index.mjs && mv ./dist/mjs/index.d.ts ./dist/mjs/index.d.mts",
+    "build:node-mjs": "tsc -p ./tsconfig.esm.json --target es2021 --outDir ./dist/node-mjs && mv ./dist/node-mjs/index.js ./dist/node-mjs/index.mjs && mv ./dist/node-mjs/index.d.ts ./dist/node-mjs/index.d.mts",
     "changeset": "changeset",
     "bump": "changeset version && sed --in-place \"s/\\\"version\\\": \\\".*\\\"/\\\"version\\\": \\\"$(sed -n 's/^\\s*\\\"version\\\": \\\"\\([^\\\"/]*\\)\\\".*/\\1/p' package.json)\\\"/\" jsr.json",
     "release": "npm run build && changeset publish && jsr publish"

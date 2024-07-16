@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "module": "commonjs",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "noImplicitReturns": true,
     "declaration": true,
-    "moduleResolution": "node",
     "isolatedModules": true,
     "outDir": "./dist/main",
     "sourceMap": true,
@@ -13,5 +13,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["mod.ts", "src/**/*.ts", "tests/**/*.ts"]
+  "include": ["mod.ts", "src/**/*", "tests/**/*"]
 }
