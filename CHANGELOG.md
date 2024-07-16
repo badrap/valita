@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.3.9
+
+### Patch Changes
+
+- [`e452c08`](https://github.com/badrap/valita/commit/e452c088855277740404cdf019790141e55938e3) Thanks [@jviide](https://github.com/jviide)! - Avoid dual package hazard
+
 ## 0.3.8
 
 ### Patch Changes
