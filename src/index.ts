@@ -46,7 +46,12 @@ type IssueLeaf = Readonly<
   | { ok: false; code: "invalid_literal"; expected: Literal[] }
   | { ok: false; code: "unrecognized_keys"; keys: Key[] }
   | { ok: false; code: "invalid_union"; tree: IssueTree }
-  | { ok: false; code: "invalid_length"; minLength: number; maxLength: number }
+  | {
+      ok: false;
+      code: "invalid_length";
+      minLength: number;
+      maxLength: number | undefined;
+    }
 >;
 
 type IssueTree =
@@ -65,7 +70,7 @@ type Issue = Readonly<
       code: "invalid_length";
       path: Key[];
       minLength: number;
-      maxLength: number;
+      maxLength: number | undefined;
     }
 >;
 
@@ -193,7 +198,7 @@ function formatIssueTree(tree: IssueTree): string {
     if (min > 0) {
       if (max === min) {
         message += `${min}`;
-      } else if (max < Infinity) {
+      } else if (max !== undefined) {
         message += `between ${min} and ${max}`;
       } else {
         message += `at least ${min}`;
@@ -983,32 +988,39 @@ type TupleOutput<T extends Type[]> = {
   [K in keyof T]: T[K] extends Type<infer U> ? U : never;
 };
 
-type ArrayOutput<Head extends Type[], Rest extends Type | undefined> = [
+type ArrayOutput<
+  Head extends Type[],
+  Rest extends Type | undefined,
+  Tail extends Type[],
+> = [
   ...TupleOutput<Head>,
   ...(Rest extends Type ? Infer<Rest>[] : []),
+  ...TupleOutput<Tail>,
 ];
 
-class ArrayType<
+class ArrayOrTupleType<
   Head extends Type[] = Type[],
   Rest extends Type | undefined = Type | undefined,
-> extends Type<ArrayOutput<Head, Rest>> {
+  Tail extends Type[] = Type[],
+> extends Type<ArrayOutput<Head, Rest, Tail>> {
   readonly name = "array";
 
-  private readonly rest: Type;
+  private readonly restType: Type;
   private readonly invalidType: IssueLeaf;
   private readonly invalidLength: IssueLeaf;
   private readonly minLength: number;
-  private readonly maxLength: number;
+  private readonly maxLength: number | undefined;
 
   constructor(
-    readonly head: Head,
-    rest?: Rest,
+    readonly prefix: Head,
+    readonly rest: Rest | undefined,
+    readonly suffix: Tail,
   ) {
     super();
 
-    this.rest = rest ?? never();
-    this.minLength = this.head.length;
-    this.maxLength = rest ? Infinity : this.minLength;
+    this.restType = rest ?? never();
+    this.minLength = this.prefix.length + this.suffix.length;
+    this.maxLength = rest ? undefined : this.minLength;
     this.invalidType = {
       ok: false,
       code: "invalid_type",
@@ -1022,22 +1034,30 @@ class ArrayType<
     };
   }
 
-  func(arr: unknown, flags: number): RawResult<ArrayOutput<Head, Rest>> {
+  func(arr: unknown, flags: number): RawResult<ArrayOutput<Head, Rest, Tail>> {
     if (!Array.isArray(arr)) {
       return this.invalidType;
     }
 
     const length = arr.length;
     const minLength = this.minLength;
-    const maxLength = this.maxLength;
+    const maxLength = this.maxLength ?? Infinity;
     if (length < minLength || length > maxLength) {
       return this.invalidLength;
     }
 
+    const headEnd = this.prefix.length;
+    const tailStart = arr.length - this.suffix.length;
+
     let issueTree: IssueTree | undefined = undefined;
     let output: unknown[] = arr;
     for (let i = 0; i < arr.length; i++) {
-      const type = i < minLength ? this.head[i] : this.rest;
+      const type =
+        i < headEnd
+          ? this.prefix[i]
+          : i >= tailStart
+            ? this.suffix[i - tailStart]
+            : this.restType;
       const r = type.func(arr[i], flags);
       if (r !== undefined) {
         if (r.ok) {
@@ -1055,9 +1075,85 @@ class ArrayType<
     } else if (arr === output) {
       return undefined;
     } else {
-      return { ok: true, value: output as ArrayOutput<Head, Rest> };
+      return { ok: true, value: output as ArrayOutput<Head, Rest, Tail> };
     }
   }
+
+  concat<T extends ArrayType | TupleType | VariadicTupleType>(
+    type: T,
+  ): ArrayOrTupleType {
+    if (this.rest) {
+      if (type.rest) {
+        throw new TypeError("can not concatenate two variadic types");
+      }
+      return new ArrayOrTupleType(this.prefix, this.rest, [
+        ...this.suffix,
+        ...type.prefix,
+        ...type.suffix,
+      ]);
+    } else if (type.rest) {
+      return new ArrayOrTupleType(
+        [...this.prefix, ...this.suffix, ...type.prefix],
+        type.rest,
+        type.suffix,
+      );
+    } else {
+      return new ArrayOrTupleType(
+        [...this.prefix, ...this.suffix, ...type.prefix, ...type.suffix],
+        type.rest,
+        type.suffix,
+      );
+    }
+  }
+}
+
+interface ArrayType<Element extends Type = Type>
+  extends Type<Infer<Element>[]> {
+  readonly name: "array";
+  readonly prefix: Type[];
+  readonly rest: Element;
+  readonly suffix: Type[];
+
+  concat<Suffix extends Type[]>(
+    type: TupleType<Suffix>,
+  ): VariadicTupleType<[], Element, Suffix>;
+}
+
+interface TupleType<Elements extends Type[] = Type[]>
+  extends Type<TupleOutput<Elements>> {
+  readonly name: "array";
+  readonly prefix: Elements;
+  readonly rest: undefined;
+  readonly suffix: Type[];
+
+  concat<ConcatPrefix extends Type[]>(
+    type: TupleType<ConcatPrefix>,
+  ): TupleType<[...Elements, ...ConcatPrefix]>;
+  concat<
+    ConcatPrefix extends Type[],
+    Rest extends Type | undefined,
+    Suffix extends Type[],
+  >(
+    type: VariadicTupleType<ConcatPrefix, Rest, Suffix>,
+  ): VariadicTupleType<[...Elements, ...ConcatPrefix], Rest, Suffix>;
+  concat<Element extends Type>(
+    type: ArrayType<Element>,
+  ): VariadicTupleType<Elements, Element, []>;
+}
+
+interface VariadicTupleType<
+  Prefix extends Type[] = Type[],
+  Rest extends Type | undefined = undefined,
+  Suffix extends Type[] = Type[],
+> extends Type<ArrayOutput<Prefix, Rest, Suffix>> {
+  readonly name: "array";
+  readonly prefix: Prefix;
+  readonly rest: Rest;
+  readonly suffix: Suffix;
+
+  concat<OtherPrefix extends Type[]>(
+    type: TupleType<OtherPrefix>,
+  ): VariadicTupleType<Prefix, Rest, [...Suffix, ...OtherPrefix]>;
 }
 
 function toInputType(v: unknown): InputType {
@@ -1656,18 +1752,16 @@ function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
  * Create a validator for an array type `T[]`,
  * where `T` is the output type of the given subvalidator.
  */
-function array<T extends Type>(item: T): ArrayType<[], T> {
-  return new ArrayType([], item);
+function array<T extends Type>(item: T): ArrayType<T> {
+  return new ArrayOrTupleType([], item, []) as unknown as ArrayType<T>;
 }
 
 /**
  * Create a validator for an array type `[T1, T2, ..., Tn]`,
  * where `T1`, `T2`, ..., `Tn` are the output types of the given subvalidators.
  */
-function tuple<T extends [] | [Type, ...Type[]]>(
-  items: T,
-): ArrayType<T, undefined> {
-  return new ArrayType(items);
+function tuple<T extends [] | [Type, ...Type[]]>(items: T): TupleType<T> {
+  return new ArrayOrTupleType(items, undefined, []) as unknown as TupleType<T>;
 }
 
 /**
@@ -1708,7 +1802,7 @@ type TerminalType =
   | UndefinedType
   | NullType
   | ObjectType
-  | ArrayType
+  | ArrayOrTupleType
   | LiteralType
   | Optional;
 
@@ -1733,4 +1827,4 @@ export {
 };
 
 export type { Type, Optional };
-export type { ObjectType, ArrayType, UnionType };
+export type { ObjectType, ArrayType, TupleType, VariadicTupleType, UnionType };
