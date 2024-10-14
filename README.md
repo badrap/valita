@@ -369,7 +369,7 @@ range.parse([1, "2"]);
 // ValitaError: invalid_type at .1 (expected number)
 ```
 
-Tuples can be concatenated with other tuples to create new tuple types, and even arrays to create [variadic tuple types](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#variadic-tuple-types).
+Tuples can be concatenated with other tuples to create new tuple types, and with even arrays to create [variadic tuple types](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#variadic-tuple-types).
 
 ```ts
 const twoNumbers = v.tuple([v.number(), v.number()]); // Type<[number number]>
