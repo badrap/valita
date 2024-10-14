@@ -389,7 +389,7 @@ twoNumbers.concat(booleans).concat(twoStrings);
 // Type<[number, number, ...boolean[], string, string]>
 ```
 
-Two variable-length tuples or arrays can not be concatenated, though, so this is a type-level error and raises runtime error as well:
+Two variable-length tuples or arrays can not be concatenated, though, so this is a type-level error and also throws an error at runtime:
 
 ```ts
 v.tuple([]).concat(v.array()).concat(v.array());
