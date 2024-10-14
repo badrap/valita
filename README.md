@@ -369,6 +369,33 @@ range.parse([1, "2"]);
 // ValitaError: invalid_type at .1 (expected number)
 ```
 
+Tuples can be concatenated with other tuples to create new tuple types, and even arrays to create [variadic tuple types](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#variadic-tuple-types).
+
+```ts
+const twoNumbers = v.tuple([v.number(), v.number()]); // Type<[number number]>
+const twoStrings = v.tuple([v.string(), v.string()]); // Type<[string, string]>
+const booleans = v.array(v.boolean()); // Type<boolean[]>
+
+twoNumbers.concat(twoStrings);
+// Type<[number, number, string, string]>
+
+twoNumbers.concat(booleans);
+// Type<[number, number, ...boolean[]]>
+
+booleans.concat(twoStrings);
+// Type<[...boolean[], string, string]>
+
+twoNumbers.concat(booleans).concat(twoStrings);
+// Type<[number, number, ...boolean[], string, string]>
+```
+
+Two variable-length tuples or arrays can not be concatenated, though, so this is a type-level error and raises runtime error as well:
+
+```ts
+v.tuple([]).concat(v.array()).concat(v.array());
+// TypeError: can not concatenate two variadic types
+```
+
 ### Union Types
 
 A union type is a value which can have several different representations. Let's imagine we have a value of type `Shape` that can be either a triangle, a circle or a square:
