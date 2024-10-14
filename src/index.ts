@@ -1752,8 +1752,12 @@ function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
  * Create a validator for an array type `T[]`,
  * where `T` is the output type of the given subvalidator.
  */
-function array<T extends Type>(item: T): ArrayType<T> {
-  return new ArrayOrTupleType([], item, []) as unknown as ArrayType<T>;
+function array<T extends Type>(item?: T): ArrayType<T> {
+  return new ArrayOrTupleType(
+    [],
+    item ?? unknown(),
+    [],
+  ) as unknown as ArrayType<T>;
 }
 
 /**

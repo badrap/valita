@@ -14,6 +14,12 @@ describe("array()", () => {
     }
   });
 
+  it("defaults to unknown[]", () => {
+    const t = v.array();
+    expect(t.parse(["foo", 1])).to.deep.equal(["foo", 1]);
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<unknown[]>();
+  });
+
   it("throws on item mismatch", () => {
     const t = v.array(v.string());
     expect(() => t.parse([1])).to.throw(v.ValitaError);
