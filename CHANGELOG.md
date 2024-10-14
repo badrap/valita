@@ -1,5 +1,15 @@
 # @badrap/valita
 
+## 0.3.10
+
+### Patch Changes
+
+- [`43513b6`](https://github.com/badrap/valita/commit/43513b60087a17e15378fcac1bfce3275d7a6bd4) Thanks [@jviide](https://github.com/jviide)! - Add support for variadic tuple types
+
+  Tuple and array types now have a new method, `.concat()` that can be used to create [variadic tuple types](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#variadic-tuple-types).
+
+- [`43513b6`](https://github.com/badrap/valita/commit/43513b60087a17e15378fcac1bfce3275d7a6bd4) Thanks [@jviide](https://github.com/jviide)! - Make `v.array()` a shorthand for `v.array(v.unknown())`
+
 ## 0.3.9
 
 ### Patch Changes
