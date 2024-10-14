@@ -256,6 +256,21 @@ r.parse({ a: 1, b: "hello" });
 // ValitaError: invalid_type at .b (expected number)
 ```
 
+For allowing any collection of properties of any type, `v.record()` is a shorthand for `v.record(v.unknown())`.
+
+```ts
+const r = v.record();
+
+r.parse({ a: 1, b: 2 });
+// { a: 1, b: 2 }
+r.parse({ a: 1, b: "hello" });
+// { a: 1, b: "hello" }
+
+// The input still has to be an object.
+r.parse([]);
+// ValitaError: invalid_type at . (expected object)
+```
+
 #### Optional Properties
 
 One common API pattern is that some object fields are _optional_, i.e. they can be missing completely or be set to `undefined`. You can allow some keys to be missing by annotating them with `.optional()`.
@@ -313,6 +328,21 @@ a.parse([{ name: "Acme Inc." }, { name: "Evil Corporation" }]);
 a.parse([]);
 // []
 
+a.parse({ 0: { name: "Acme Inc." } });
+// ValitaError: invalid_type at . (expected array)
+```
+
+For allowing any array, `v.array()` is a shorthand for `v.array(v.unknown())`.
+
+```ts
+const a = v.array();
+
+a.parse(["foo", 1]);
+// ["foo", 1]
+a.parse([]);
+// []
+
+// Only arrays are allowed, though.
 a.parse({ 0: { name: "Acme Inc." } });
 // ValitaError: invalid_type at . (expected array)
 ```
