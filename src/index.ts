@@ -437,8 +437,40 @@ abstract class AbstractType<Output = unknown> {
   abstract toTerminals(func: (t: TerminalType) => void): void;
   abstract func(v: unknown, flags: number): RawResult<Output>;
 
-  optional(): Optional<Output> {
-    return new Optional(this);
+  /** @experimental */
+  // Use `<X extends T>() => X` instead of `() => T` to make literal
+  // inference work when an optionals with defaultFn is used as a
+  // ObjectType property.
+  // The same could be accomplished by replacing the `| T` in the
+  // output type with `NoInfer<T>`, but it's supported only from
+  // TypeScript 5.4 onwards.
+  optional<T extends Literal>(
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  // Support parsers like `v.array(t).optional(() => [])`
+  // so that the output type is `Infer<typeof t>[]` instead of
+  // `Infer<typeof t>[] | never[]`.
+  optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
+  /**
+   * Return new optional type that can not be used as a standalone
+   * validator. Rather, it's meant to be used as a with object validators,
+   * to mark one of the object's properties as _optional_. Optional property
+   * types accept both the original type, `undefined` and missing properties.
+   */
+  optional(): Optional<Output>;
+  optional<T>(
+    defaultFn?: () => T,
+  ): Type<Exclude<Output, undefined> | T> | Optional<Output> {
+    const optional = new Optional(this);
+    if (!defaultFn) {
+      return optional;
+    }
+    return new TransformType(optional, (v) => {
+      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
+    });
   }
 
   default<T extends Literal>(
@@ -596,8 +628,23 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     this.type.toTerminals(func);
   }
 
-  optional(): Optional<Output> {
-    return this;
+  optional<T extends Literal>(
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
+  optional(): Optional<Output>;
+  optional<T>(
+    defaultFn?: () => T,
+  ): Type<Exclude<Output, undefined> | T> | Optional<Output> {
+    if (!defaultFn) {
+      return this;
+    }
+    return new TransformType(this, (v) => {
+      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
+    });
   }
 }
 
@@ -1732,7 +1779,7 @@ function literal<T extends Literal>(value: T): Type<T> {
 /**
  * Create a validator for an object type.
  */
-function object<T extends Record<string, Type | Optional>>(
+function object<T extends Record<string, AbstractType>>(
   obj: T,
 ): ObjectType<T, undefined> {
   return new ObjectType(obj, undefined);
