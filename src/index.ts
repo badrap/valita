@@ -1154,6 +1154,9 @@ class ArrayOrTupleType<
   }
 }
 
+/**
+ * A validator for arbitrary-length array types like `T[]`.
+ */
 interface ArrayType<Element extends Type = Type>
   extends Type<Infer<Element>[]> {
   readonly name: "array";
@@ -1166,6 +1169,10 @@ interface ArrayType<Element extends Type = Type>
   ): VariadicTupleType<[], Element, Suffix>;
 }
 
+/**
+ * A validator for a fixed-length tuple type like `[]`, `[T1, T2]`
+ * or `[T1, T2, ..., Tn]`.
+ */
 interface TupleType<Elements extends Type[] = Type[]>
   extends Type<TupleOutput<Elements>> {
   readonly name: "array";
@@ -1188,6 +1195,10 @@ interface TupleType<Elements extends Type[] = Type[]>
   ): VariadicTupleType<Elements, Element, []>;
 }
 
+/**
+ * A validator for a variadic tuple type like `[T1, ...T[], Tn]`,
+ * `[...T[], Tn-1, Tn]` or `[T1, T2, ...T[]]`.
+ */
 interface VariadicTupleType<
   Prefix extends Type[] = Type[],
   Rest extends Type | undefined = undefined,
