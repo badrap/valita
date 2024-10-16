@@ -1,5 +1,23 @@
 # @badrap/valita
 
+## 0.3.11
+
+### Patch Changes
+
+- [`f78c082`](https://github.com/badrap/valita/commit/f78c0825b1a59d6f6cd7e73354526ee517a2bd0b) Thanks [@jviide](https://github.com/jviide)! - Add **experimental** support for `.optional(() => x)`
+
+  The `.optional()` method now supports _default value functions_ for replacing `undefined` and missing values from the input and wrapped validator. The functionality is similar to `.default(x)`, except that `defaultFn` has to be a function and is executed for each validation run. This allows patterns like the following:
+
+  ```ts
+  const Item = v.object({ id: v.string() });
+
+  const Items = v.array(Item).optional(() => []);
+  ```
+
+  This avoids a common pitfall with using `.default([])` for the same pattern. As the newly created empty arrays are not shared, mutating them is safe(r) as it doesn't affect other validation outputs.
+
+  This feature is marked **experimental** for the time being.
+
 ## 0.3.10
 
 ### Patch Changes
