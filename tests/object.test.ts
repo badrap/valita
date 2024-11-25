@@ -157,6 +157,7 @@ describe("object()", () => {
   });
   it("safely sets __proto__ when it's added to already cloned output", () => {
     const o = Object.create(null) as Record<string, v.Type>;
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     o.x = v.unknown().default(true);
     o.__proto__ = v.unknown().default({ a: 1 });
     const t = v.object(o);
