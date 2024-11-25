@@ -3,7 +3,7 @@ import * as v from "../src";
 
 describe("ok()", () => {
   it("infers literals when possible", () => {
-    const t = v.number().chain(() => v.ok("test"));
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<"test">();
+    const _t = v.number().chain(() => v.ok("test"));
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<"test">();
   });
 });

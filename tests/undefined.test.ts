@@ -13,7 +13,7 @@ describe("undefined()", () => {
     }
   });
   it("has output type 'undefined'", () => {
-    const t = v.undefined();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<undefined>();
+    const _t = v.undefined();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<undefined>();
   });
 });

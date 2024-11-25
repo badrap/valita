@@ -13,7 +13,7 @@ describe("string()", () => {
     }
   });
   it("has output type 'string'", () => {
-    const t = v.string();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<string>();
+    const _t = v.string();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string>();
   });
 });

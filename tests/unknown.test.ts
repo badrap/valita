@@ -9,7 +9,7 @@ describe("unknown()", () => {
     }
   });
   it("has output type 'unknown'", () => {
-    const t = v.unknown();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<unknown>();
+    const _t = v.unknown();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<unknown>();
   });
 });

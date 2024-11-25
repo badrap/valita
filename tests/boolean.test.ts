@@ -13,7 +13,7 @@ describe("boolean()", () => {
     }
   });
   it("has output type 'boolean'", () => {
-    const t = v.boolean();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<boolean>();
+    const _t = v.boolean();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<boolean>();
   });
 });

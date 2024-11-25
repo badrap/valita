@@ -102,7 +102,7 @@ function cloneIssueWithPath(tree: IssueLeaf, path: Key[]): Issue {
       return { code, path, keys: tree.keys };
     case "invalid_union":
       return { code, path, tree: tree.tree };
-    default:
+    case "custom_error":
       return { code, path, error: tree.error };
   }
 }
@@ -169,7 +169,7 @@ function formatIssueTree(tree: IssueTree): string {
       count += countIssues(tree.right);
       tree = tree.left;
     } else if (tree.code === "prepend") {
-      path += "." + tree.key;
+      path += `.${tree.key}`;
       tree = tree.tree;
     } else {
       break;
@@ -204,7 +204,7 @@ function formatIssueTree(tree: IssueTree): string {
         message += `at least ${min}`;
       }
     } else {
-      message += `at most ${max}`;
+      message += `at most ${max ?? "∞"}`;
     }
     message += ` item(s)`;
   } else if (tree.code === "custom_error") {
@@ -445,6 +445,7 @@ abstract class AbstractType<Output = unknown> {
   // output type with `NoInfer<T>`, but it's supported only from
   // TypeScript 5.4 onwards.
   optional<T extends Literal>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   // Support parsers like `v.array(t).optional(() => [])`
@@ -629,6 +630,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
 
   optional<T extends Literal>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   optional(
@@ -659,9 +661,9 @@ type ObjectOutput<
   } & {
     [K in keyof T as T[K] extends Optional ? never : K]: Infer<T[K]>;
   } & (R extends Type<infer I>
-      ? { [K: string]: I }
+      ? Record<string, I>
       : R extends Optional<infer J>
-        ? Partial<{ [K: string]: J }>
+        ? Partial<Record<string, J>>
         : unknown)
 >;
 
@@ -819,7 +821,7 @@ function createObjectMatcher(
   const requiredKeys: string[] = [];
   const optionalKeys: string[] = [];
   for (const key in shape) {
-    let hasOptional = false;
+    let hasOptional = false as boolean;
     shape[key].toTerminals((t) => {
       hasOptional ||= t.name === "optional";
     });
@@ -1126,9 +1128,7 @@ class ArrayOrTupleType<
     }
   }
 
-  concat<T extends ArrayType | TupleType | VariadicTupleType>(
-    type: T,
-  ): ArrayOrTupleType {
+  concat(type: ArrayType | TupleType | VariadicTupleType): ArrayOrTupleType {
     if (this.rest) {
       if (type.rest) {
         throw new TypeError("can not concatenate two variadic types");
@@ -1235,7 +1235,7 @@ function findCommonKeys(rs: ObjectShape[]): string[] {
   const map = new Map<string, number>();
   rs.forEach((r) => {
     for (const key in r) {
-      map.set(key, (map.get(key) || 0) + 1);
+      map.set(key, (map.get(key) ?? 0) + 1);
     }
   });
   const result = [] as string[];
@@ -1272,12 +1272,12 @@ function groupTerminals(
     } else if (terminal.name === "unknown") {
       unknowns.push(root);
     } else if (terminal.name === "literal") {
-      const roots = literals.get(terminal.value) || [];
+      const roots = literals.get(terminal.value) ?? [];
       roots.push(root);
       literals.set(terminal.value, roots);
       expectedTypes.push(toInputType(terminal.value));
     } else {
-      const roots = types.get(terminal.name) || [];
+      const roots = types.get(terminal.name) ?? [];
       roots.push(root);
       types.set(terminal.name, roots);
       expectedTypes.push(terminal.name);
@@ -1428,15 +1428,10 @@ function createUnionBaseMatcher(
   }
 
   return function (value: unknown, flags: number) {
-    let options: undefined | AbstractType[];
-    if (flags & FLAG_MISSING_VALUE) {
-      options = optionals;
-    } else {
-      options = byType?.[toInputType(value)] ?? litMap?.get(value) ?? unknowns;
-    }
-    if (!options) {
-      return issue;
-    }
+    const options =
+      flags & FLAG_MISSING_VALUE
+        ? optionals
+        : (byType?.[toInputType(value)] ?? litMap?.get(value) ?? unknowns);
 
     let count = 0;
     let issueTree: IssueTree = issue;
@@ -1464,18 +1459,20 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
-    this.options.forEach((o) => o.toTerminals(func));
+    this.options.forEach((o) => {
+      o.toTerminals(func);
+    });
   }
 
   func(v: unknown, flags: number): RawResult<Infer<T[number]>> {
     let func = this._func;
     if (func === undefined) {
       const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
-      this.options.forEach((option) =>
+      this.options.forEach((option) => {
         option.toTerminals((terminal) => {
           flattened.push({ root: option, terminal });
-        }),
-      );
+        });
+      });
       const base = createUnionBaseMatcher(flattened);
       const object = createUnionObjectMatcher(flattened);
       if (!object) {
@@ -1535,7 +1532,6 @@ class TransformType<Output> extends Type<Output> {
       this.transformRoot = next;
     }
 
-    // eslint-disable-next-line
     let result = this.transformRoot!.func(v, flags);
     if (result !== undefined && !result.ok) {
       return result;
@@ -1628,7 +1624,7 @@ function never(): Type<never> {
   return neverSingleton;
 }
 
-class UnknownType extends Type<unknown> {
+class UnknownType extends Type {
   readonly name = "unknown";
   func(_: unknown, __: number): RawResult<unknown> {
     return undefined;
@@ -1640,7 +1636,7 @@ const unknownSingleton = new UnknownType();
  * Create a validator that matches any value,
  * analogous to the TypeScript type `unknown`.
  */
-function unknown(): Type<unknown> {
+function unknown(): Type {
   return unknownSingleton;
 }
 

@@ -5,7 +5,7 @@ describe("record()", () => {
   it("acceps empty objects", () => {
     const t = v.record(v.unknown());
     expect(t.parse({})).to.deep.equal({});
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ [K: string]: unknown }>();
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<Record<string, unknown>>();
   });
   it("does not accept arrays", () => {
     const t = v.record(v.unknown());
@@ -14,12 +14,12 @@ describe("record()", () => {
   it("acceps the defined types of values", () => {
     const t = v.record(v.number());
     expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ [K: string]: number }>();
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<Record<string, number>>();
   });
   it("defaults to Record<string, unknown>", () => {
     const t = v.record();
     expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ [K: string]: unknown }>();
+    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<Record<string, unknown>>();
   });
   it("rejects values other than the defined type", () => {
     const t = v.record(v.number());

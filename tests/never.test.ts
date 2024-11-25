@@ -9,8 +9,8 @@ describe("never()", () => {
     }
   });
   it("has output type 'never'", () => {
-    const t = v.never();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<never>();
+    const _t = v.never();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<never>();
   });
   it("never propagates to assert()", () => {
     let called = false;
@@ -19,15 +19,16 @@ describe("never()", () => {
       return true;
     });
     expect(() => t.parse(null)).to.throw(v.ValitaError);
-    expect(called).to.be.false;
+    expect(called).toBe(false);
   });
   it("never propagates to map()", () => {
     let called = false;
     const t = v.never().map(() => {
       called = true;
+      return undefined;
     });
     expect(() => t.parse(null)).to.throw(v.ValitaError);
-    expect(called).to.be.false;
+    expect(called).toBe(false);
   });
   it("never propagates to chain()", () => {
     let called = false;
@@ -36,6 +37,6 @@ describe("never()", () => {
       return v.ok(true);
     });
     expect(() => t.parse(null)).to.throw(v.ValitaError);
-    expect(called).to.be.false;
+    expect(called).toBe(false);
   });
 });

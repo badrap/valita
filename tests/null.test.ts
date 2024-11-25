@@ -13,7 +13,7 @@ describe("null()", () => {
     }
   });
   it("has output type 'null'", () => {
-    const t = v.null();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<null>();
+    const _t = v.null();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<null>();
   });
 });

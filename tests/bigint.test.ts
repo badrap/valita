@@ -13,7 +13,7 @@ describe("bigint()", () => {
     }
   });
   it("has output type 'bigint'", () => {
-    const t = v.bigint();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<bigint>();
+    const _t = v.bigint();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<bigint>();
   });
 });

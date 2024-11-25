@@ -38,8 +38,8 @@ describe("array()", () => {
   });
 
   it("infers array", () => {
-    const t = v.array(v.number());
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<number[]>();
+    const _t = v.array(v.number());
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number[]>();
   });
 
   describe("concat()", () => {

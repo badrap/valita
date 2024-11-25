@@ -13,7 +13,7 @@ describe("number()", () => {
     }
   });
   it("has output type 'number'", () => {
-    const t = v.number();
-    expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<number>();
+    const _t = v.number();
+    expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number>();
   });
 });

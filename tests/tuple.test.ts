@@ -5,16 +5,16 @@ describe("tuple()", () => {
   it("returns a fixed-length tuple", () => {
     const t = v.tuple([v.number(), v.number()]);
     expect(t.prefix).toHaveLength(2);
-    expect(t.rest).to.be.undefined;
-    expect(t.suffix).to.toHaveLength(0);
+    expect(t.rest).toBe(undefined);
+    expect(t.suffix).toHaveLength(0);
   });
 
   describe("concat()", () => {
     it("creates a fixed-length tuple from two fixed-length tuples", () => {
       const t = v.tuple([v.number()]).concat(v.tuple([v.string()]));
-      expect(t.prefix).to.toHaveLength(2);
-      expect(t.rest).to.be.undefined;
-      expect(t.suffix).to.toHaveLength(0);
+      expect(t.prefix).toHaveLength(2);
+      expect(t.rest).toBe(undefined);
+      expect(t.suffix).toHaveLength(0);
     });
 
     it("creates a variadic tuple from a fixed-length tuple and an array", () => {
@@ -22,7 +22,7 @@ describe("tuple()", () => {
       const t = v.tuple([v.number(), v.number()]).concat(v.array(v.string()));
       expect(t.prefix).toHaveLength(2);
       expect(t.rest).toStrictEqual(s);
-      expect(t.suffix).to.toHaveLength(0);
+      expect(t.suffix).toHaveLength(0);
     });
 
     it("creates a variadic tuple from a variadic and a fixed-length tuple", () => {
@@ -152,8 +152,8 @@ describe("tuple()", () => {
     });
 
     it("infers tuple", () => {
-      const t = v.tuple([v.number(), v.string()]);
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<[number, string]>();
+      const _t = v.tuple([v.number(), v.string()]);
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<[number, string]>();
     });
 
     it("returns the original array instance if possible", () => {
@@ -232,8 +232,8 @@ describe("tuple()", () => {
     });
 
     it("infers a variadic tuple", () => {
-      const t = v.tuple([v.number(), v.string()]).concat(v.array(v.boolean()));
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<
+      const _t = v.tuple([v.number(), v.string()]).concat(v.array(v.boolean()));
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<
         [number, string, ...boolean[]]
       >();
     });
@@ -343,11 +343,11 @@ describe("tuple()", () => {
     });
 
     it("infers a variadic tuple with a suffix", () => {
-      const t = v
+      const _t = v
         .tuple([v.number()])
         .concat(v.array(v.boolean()))
         .concat(v.tuple([v.string(), v.null()]));
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<
         [number, ...boolean[], string, null]
       >();
     });
