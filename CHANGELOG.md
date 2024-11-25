@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.3.12
+
+### Patch Changes
+
+- [`8aaad50`](https://github.com/badrap/valita/commit/8aaad504c693047b62a1ae5f57d406f4f2f4cad4) Thanks [@jviide](https://github.com/jviide)! - Mark `.optional(() => ...)` as non-experimental and recommend it over the now-deprecated `.default(x)`
+
 ## 0.3.11
 
 ### Patch Changes
