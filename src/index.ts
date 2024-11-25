@@ -437,7 +437,17 @@ abstract class AbstractType<Output = unknown> {
   abstract toTerminals(func: (t: TerminalType) => void): void;
   abstract func(v: unknown, flags: number): RawResult<Output>;
 
-  /** @experimental */
+  /**
+   * Return new optional type that can not be used as a standalone
+   * validator. Rather, it's meant to be used as a with object validators,
+   * to mark one of the object's properties as _optional_. Optional property
+   * types accept both the original type, `undefined` and missing properties.
+   *
+   * The optional `defaultFn` function, if provided, will be called each
+   * time a value that is missing or `undefined` is parsed.
+   *
+   * @param [defaultFn] - An optional function returning the default value.
+   */
   // Use `<X extends T>() => X` instead of `() => T` to make literal
   // inference work when an optionals with defaultFn is used as a
   // ObjectType property.
@@ -455,12 +465,6 @@ abstract class AbstractType<Output = unknown> {
     defaultFn: () => Exclude<Output, undefined>,
   ): Type<Exclude<Output, undefined>>;
   optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
-  /**
-   * Return new optional type that can not be used as a standalone
-   * validator. Rather, it's meant to be used as a with object validators,
-   * to mark one of the object's properties as _optional_. Optional property
-   * types accept both the original type, `undefined` and missing properties.
-   */
   optional(): Optional<Output>;
   optional<T>(
     defaultFn?: () => T,
@@ -474,6 +478,9 @@ abstract class AbstractType<Output = unknown> {
     });
   }
 
+  /**
+   * @deprecated Instead of `.default(x)` use `.optional(() => x)`.
+   */
   default<T extends Literal>(
     defaultValue: T,
   ): Type<Exclude<Output, undefined> | T>;

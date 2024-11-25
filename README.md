@@ -299,13 +299,13 @@ const t = v.string().optional();
 t.parse("Hello, World!");
 ```
 
-The `.default(...)` method can be used to set a default value for a missing or undefined value.
+An optional function can be used to replace a missing or undefined values with some other default value:
 
 ```ts
 const person = v.object({
   name: v.string(),
   // Set a sensible default for those unwilling to fill in their theme song
-  themeSong: v.string().default("Tribute"),
+  themeSong: v.string().optional(() => "Tribute"),
 });
 
 person.parse({ name: "Jane Doe", themeSong: "Never gonna give you up" });
@@ -315,6 +315,8 @@ person.parse({ name: "Jane Doe" });
 person.parse({ name: "Jane Doe", themeSong: undefined });
 // { name: "Jane Doe", themeSong: "Tribute" }
 ```
+
+The default function is re-evaluated every for every missing or undefined value to avoid accidentally sharing mutable default values like objects or arrays between different parsed values.
 
 ### Array Types
 
