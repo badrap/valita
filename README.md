@@ -23,7 +23,7 @@ vehicle.parse({ type: "bike" });
 2. **Minimalism**: Deliver a streamlined and concentrated library that offers just the essentials.
 3. **Extensibility**: Allow users to create their own validators and parsers that cater to specific validation scenarios.
 
-### Non-Goals:
+### Non-Goals
 
 1. **Data Definition**: The library is designed to validate and parse input data as it enters the program, rather than serving as an exhaustive tool for defining all types within the program after obtaining input.
 2. **Extensive Built-In Formats**: The library does not prioritize having a large array of built-in validation formats out of the box.
