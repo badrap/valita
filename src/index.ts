@@ -817,6 +817,19 @@ class ObjectType<
   }
 }
 
+function set(obj: Record<string, unknown>, key: string, value: unknown): void {
+  if (key === "__proto__") {
+    Object.defineProperty(obj, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    obj[key] = value;
+  }
+}
+
 function createObjectMatcher(
   shape: ObjectShape,
   rest?: AbstractType,
@@ -825,22 +838,28 @@ function createObjectMatcher(
     issue: IssueLeaf;
   }[],
 ): (v: Record<string, unknown>, flags: number) => RawResult<unknown> {
-  const requiredKeys: string[] = [];
-  const optionalKeys: string[] = [];
-  for (const key in shape) {
-    let hasOptional = false as boolean;
-    shape[key].toTerminals((t) => {
-      hasOptional ||= t.name === "optional";
+  const missingValue = {
+    ok: false,
+    code: "missing_value",
+  } as const;
+
+  const indexedEntries = Object.keys(shape).map((key) => {
+    const type = shape[key];
+
+    let optional = false as boolean;
+    type.toTerminals((t) => {
+      optional ||= t.name === "optional";
     });
-    if (hasOptional) {
-      optionalKeys.push(key);
-    } else {
-      requiredKeys.push(key);
-    }
-  }
-  const keys = [...requiredKeys, ...optionalKeys];
-  const totalCount = keys.length;
-  if (totalCount === 0 && rest?.name === "unknown") {
+
+    return {
+      key,
+      type,
+      optional,
+      missing: prependPath(key, missingValue),
+    };
+  });
+
+  if (indexedEntries.length === 0 && rest?.name === "unknown") {
     // A fast path for record(unknown())
     return function (obj, _) {
       if (checks !== undefined) {
@@ -854,35 +873,19 @@ function createObjectMatcher(
     };
   }
 
-  const types = keys.map((key) => shape[key]);
-  const requiredCount = requiredKeys.length;
-  const invertedIndexes = Object.create(null) as Record<string, number>;
-  keys.forEach((key, index) => {
-    invertedIndexes[key] = ~index;
+  const keyedEntries = Object.create(null) as Record<
+    string,
+    { index: number; type: AbstractType } | undefined
+  >;
+  indexedEntries.forEach((entry, index) => {
+    keyedEntries[entry.key] = {
+      index,
+      type: entry.type,
+    };
   });
-  const missingValues = requiredKeys.map((key) =>
-    prependPath(key, {
-      ok: false,
-      code: "missing_value",
-    }),
-  );
 
-  function set(
-    obj: Record<string, unknown>,
-    key: string,
-    value: unknown,
-  ): void {
-    if (key === "__proto__") {
-      Object.defineProperty(obj, key, {
-        value,
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      });
-    } else {
-      obj[key] = value;
-    }
-  }
+  const fallbackEntry =
+    rest === undefined ? undefined : { index: -1, type: rest };
 
   return function (obj, flags) {
     let copied = false;
@@ -895,20 +898,11 @@ function createObjectMatcher(
     if (
       flags & FLAG_FORBID_EXTRA_KEYS ||
       flags & FLAG_STRIP_EXTRA_KEYS ||
-      rest !== undefined
+      fallbackEntry !== undefined
     ) {
       for (const key in obj) {
-        const value = obj[key];
-        const index = ~invertedIndexes[key];
-
-        let r: RawResult<unknown>;
-        if (index >= 0) {
-          seenCount++;
-          seenBits = setBit(seenBits, index);
-          r = types[index].func(value, flags);
-        } else if (rest !== undefined) {
-          r = rest.func(value, flags);
-        } else {
+        const entry = keyedEntries[key] ?? fallbackEntry;
+        if (entry === undefined) {
           if (flags & FLAG_FORBID_EXTRA_KEYS) {
             if (unrecognized === undefined) {
               unrecognized = [key];
@@ -922,9 +916,9 @@ function createObjectMatcher(
           ) {
             output = {};
             copied = true;
-            for (let m = 0; m < totalCount; m++) {
+            for (let m = 0; m < indexedEntries.length; m++) {
               if (getBit(seenBits, m)) {
-                const k = keys[m];
+                const k = indexedEntries[m].key;
                 set(output, k, obj[k]);
               }
             }
@@ -932,6 +926,8 @@ function createObjectMatcher(
           continue;
         }
 
+        const value = obj[key];
+        const r = entry.type.func(value, flags);
         if (r === undefined) {
           if (copied && issues === undefined) {
             set(output, key, value);
@@ -942,10 +938,10 @@ function createObjectMatcher(
           if (!copied) {
             output = {};
             copied = true;
-            if (rest === undefined) {
-              for (let m = 0; m < totalCount; m++) {
-                if (m !== index && getBit(seenBits, m)) {
-                  const k = keys[m];
+            if (fallbackEntry === undefined) {
+              for (let m = 0; m < indexedEntries.length; m++) {
+                if (getBit(seenBits, m)) {
+                  const k = indexedEntries[m].key;
                   set(output, k, obj[k]);
                 }
               }
@@ -957,45 +953,50 @@ function createObjectMatcher(
           }
           set(output, key, r.value);
         }
+
+        if (entry.index >= 0) {
+          seenCount++;
+          seenBits = setBit(seenBits, entry.index);
+        }
       }
     }
 
-    if (seenCount < totalCount) {
-      for (let i = 0; i < totalCount; i++) {
+    if (seenCount < indexedEntries.length) {
+      for (let i = 0; i < indexedEntries.length; i++) {
         if (getBit(seenBits, i)) {
           continue;
         }
-        const key = keys[i];
-        const value = obj[key];
+        const entry = indexedEntries[i];
+        const value = obj[entry.key];
 
         let keyFlags = flags & ~FLAG_MISSING_VALUE;
-        if (value === undefined && !(key in obj)) {
-          if (i < requiredCount) {
-            issues = joinIssues(issues, missingValues[i]);
+        if (value === undefined && !(entry.key in obj)) {
+          if (!entry.optional) {
+            issues = joinIssues(issues, entry.missing);
             continue;
           }
           keyFlags |= FLAG_MISSING_VALUE;
         }
 
-        const r = types[i].func(value, keyFlags);
+        const r = entry.type.func(value, keyFlags);
         if (r === undefined) {
           if (
             copied &&
             issues === undefined &&
             !(keyFlags & FLAG_MISSING_VALUE)
           ) {
-            set(output, key, value);
+            set(output, entry.key, value);
           }
         } else if (!r.ok) {
-          issues = joinIssues(issues, prependPath(key, r));
+          issues = joinIssues(issues, prependPath(entry.key, r));
         } else if (issues === undefined) {
           if (!copied) {
             output = {};
             copied = true;
-            if (rest === undefined) {
-              for (let m = 0; m < totalCount; m++) {
+            if (fallbackEntry === undefined) {
+              for (let m = 0; m < indexedEntries.length; m++) {
                 if (m < i || getBit(seenBits, m)) {
-                  const k = keys[m];
+                  const k = indexedEntries[m].key;
                   set(output, k, obj[k]);
                 }
               }
@@ -1005,13 +1006,13 @@ function createObjectMatcher(
               }
               for (let m = 0; m < i; m++) {
                 if (!getBit(seenBits, m)) {
-                  const k = keys[m];
+                  const k = indexedEntries[m].key;
                   set(output, k, obj[k]);
                 }
               }
             }
           }
-          set(output, key, r.value);
+          set(output, entry.key, r.value);
         }
       }
     }
