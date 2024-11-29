@@ -32,7 +32,9 @@ export default [
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-confusing-void-expression": "off",
       "@typescript-eslint/consistent-type-definitions": "off",
+      "@typescript-eslint/consistent-indexed-object-style": "off",
       "@typescript-eslint/prefer-return-this-type": "off",
+      "@typescript-eslint/unbound-method": "off",
       "@typescript-eslint/restrict-template-expressions": [
         "error",
         {
