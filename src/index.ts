@@ -54,6 +54,28 @@ type IssueLeaf = Readonly<
     }
 >;
 
+function expectedType(expected: InputType[]): IssueLeaf {
+  return {
+    ok: false,
+    code: "invalid_type",
+    expected,
+  };
+}
+
+const ISSUE_EXPECTED_NOTHING = expectedType([]);
+const ISSUE_EXPECTED_STRING = expectedType(["string"]);
+const ISSUE_EXPECTED_NUMBER = expectedType(["number"]);
+const ISSUE_EXPECTED_BIGINT = expectedType(["bigint"]);
+const ISSUE_EXPECTED_BOOLEAN = expectedType(["boolean"]);
+const ISSUE_EXPECTED_UNDEFINED = expectedType(["undefined"]);
+const ISSUE_EXPECTED_NULL = expectedType(["null"]);
+const ISSUE_EXPECTED_OBJECT = expectedType(["object"]);
+const ISSUE_EXPECTED_ARRAY = expectedType(["array"]);
+const ISSUE_MISSING_VALUE: IssueLeaf = {
+  ok: false,
+  code: "missing_value",
+};
+
 type IssueTree =
   | Readonly<{ ok: false; code: "prepend"; key: Key; tree: IssueTree }>
   | Readonly<{ ok: false; code: "join"; left: IssueTree; right: IssueTree }>
@@ -403,16 +425,13 @@ function err(error?: CustomError): Err {
   return new ErrImpl({ ok: false, code: "custom_error", error });
 }
 
-type RawResult<T> = undefined | Ok<T> | IssueTree;
-
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-const FLAG_FORBID_EXTRA_KEYS = 0x1;
-const FLAG_STRIP_EXTRA_KEYS = 0x2;
-const FLAG_MISSING_VALUE = 0x4;
-type Func<T> = (v: unknown, flags: number) => RawResult<T>;
+const FLAG_FORBID_EXTRA_KEYS = 1 << 0;
+const FLAG_STRIP_EXTRA_KEYS = 1 << 1;
+const FLAG_MISSING_VALUE = 1 << 2;
 
 /**
  * Return the inferred output type of a validator.
@@ -432,10 +451,80 @@ type ParseOptions = {
   mode?: "passthrough" | "strict" | "strip";
 };
 
+const TAG_UNKNOWN = 0;
+const TAG_NEVER = 1;
+const TAG_STRING = 2;
+const TAG_NUMBER = 3;
+const TAG_BIGINT = 4;
+const TAG_BOOLEAN = 5;
+const TAG_NULL = 6;
+const TAG_UNDEFINED = 7;
+const TAG_LITERAL = 8;
+const TAG_OPTIONAL = 9;
+const TAG_OBJECT = 10;
+const TAG_ARRAY = 11;
+const TAG_UNION = 12;
+const TAG_TRANSFORM = 13;
+
+type MatcherResult = undefined | Ok<unknown> | IssueTree;
+
+type Matcher<Input = unknown> = (value: Input, flags: number) => MatcherResult;
+
+type TaggedMatcher = { tag: number; match: Matcher };
+
+const taggedMatcher = (tag: number, match: Matcher): TaggedMatcher => {
+  return { tag, match };
+};
+
+function callMatcher(
+  matcher: TaggedMatcher,
+  value: unknown,
+  flags: number,
+): MatcherResult {
+  switch (matcher.tag) {
+    case TAG_UNKNOWN:
+      return undefined;
+    case TAG_NEVER:
+      return ISSUE_EXPECTED_NOTHING;
+    case TAG_STRING:
+      return typeof value === "string" ? undefined : ISSUE_EXPECTED_STRING;
+    case TAG_NUMBER:
+      return typeof value === "number" ? undefined : ISSUE_EXPECTED_NUMBER;
+    case TAG_BIGINT:
+      return typeof value === "bigint" ? undefined : ISSUE_EXPECTED_BIGINT;
+    case TAG_BOOLEAN:
+      return typeof value === "boolean" ? undefined : ISSUE_EXPECTED_BOOLEAN;
+    case TAG_NULL:
+      return value === null ? undefined : ISSUE_EXPECTED_NULL;
+    case TAG_UNDEFINED:
+      return value === undefined ? undefined : ISSUE_EXPECTED_UNDEFINED;
+    case TAG_LITERAL:
+      return matcher.match(value, flags);
+    case TAG_OPTIONAL:
+      return matcher.match(value, flags);
+    case TAG_OBJECT:
+      return matcher.match(value, flags);
+    case TAG_ARRAY:
+      return matcher.match(value, flags);
+    case TAG_UNION:
+      return matcher.match(value, flags);
+    case TAG_TRANSFORM:
+      return matcher.match(value, flags);
+    default:
+      return matcher.match(value, flags);
+  }
+}
+
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
   abstract toTerminals(func: (t: TerminalType) => void): void;
-  abstract func(v: unknown, flags: number): RawResult<Output>;
+  abstract createMatcher(): TaggedMatcher;
+
+  get matcher(): TaggedMatcher {
+    const value = this.createMatcher();
+    Object.defineProperty(this, "matcher", { value });
+    return value;
+  }
 
   /**
    * Return new optional type that can not be used as a standalone
@@ -469,7 +558,13 @@ abstract class AbstractType<Output = unknown> {
   optional<T>(
     defaultFn?: () => T,
   ): Type<Exclude<Output, undefined> | T> | Optional<Output> {
-    const optional = new Optional(this);
+    // If this type is already Optional there's no need to wrap it inside
+    // a new Optional instance.
+    const optional =
+      this.name === "optional"
+        ? (this as unknown as Optional<Output>)
+        : new Optional(this);
+
     if (!defaultFn) {
       return optional;
     }
@@ -550,14 +645,16 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value without throwing.
    */
   try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
-    let flags = FLAG_FORBID_EXTRA_KEYS;
-    if (options?.mode === "passthrough") {
-      flags = 0;
-    } else if (options?.mode === "strip") {
-      flags = FLAG_STRIP_EXTRA_KEYS;
-    }
-
-    const r = this.func(v, flags);
+    const r = this.matcher.match(
+      v,
+      options === undefined
+        ? FLAG_FORBID_EXTRA_KEYS
+        : options.mode === "strip"
+          ? FLAG_STRIP_EXTRA_KEYS
+          : options.mode === "passthrough"
+            ? 0
+            : FLAG_FORBID_EXTRA_KEYS,
+    );
     if (r === undefined) {
       return { ok: true, value: v as Infer<this> };
     } else if (r.ok) {
@@ -571,14 +668,16 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value. Throw a ValitaError on failure.
    */
   parse(v: unknown, options?: ParseOptions): Infer<this> {
-    let flags = FLAG_FORBID_EXTRA_KEYS;
-    if (options?.mode === "passthrough") {
-      flags = 0;
-    } else if (options?.mode === "strip") {
-      flags = FLAG_STRIP_EXTRA_KEYS;
-    }
-
-    const r = this.func(v, flags);
+    const r = this.matcher.match(
+      v,
+      options === undefined
+        ? FLAG_FORBID_EXTRA_KEYS
+        : options.mode === "strip"
+          ? FLAG_STRIP_EXTRA_KEYS
+          : options.mode === "passthrough"
+            ? 0
+            : FLAG_FORBID_EXTRA_KEYS,
+    );
     if (r === undefined) {
       return v as Infer<this>;
     } else if (r.ok) {
@@ -590,18 +689,22 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 }
 
 class Nullable<Output = unknown> extends Type<Output | null> {
-  readonly name = "nullable";
+  readonly name = "union";
 
   constructor(private readonly type: Type<Output>) {
     super();
   }
 
-  func(v: unknown, flags: number): RawResult<Output | null> {
-    return v === null ? undefined : this.type.func(v, flags);
+  createMatcher(): TaggedMatcher {
+    const matcher = this.type.matcher;
+
+    return taggedMatcher(TAG_UNION, (v, flags) =>
+      v === null ? undefined : callMatcher(matcher, v, flags),
+    );
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
-    func(nullSingleton);
+    func(null_() as TerminalType);
     this.type.toTerminals(func);
   }
 
@@ -624,36 +727,20 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     super();
   }
 
-  func(v: unknown, flags: number): RawResult<Output | undefined> {
-    return v === undefined || flags & FLAG_MISSING_VALUE
-      ? undefined
-      : this.type.func(v, flags);
+  createMatcher(): TaggedMatcher {
+    const matcher = this.type.matcher;
+
+    return taggedMatcher(TAG_OPTIONAL, (v, flags) =>
+      v === undefined || flags & FLAG_MISSING_VALUE
+        ? undefined
+        : callMatcher(matcher, v, flags),
+    );
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
     func(this);
-    func(undefinedSingleton);
+    func(undefined_() as TerminalType);
     this.type.toTerminals(func);
-  }
-
-  optional<T extends Literal>(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
-    defaultFn: <X extends T>() => X,
-  ): Type<Exclude<Output, undefined> | T>;
-  optional(
-    defaultFn: () => Exclude<Output, undefined>,
-  ): Type<Exclude<Output, undefined>>;
-  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
-  optional(): Optional<Output>;
-  optional<T>(
-    defaultFn?: () => T,
-  ): Type<Exclude<Output, undefined> | T> | Optional<Output> {
-    if (!defaultFn) {
-      return this;
-    }
-    return new TransformType(this, (v) => {
-      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
-    });
   }
 }
 
@@ -719,17 +806,6 @@ class ObjectType<
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
-  private _func?: (
-    obj: Record<string, unknown>,
-    flags: number,
-  ) => RawResult<unknown>;
-
-  private _invalidType: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["object"],
-  };
-
   constructor(
     readonly shape: Shape,
     private readonly restType: Rest,
@@ -739,6 +815,14 @@ class ObjectType<
     }[],
   ) {
     super();
+  }
+
+  createMatcher(): TaggedMatcher {
+    const func = createObjectMatcher(this.shape, this.restType, this.checks);
+
+    return taggedMatcher(TAG_OBJECT, (v, flags) =>
+      isObject(v) ? func(v, flags) : ISSUE_EXPECTED_OBJECT,
+    );
   }
 
   check(
@@ -755,19 +839,6 @@ class ObjectType<
     ]);
   }
 
-  func(v: unknown, flags: number): RawResult<ObjectOutput<Shape, Rest>> {
-    if (!isObject(v)) {
-      return this._invalidType;
-    }
-
-    let func = this._func;
-    if (func === undefined) {
-      func = createObjectMatcher(this.shape, this.restType, this.checks);
-      this._func = func;
-    }
-    return func(v, flags) as RawResult<ObjectOutput<Shape, Rest>>;
-  }
-
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
     return new ObjectType(this.shape, restType);
   }
@@ -781,23 +852,23 @@ class ObjectType<
     );
   }
 
-  pick<K extends (keyof Shape)[]>(
+  pick<K extends (string & keyof Shape)[]>(
     ...keys: K
   ): ObjectType<Pick<Shape, K[number]>, undefined> {
     const shape = {} as Pick<Shape, K[number]>;
-    keys.forEach((key) => {
-      shape[key] = this.shape[key];
-    });
+    for (const key of keys) {
+      set(shape, key, this.shape[key]);
+    }
     return new ObjectType(shape, undefined);
   }
 
-  omit<K extends (keyof Shape)[]>(
+  omit<K extends (string & keyof Shape)[]>(
     ...keys: K
   ): ObjectType<Omit<Shape, K[number]>, Rest> {
     const shape = { ...this.shape };
-    keys.forEach((key) => {
+    for (const key of keys) {
       delete shape[key];
-    });
+    }
     return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
   }
 
@@ -806,9 +877,9 @@ class ObjectType<
     Rest extends AbstractType<infer I> ? Optional<I> : undefined
   > {
     const shape = {} as Record<string, unknown>;
-    Object.keys(this.shape).forEach((key) => {
-      shape[key] = this.shape[key].optional();
-    });
+    for (const key of Object.keys(this.shape)) {
+      set(shape, key, this.shape[key].optional());
+    }
     const rest = this.restType?.optional();
     return new ObjectType(
       shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
@@ -837,13 +908,16 @@ function createObjectMatcher(
     func: (v: unknown) => boolean;
     issue: IssueLeaf;
   }[],
-): (v: Record<string, unknown>, flags: number) => RawResult<unknown> {
-  const missingValue = {
-    ok: false,
-    code: "missing_value",
-  } as const;
+): Matcher<Record<string, unknown>> {
+  type Entry = {
+    key: string;
+    index: number;
+    matcher: TaggedMatcher;
+    optional: boolean;
+    missing: IssueTree;
+  };
 
-  const indexedEntries = Object.keys(shape).map((key) => {
+  const indexedEntries = Object.keys(shape).map((key, index) => {
     const type = shape[key];
 
     let optional = false as boolean;
@@ -853,56 +927,46 @@ function createObjectMatcher(
 
     return {
       key,
-      type,
+      index,
+      matcher: type.matcher,
       optional,
-      missing: prependPath(key, missingValue),
-    };
+      missing: prependPath(key, ISSUE_MISSING_VALUE),
+    } satisfies Entry;
   });
 
-  if (indexedEntries.length === 0 && rest?.name === "unknown") {
-    // A fast path for record(unknown())
-    return function (obj, _) {
-      if (checks !== undefined) {
-        for (let i = 0; i < checks.length; i++) {
-          if (!checks[i].func(obj)) {
-            return checks[i].issue;
-          }
-        }
-      }
-      return undefined;
-    };
+  const keyedEntries = Object.create(null) as { [K in string]?: Entry };
+  for (const entry of indexedEntries) {
+    keyedEntries[entry.key] = entry;
   }
 
-  const keyedEntries = Object.create(null) as Record<
-    string,
-    { index: number; type: AbstractType } | undefined
-  >;
-  indexedEntries.forEach((entry, index) => {
-    keyedEntries[entry.key] = {
-      index,
-      type: entry.type,
-    };
-  });
+  const restMatcher = rest?.matcher;
 
-  const fallbackEntry =
-    rest === undefined ? undefined : { index: -1, type: rest };
+  // A fast path for record(unknown()) without checks
+  const fastPath =
+    indexedEntries.length === 0 &&
+    rest?.name === "unknown" &&
+    checks === undefined;
 
-  return function (obj, flags) {
-    let copied = false;
-    let output = obj;
-    let issues: IssueTree | undefined;
+  return (obj, flags) => {
+    if (fastPath) {
+      return undefined;
+    }
+
+    let output: Record<string, unknown> | undefined = undefined;
+    let issues: IssueTree | undefined = undefined;
     let unrecognized: Key[] | undefined = undefined;
     let seenBits: BitSet = 0;
     let seenCount = 0;
 
     if (
-      flags & FLAG_FORBID_EXTRA_KEYS ||
-      flags & FLAG_STRIP_EXTRA_KEYS ||
-      fallbackEntry !== undefined
+      flags & (FLAG_FORBID_EXTRA_KEYS | FLAG_STRIP_EXTRA_KEYS) ||
+      restMatcher !== undefined
     ) {
       for (const key in obj) {
-        const entry = keyedEntries[key] ?? fallbackEntry;
-        if (entry === undefined) {
+        const value = obj[key];
+
+        const entry = keyedEntries[key];
+        if (entry === undefined && restMatcher === undefined) {
           if (flags & FLAG_FORBID_EXTRA_KEYS) {
             if (unrecognized === undefined) {
               unrecognized = [key];
@@ -912,10 +976,9 @@ function createObjectMatcher(
           } else if (
             flags & FLAG_STRIP_EXTRA_KEYS &&
             issues === undefined &&
-            !copied
+            output === undefined
           ) {
             output = {};
-            copied = true;
             for (let m = 0; m < indexedEntries.length; m++) {
               if (getBit(seenBits, m)) {
                 const k = indexedEntries[m].key;
@@ -926,19 +989,20 @@ function createObjectMatcher(
           continue;
         }
 
-        const value = obj[key];
-        const r = entry.type.func(value, flags);
+        const r =
+          entry === undefined
+            ? callMatcher(restMatcher!, value, flags)
+            : callMatcher(entry.matcher, value, flags);
         if (r === undefined) {
-          if (copied && issues === undefined) {
+          if (output !== undefined && issues === undefined) {
             set(output, key, value);
           }
         } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(key, r));
         } else if (issues === undefined) {
-          if (!copied) {
+          if (output === undefined) {
             output = {};
-            copied = true;
-            if (fallbackEntry === undefined) {
+            if (restMatcher === undefined) {
               for (let m = 0; m < indexedEntries.length; m++) {
                 if (getBit(seenBits, m)) {
                   const k = indexedEntries[m].key;
@@ -954,7 +1018,7 @@ function createObjectMatcher(
           set(output, key, r.value);
         }
 
-        if (entry.index >= 0) {
+        if (entry !== undefined) {
           seenCount++;
           seenBits = setBit(seenBits, entry.index);
         }
@@ -969,31 +1033,26 @@ function createObjectMatcher(
         const entry = indexedEntries[i];
         const value = obj[entry.key];
 
-        let keyFlags = flags & ~FLAG_MISSING_VALUE;
+        let extraFlags = 0;
         if (value === undefined && !(entry.key in obj)) {
           if (!entry.optional) {
             issues = joinIssues(issues, entry.missing);
             continue;
           }
-          keyFlags |= FLAG_MISSING_VALUE;
+          extraFlags = FLAG_MISSING_VALUE;
         }
 
-        const r = entry.type.func(value, keyFlags);
+        const r = callMatcher(entry.matcher, value, flags | extraFlags);
         if (r === undefined) {
-          if (
-            copied &&
-            issues === undefined &&
-            !(keyFlags & FLAG_MISSING_VALUE)
-          ) {
+          if (output !== undefined && issues === undefined && !extraFlags) {
             set(output, entry.key, value);
           }
         } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(entry.key, r));
         } else if (issues === undefined) {
-          if (!copied) {
+          if (output === undefined) {
             output = {};
-            copied = true;
-            if (fallbackEntry === undefined) {
+            if (restMatcher === undefined) {
               for (let m = 0; m < indexedEntries.length; m++) {
                 if (m < i || getBit(seenBits, m)) {
                   const k = indexedEntries[m].key;
@@ -1018,25 +1077,22 @@ function createObjectMatcher(
     }
 
     if (unrecognized !== undefined) {
-      issues = joinIssues(issues, {
+      return joinIssues(issues, {
         ok: false,
         code: "unrecognized_keys",
         keys: unrecognized,
       });
-    }
-
-    if (issues === undefined && checks !== undefined) {
-      for (let i = 0; i < checks.length; i++) {
-        if (!checks[i].func(output)) {
-          return checks[i].issue;
+    } else if (issues !== undefined) {
+      return issues;
+    } else {
+      if (checks !== undefined) {
+        for (const { func, issue } of checks) {
+          if (!func(output ?? obj)) {
+            return issue;
+          }
         }
       }
-    }
-
-    if (issues === undefined && copied) {
-      return { ok: true, value: output };
-    } else {
-      return issues;
+      return output && { ok: true, value: output };
     }
   };
 }
@@ -1062,78 +1118,71 @@ class ArrayOrTupleType<
 > extends Type<ArrayOutput<Head, Rest, Tail>> {
   readonly name = "array";
 
-  private readonly restType: Type;
-  private readonly invalidType: IssueLeaf;
-  private readonly invalidLength: IssueLeaf;
-  private readonly minLength: number;
-  private readonly maxLength: number | undefined;
-
   constructor(
     readonly prefix: Head,
     readonly rest: Rest | undefined,
     readonly suffix: Tail,
   ) {
     super();
-
-    this.restType = rest ?? never();
-    this.minLength = this.prefix.length + this.suffix.length;
-    this.maxLength = rest ? undefined : this.minLength;
-    this.invalidType = {
-      ok: false,
-      code: "invalid_type",
-      expected: ["array"],
-    };
-    this.invalidLength = {
-      ok: false,
-      code: "invalid_length",
-      minLength: this.minLength,
-      maxLength: this.maxLength,
-    };
   }
 
-  func(arr: unknown, flags: number): RawResult<ArrayOutput<Head, Rest, Tail>> {
-    if (!Array.isArray(arr)) {
-      return this.invalidType;
-    }
+  createMatcher(): TaggedMatcher {
+    const prefix = this.prefix.map((t) => t.matcher);
+    const suffix = this.suffix.map((t) => t.matcher);
+    const rest =
+      this.rest?.matcher ?? taggedMatcher(1, () => ISSUE_MISSING_VALUE);
 
-    const length = arr.length;
-    const minLength = this.minLength;
-    const maxLength = this.maxLength ?? Infinity;
-    if (length < minLength || length > maxLength) {
-      return this.invalidLength;
-    }
+    const minLength = prefix.length + suffix.length;
+    const maxLength = this.rest ? Infinity : minLength;
+    const invalidLength: IssueLeaf = {
+      ok: false,
+      code: "invalid_length",
+      minLength,
+      maxLength: maxLength === Infinity ? undefined : maxLength,
+    };
 
-    const headEnd = this.prefix.length;
-    const tailStart = arr.length - this.suffix.length;
+    return taggedMatcher(TAG_ARRAY, (arr, flags) => {
+      if (!Array.isArray(arr)) {
+        return ISSUE_EXPECTED_ARRAY;
+      }
 
-    let issueTree: IssueTree | undefined = undefined;
-    let output: unknown[] = arr;
-    for (let i = 0; i < arr.length; i++) {
-      const type =
-        i < headEnd
-          ? this.prefix[i]
-          : i >= tailStart
-            ? this.suffix[i - tailStart]
-            : this.restType;
-      const r = type.func(arr[i], flags);
-      if (r !== undefined) {
-        if (r.ok) {
-          if (output === arr) {
-            output = arr.slice();
+      const length = arr.length;
+      if (length < minLength || length > maxLength) {
+        return invalidLength;
+      }
+
+      const headEnd = prefix.length;
+      const tailStart = arr.length - suffix.length;
+
+      let issueTree: IssueTree | undefined = undefined;
+      let output: unknown[] = arr;
+      for (let i = 0; i < arr.length; i++) {
+        const entry =
+          i < headEnd
+            ? prefix[i]
+            : i >= tailStart
+              ? suffix[i - tailStart]
+              : rest;
+        const r = callMatcher(entry, arr[i], flags);
+        if (r !== undefined) {
+          if (r.ok) {
+            if (output === arr) {
+              output = arr.slice();
+            }
+            output[i] = r.value;
+          } else {
+            issueTree = joinIssues(issueTree, prependPath(i, r));
           }
-          output[i] = r.value;
-        } else {
-          issueTree = joinIssues(issueTree, prependPath(i, r));
         }
       }
-    }
-    if (issueTree) {
-      return issueTree;
-    } else if (arr === output) {
-      return undefined;
-    } else {
-      return { ok: true, value: output as ArrayOutput<Head, Rest, Tail> };
-    }
+      if (issueTree) {
+        return issueTree;
+      } else if (arr === output) {
+        return undefined;
+      } else {
+        return { ok: true, value: output };
+      }
+    });
   }
 
   concat(type: ArrayType | TupleType | VariadicTupleType): ArrayOrTupleType {
@@ -1236,23 +1285,7 @@ function toInputType(v: unknown): InputType {
 }
 
 function dedup<T>(arr: T[]): T[] {
-  return Array.from(new Set(arr));
-}
-
-function findCommonKeys(rs: ObjectShape[]): string[] {
-  const map = new Map<string, number>();
-  rs.forEach((r) => {
-    for (const key in r) {
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
-  });
-  const result = [] as string[];
-  map.forEach((count, key) => {
-    if (count === rs.length) {
-      result.push(key);
-    }
-  });
-  return result;
+  return [...new Set(arr)];
 }
 
 function groupTerminals(
@@ -1270,7 +1303,7 @@ function groupTerminals(
   const unknowns = [] as AbstractType[];
   const optionals = [] as AbstractType[];
   const expectedTypes = [] as InputType[];
-  terminals.forEach(({ root, terminal }) => {
+  for (const { root, terminal } of terminals) {
     order.set(root, order.get(root) ?? order.size);
 
     if (terminal.name === "never") {
@@ -1290,25 +1323,26 @@ function groupTerminals(
       types.set(terminal.name, roots);
       expectedTypes.push(terminal.name);
     }
-  });
-
-  literals.forEach((roots, value) => {
-    const options = types.get(toInputType(value));
-    if (options) {
-      options.push(...roots);
-      literals.delete(value);
-    }
-  });
+  }
 
   const byOrder = (a: AbstractType, b: AbstractType): number => {
     return (order.get(a) ?? 0) - (order.get(b) ?? 0);
   };
-  types.forEach((roots, type) =>
-    types.set(type, dedup(roots.concat(unknowns).sort(byOrder))),
-  );
-  literals.forEach((roots, value) =>
-    literals.set(value, dedup(roots.concat(unknowns)).sort(byOrder)),
-  );
+
+  for (const [value, roots] of literals) {
+    const options = types.get(toInputType(value));
+    if (options) {
+      options.push(...roots);
+      literals.delete(value);
+    } else {
+      literals.set(value, dedup(roots.concat(unknowns)).sort(byOrder));
+    }
+  }
+
+  for (const [type, roots] of types) {
+    types.set(type, dedup(roots.concat(unknowns)).sort(byOrder));
+  }
+
   return {
     types,
     literals,
@@ -1321,7 +1355,7 @@ function groupTerminals(
 function createObjectKeyMatcher(
   objects: { root: AbstractType; terminal: ObjectType }[],
   key: string,
-): Func<unknown> | undefined {
+): Matcher<Record<string, unknown>> | undefined {
   const list: { root: AbstractType; terminal: TerminalType }[] = [];
   for (const { root, terminal } of objects) {
     terminal.shape[key].toTerminals((t) => list.push({ root, terminal: t }));
@@ -1343,14 +1377,14 @@ function createObjectKeyMatcher(
     }
   }
 
-  const missingValue = prependPath(key, { ok: false, code: "missing_value" });
+  const missingValue = prependPath(key, ISSUE_MISSING_VALUE);
   const issue = prependPath(
     key,
     types.size === 0
       ? {
           ok: false,
           code: "invalid_literal",
-          expected: Array.from(literals.keys()) as Literal[],
+          expected: [...literals.keys()] as Literal[],
         }
       : {
           ok: false,
@@ -1359,51 +1393,64 @@ function createObjectKeyMatcher(
         },
   );
 
-  const litMap =
-    literals.size > 0 ? new Map<unknown, AbstractType>() : undefined;
-  for (const [literal, options] of literals) {
-    litMap!.set(literal, options[0]);
-  }
-  const byType =
-    types.size > 0 ? ({} as Record<string, AbstractType>) : undefined;
-  for (const [type, options] of types) {
-    byType![type] = options[0];
+  const byLiteral =
+    literals.size > 0 ? new Map<unknown, TaggedMatcher>() : undefined;
+  if (byLiteral) {
+    for (const [literal, options] of literals) {
+      byLiteral.set(literal, options[0].matcher);
+    }
   }
 
-  return function (_obj: unknown, flags: number) {
-    const obj = _obj as Record<string, unknown>;
+  const byType =
+    types.size > 0 ? ({} as Record<string, TaggedMatcher>) : undefined;
+  if (byType) {
+    for (const [type, options] of types) {
+      byType[type] = options[0].matcher;
+    }
+  }
+
+  const optional = optionals[0]?.matcher as TaggedMatcher | undefined;
+  return (obj, flags) => {
     const value = obj[key];
     if (value === undefined && !(key in obj)) {
-      return optionals.length > 0
-        ? optionals[0].func(obj, flags)
-        : missingValue;
+      return optional === undefined
+        ? missingValue
+        : callMatcher(optional, obj, flags);
     }
-    const option = byType?.[toInputType(value)] ?? litMap?.get(value);
-    return option ? option.func(obj, flags) : issue;
+    const option = byType?.[toInputType(value)] ?? byLiteral?.get(value);
+    return option ? callMatcher(option, obj, flags) : issue;
   };
 }
 
 function createUnionObjectMatcher(
   terminals: { root: AbstractType; terminal: TerminalType }[],
-): Func<unknown> | undefined {
-  if (terminals.some(({ terminal: t }) => t.name === "unknown")) {
-    return undefined;
+): Matcher<Record<string, unknown>> | undefined {
+  const objects: { root: AbstractType; terminal: ObjectType }[] = [];
+  const keyCounts = new Map<string, number>();
+
+  for (const { root, terminal } of terminals) {
+    if (terminal.name === "unknown") {
+      return undefined;
+    }
+
+    if (terminal.name === "object") {
+      for (const key in terminal.shape) {
+        keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
+      }
+      objects.push({ root, terminal });
+    }
   }
 
-  const objects = terminals.filter(
-    (item): item is { root: AbstractType; terminal: ObjectType } => {
-      return item.terminal.name === "object";
-    },
-  );
   if (objects.length < 2) {
     return undefined;
   }
 
-  const shapes = objects.map(({ terminal }) => terminal.shape);
-  for (const key of findCommonKeys(shapes)) {
-    const matcher = createObjectKeyMatcher(objects, key);
-    if (matcher) {
-      return matcher;
+  for (const [key, count] of keyCounts) {
+    if (count === objects.length) {
+      const matcher = createObjectKeyMatcher(objects, key);
+      if (matcher) {
+        return matcher;
+      }
     }
   }
   return undefined;
@@ -1411,7 +1458,7 @@ function createUnionObjectMatcher(
 
 function createUnionBaseMatcher(
   terminals: { root: AbstractType; terminal: TerminalType }[],
-): Func<unknown> {
+): Matcher {
   const { expectedTypes, literals, types, unknowns, optionals } =
     groupTerminals(terminals);
 
@@ -1420,7 +1467,7 @@ function createUnionBaseMatcher(
       ? {
           ok: false,
           code: "invalid_literal",
-          expected: Array.from(literals.keys()) as Literal[],
+          expected: [...literals.keys()] as Literal[],
         }
       : {
           ok: false,
@@ -1428,23 +1475,39 @@ function createUnionBaseMatcher(
           expected: expectedTypes,
         };
 
-  const litMap = literals.size > 0 ? literals : undefined;
-  const byType =
-    types.size > 0 ? ({} as Record<string, AbstractType[]>) : undefined;
-  for (const [type, options] of types) {
-    byType![type] = options;
+  const byLiteral =
+    literals.size > 0 ? new Map<unknown, TaggedMatcher[]>() : undefined;
+  if (byLiteral) {
+    for (const [literal, options] of literals) {
+      byLiteral.set(
+        literal,
+        options.map((t) => t.matcher),
+      );
+    }
   }
 
-  return function (value: unknown, flags: number) {
+  const byType =
+    types.size > 0 ? ({} as Record<string, TaggedMatcher[]>) : undefined;
+  if (byType) {
+    for (const [type, options] of types) {
+      byType[type] = options.map((t) => t.matcher);
+    }
+  }
+
+  const optionalMatchers = optionals.map((t) => t.matcher);
+  const unknownMatchers = unknowns.map((t) => t.matcher);
+  return (value: unknown, flags: number) => {
     const options =
       flags & FLAG_MISSING_VALUE
-        ? optionals
-        : (byType?.[toInputType(value)] ?? litMap?.get(value) ?? unknowns);
+        ? optionalMatchers
+        : (byType?.[toInputType(value)] ??
+          byLiteral?.get(value) ??
+          unknownMatchers);
 
     let count = 0;
     let issueTree: IssueTree = issue;
     for (let i = 0; i < options.length; i++) {
-      const r = options[i].func(value, flags);
+      const r = callMatcher(options[i], value, flags);
       if (r === undefined || r.ok) {
         return r;
       }
@@ -1460,49 +1523,33 @@ function createUnionBaseMatcher(
 
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
-  private _func?: Func<Infer<T[number]>>;
 
   constructor(readonly options: T) {
     super();
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
-    this.options.forEach((o) => {
-      o.toTerminals(func);
-    });
+    for (const option of this.options) {
+      option.toTerminals(func);
+    }
   }
 
-  func(v: unknown, flags: number): RawResult<Infer<T[number]>> {
-    let func = this._func;
-    if (func === undefined) {
-      const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
-      this.options.forEach((option) => {
-        option.toTerminals((terminal) => {
-          flattened.push({ root: option, terminal });
-        });
+  createMatcher(): TaggedMatcher {
+    const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
+    for (const option of this.options) {
+      option.toTerminals((terminal) => {
+        flattened.push({ root: option, terminal });
       });
-      const base = createUnionBaseMatcher(flattened);
-      const object = createUnionObjectMatcher(flattened);
-      if (!object) {
-        func = base as Func<Infer<T[number]>>;
-      } else {
-        func = function (v, f) {
-          if (isObject(v)) {
-            return object(v, f) as RawResult<Infer<T[number]>>;
-          }
-          return base(v, f) as RawResult<Infer<T[number]>>;
-        };
-      }
-      this._func = func;
     }
-    return func(v, flags);
+    const base = createUnionBaseMatcher(flattened);
+    const object = createUnionObjectMatcher(flattened);
+    return taggedMatcher(TAG_UNION, (v, f) =>
+      object !== undefined && isObject(v) ? object(v, f) : base(v, f),
+    );
   }
 }
 
-type TransformFunc = (
-  value: unknown,
-  options: ParseOptions,
-) => RawResult<unknown>;
+type TransformFunc = (value: unknown, options: ParseOptions) => MatcherResult;
 
 const STRICT = Object.freeze({ mode: "strict" }) as ParseOptions;
 const STRIP = Object.freeze({ mode: "strip" }) as ParseOptions;
@@ -1511,88 +1558,103 @@ const PASSTHROUGH = Object.freeze({ mode: "passthrough" }) as ParseOptions;
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
 
-  private transformChain?: TransformFunc[];
-  private transformRoot?: AbstractType;
-  private readonly undef = ok(undefined);
-
   constructor(
     protected readonly transformed: AbstractType,
     protected readonly transform: TransformFunc,
   ) {
     super();
-    this.transformChain = undefined;
-    this.transformRoot = undefined;
   }
 
-  func(v: unknown, flags: number): RawResult<Output> {
-    let chain = this.transformChain;
-    if (!chain) {
-      chain = [];
+  createMatcher(): TaggedMatcher {
+    const chain: TransformFunc[] = [];
 
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      let next: AbstractType = this;
-      while (next instanceof TransformType) {
-        chain.push(next.transform);
-        next = next.transformed;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let next: AbstractType = this;
+    while (next instanceof TransformType) {
+      chain.push(next.transform);
+      next = next.transformed;
+    }
+    chain.reverse();
+
+    const matcher = next.matcher;
+    const undef = ok(undefined);
+
+    return taggedMatcher(TAG_TRANSFORM, (v, flags) => {
+      let result = callMatcher(matcher, v, flags);
+      if (result !== undefined && !result.ok) {
+        return result;
       }
-      chain.reverse();
-      this.transformChain = chain;
-      this.transformRoot = next;
-    }
 
-    let result = this.transformRoot!.func(v, flags);
-    if (result !== undefined && !result.ok) {
-      return result;
-    }
+      let current: unknown;
+      if (result !== undefined) {
+        current = result.value;
+      } else if (flags & FLAG_MISSING_VALUE) {
+        current = undefined;
+        result = undef;
+      } else {
+        current = v;
+      }
 
-    let current: unknown;
-    if (result !== undefined) {
-      current = result.value;
-    } else if (flags & FLAG_MISSING_VALUE) {
-      current = undefined;
-      result = this.undef;
-    } else {
-      current = v;
-    }
-
-    const options =
-      flags & FLAG_FORBID_EXTRA_KEYS
-        ? STRICT
-        : flags & FLAG_STRIP_EXTRA_KEYS
-          ? STRIP
-          : PASSTHROUGH;
-    for (let i = 0; i < chain.length; i++) {
-      const r = chain[i](current, options);
-      if (r !== undefined) {
-        if (!r.ok) {
-          return r;
+      const options =
+        flags & FLAG_FORBID_EXTRA_KEYS
+          ? STRICT
+          : flags & FLAG_STRIP_EXTRA_KEYS
+            ? STRIP
+            : PASSTHROUGH;
+      for (let i = 0; i < chain.length; i++) {
+        const r = chain[i](current, options);
+        if (r !== undefined) {
+          if (!r.ok) {
+            return r;
+          }
+          current = r.value;
+          result = r;
         }
-        current = r.value;
-        result = r;
       }
-    }
-    return result as RawResult<Output>;
+      return result;
+    });
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
     this.transformed.toTerminals(func);
   }
 }
+
 class LazyType<T> extends Type<T> {
   readonly name = "lazy";
 
   private recursing = false;
-  private type?: Type<T>;
+  private type?: AbstractType;
+  private typeMatcher?: TaggedMatcher;
 
   constructor(private readonly definer: () => Type<T>) {
     super();
+    this.type = undefined;
+    this.typeMatcher = undefined;
   }
 
-  func(v: unknown, flags: number): RawResult<T> {
-    if (!this.type) {
-      this.type = this.definer();
+  get matcher() {
+    if (this.typeMatcher !== undefined) {
+      return this.typeMatcher;
     }
-    return this.type.func(v, flags);
+    return this.createMatcher();
+  }
+
+  createMatcher(): TaggedMatcher {
+    let matcher = this.typeMatcher;
+    if (matcher === undefined) {
+      matcher = taggedMatcher(TAG_UNKNOWN, () => undefined);
+      this.typeMatcher = matcher;
+
+      if (!this.type) {
+        this.type = this.definer();
+      }
+
+      const { tag, match } = this.type.matcher;
+      matcher.tag = tag;
+      matcher.match = match;
+    }
+    return matcher;
   }
 
   toTerminals(func: (t: TerminalType) => void): void {
@@ -1611,176 +1673,104 @@ class LazyType<T> extends Type<T> {
   }
 }
 
-class NeverType extends Type<never> {
-  readonly name = "never";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: [],
-  };
-  func(_: unknown, __: number): RawResult<never> {
-    return this.issue;
-  }
-}
-const neverSingleton = new NeverType();
+function singleton<Output>(
+  name: string,
+  tag: number,
+  match: (value: unknown, flags: number) => MatcherResult,
+): () => Type<Output> {
+  const value = taggedMatcher(tag, match);
 
-/**
- * Create a validator that never matches any value,
- * analogous to the TypeScript type `never`.
- */
-function never(): Type<never> {
-  return neverSingleton;
-}
+  class SimpleType extends Type<Output> {
+    readonly name: string;
 
-class UnknownType extends Type {
-  readonly name = "unknown";
-  func(_: unknown, __: number): RawResult<unknown> {
-    return undefined;
+    constructor() {
+      super();
+      this.name = name;
+    }
+
+    createMatcher(): TaggedMatcher {
+      return value;
+    }
   }
+  Object.defineProperty(SimpleType.prototype, "matcher", { value });
+
+  const instance = new SimpleType();
+  return () => instance;
 }
-const unknownSingleton = new UnknownType();
 
 /**
  * Create a validator that matches any value,
  * analogous to the TypeScript type `unknown`.
  */
-function unknown(): Type {
-  return unknownSingleton;
-}
-
-class UndefinedType extends Type<undefined> {
-  readonly name = "undefined";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["undefined"],
-  };
-  func(v: unknown, _: number): RawResult<undefined> {
-    return v === undefined ? undefined : this.issue;
-  }
-}
-const undefinedSingleton = new UndefinedType();
+const unknown = singleton<unknown>("unknown", TAG_UNKNOWN, () => undefined);
 
 /**
- * Create a validator that matches `undefined`.
+ * Create a validator that never matches any value,
+ * analogous to the TypeScript type `never`.
  */
-function undefined_(): Type<undefined> {
-  return undefinedSingleton;
-}
-
-class NullType extends Type<null> {
-  readonly name = "null";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["null"],
-  };
-  func(v: unknown, _: number): RawResult<null> {
-    return v === null ? undefined : this.issue;
-  }
-}
-const nullSingleton = new NullType();
-
-/**
- * Create a validator that matches `null`.
- */
-function null_(): Type<null> {
-  return nullSingleton;
-}
-
-class NumberType extends Type<number> {
-  readonly name = "number";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["number"],
-  };
-  func(v: unknown, _: number): RawResult<number> {
-    return typeof v === "number" ? undefined : this.issue;
-  }
-}
-const numberSingleton = new NumberType();
-
-/**
- * Create a validator that matches any number value.
- */
-function number(): Type<number> {
-  return numberSingleton;
-}
-
-class BigIntType extends Type<bigint> {
-  readonly name = "bigint";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["bigint"],
-  };
-  func(v: unknown, _: number): RawResult<bigint> {
-    return typeof v === "bigint" ? undefined : this.issue;
-  }
-}
-const bigintSingleton = new BigIntType();
-
-/**
- * Create a validator that matches any bigint value.
- */
-function bigint(): Type<bigint> {
-  return bigintSingleton;
-}
-
-class StringType extends Type<string> {
-  readonly name = "string";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["string"],
-  };
-  func(v: unknown, _: number): RawResult<string> {
-    return typeof v === "string" ? undefined : this.issue;
-  }
-}
-const stringSingleton = new StringType();
+const never = singleton<never>(
+  "never",
+  TAG_NEVER,
+  () => ISSUE_EXPECTED_NOTHING,
+);
 
 /**
  * Create a validator that matches any string value.
  */
-function string(): Type<string> {
-  return stringSingleton;
-}
+const string = singleton<string>("string", TAG_STRING, (v) =>
+  typeof v === "string" ? undefined : ISSUE_EXPECTED_STRING,
+);
 
-class BooleanType extends Type<boolean> {
-  readonly name = "boolean";
-  private readonly issue: IssueLeaf = {
-    ok: false,
-    code: "invalid_type",
-    expected: ["boolean"],
-  };
-  func(v: unknown, _: number): RawResult<boolean> {
-    return typeof v === "boolean" ? undefined : this.issue;
-  }
-}
-const booleanSingleton = new BooleanType();
+/**
+ * Create a validator that matches any number value.
+ */
+const number = singleton<number>("number", TAG_NUMBER, (v) =>
+  typeof v === "number" ? undefined : ISSUE_EXPECTED_NUMBER,
+);
+
+/**
+ * Create a validator that matches any bigint value.
+ */
+const bigint = singleton<bigint>("bigint", TAG_BIGINT, (v) =>
+  typeof v === "bigint" ? undefined : ISSUE_EXPECTED_BIGINT,
+);
 
 /**
  * Create a validator that matches any boolean value.
  */
-function boolean(): Type<boolean> {
-  return booleanSingleton;
-}
+const boolean = singleton<boolean>("boolean", TAG_BOOLEAN, (v) =>
+  typeof v === "boolean" ? undefined : ISSUE_EXPECTED_BOOLEAN,
+);
+
+/**
+ * Create a validator that matches `null`.
+ */
+const null_ = singleton<null>("null", TAG_NULL, (v) =>
+  v === null ? undefined : ISSUE_EXPECTED_NULL,
+);
+
+/**
+ * Create a validator that matches `undefined`.
+ */
+const undefined_ = singleton<undefined>("undefined", TAG_UNDEFINED, (v) =>
+  v === undefined ? undefined : ISSUE_EXPECTED_UNDEFINED,
+);
 
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
-  private readonly issue: IssueLeaf;
+
   constructor(readonly value: Out) {
     super();
-    this.issue = {
+  }
+
+  createMatcher(): TaggedMatcher {
+    const value = this.value;
+    const issue: IssueLeaf = {
       ok: false,
       code: "invalid_literal",
       expected: [value],
     };
-  }
-  func(v: unknown, _: number): RawResult<Out> {
-    return v === this.value ? undefined : this.issue;
+    return taggedMatcher(TAG_LITERAL, (v) => (v === value ? undefined : issue));
   }
 }
 
@@ -1859,17 +1849,20 @@ function lazy<T>(definer: () => Type<T>): Type<T> {
 }
 
 type TerminalType =
-  | NeverType
-  | UnknownType
-  | StringType
-  | NumberType
-  | BigIntType
-  | BooleanType
-  | UndefinedType
-  | NullType
+  | (Type & {
+      name:
+        | "unknown"
+        | "never"
+        | "string"
+        | "number"
+        | "bigint"
+        | "boolean"
+        | "null"
+        | "undefined";
+    })
+  | LiteralType
   | ObjectType
   | ArrayOrTupleType
-  | LiteralType
   | Optional;
 
 export {
