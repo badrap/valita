@@ -522,7 +522,7 @@ const Transaction = v.object({
 
 ### Custom Parsers
 
-While `.assert(...)` can ensure that a value is valid and event refine the value's type, it can't alter the value itself. Yet sometimes we may want to validate and transform the value in one go.
+While `.assert(...)` can ensure that a value is valid and even refine the value's type, it can't alter the value itself. Yet sometimes we may want to validate and transform the value in one go.
 
 The `.map(...)` method is great for cases when you know that the transformation can't fail. The output type doesn't have to stay same:
 
@@ -568,7 +568,7 @@ APIResponse.parse({ created_at: "YOLO" });
 // ValitaError: custom_error at .created_at (invalid date)
 ```
 
-For both `.map(...)` and `.chain(...)` we highly recommend to avoid mutating the input value. Prefer returning a new value instead.
+For both `.map(...)` and `.chain(...)` we highly recommend that you avoid mutating the input value. Prefer returning a new value instead.
 
 ```ts
 v.object({ name: v.string() }).map((obj) => {
