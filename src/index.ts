@@ -587,6 +587,48 @@ abstract class AbstractType<Output = unknown> {
     });
   }
 
+  /**
+   * Derive a new validator that uses the provided predicate function to
+   * perform custom validation for the source validator's output values.
+   *
+   * The predicate function should return `true` when the source
+   * type's output value is valid, `false` otherwise. The checked value
+   * itself won't get modified or replaced, and is returned as-is on
+   * validation success.
+   *
+   * @example A validator that accepts only numeric strings.
+   * ```ts
+   * const numericString = v.string().assert((s) => /^\d+$/.test(s))
+   * numericString.parse("1");
+   * // "1"
+   * numericString.parse("foo");
+   * // ValitaError: custom_error at . (validation failed)
+   * ```
+   *
+   * You can also _refine_ the output type by passing in a
+   * [type predicate](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates).
+   * Note that the type predicate must have a compatible input type.
+   *
+   * @example A validator with its output type refined to `Date`.
+   * ```ts
+   * const dateType = v.unknown().assert((v): v is Date => v instanceof Date);
+   * ```
+   *
+   * You can also pass in a custom failure messages.
+   *
+   * @example A validator that rejects non-integers with a custom error.
+   * ```ts
+   * const integer = v.number().assert((n) => Number.isInteger(n), "not an integer");
+   * integer.parse(1);
+   * // 1
+   * integer.parse(1.5);
+   * // ValitaError: custom_error at . (not an integer)
+   * ```
+   *
+   * @param func - The assertion predicate function.
+   * @param [error] - A custom error for situations when the assertion
+   *                  predicate returns `false`.
+   */
   assert<T extends Output>(
     func:
       | ((v: Output, options: ParseOptions) => v is T)
@@ -599,6 +641,25 @@ abstract class AbstractType<Output = unknown> {
     );
   }
 
+  /**
+   * Derive a new validator that uses the provided mapping function to
+   * perform custom mapping for the source validator's output values.
+   *
+   * The mapped value's type doesn't have to stay same, but mapping must
+   * always succeed (i.e. not throw) for all values that the source validator
+   * outputs.
+   *
+   * @example
+   * ```ts
+   * const stringLength = v.string().assert((s) => s.length);
+   * stringLength.parse("Hello, World!");
+   * // 13
+   * stringLength.parse(1);
+   * // ValitaError: invalid_type at . (expected string)
+   * ```
+   *
+   * @param func - The mapping function.
+   */
   map<T extends Literal>(
     func: (v: Output, options: ParseOptions) => T,
   ): Type<T>;
@@ -610,6 +671,33 @@ abstract class AbstractType<Output = unknown> {
     }));
   }
 
+  /**
+   * Derive a new validator that uses the provided mapping function to
+   * perform custom parsing for the source validator's output values.
+   *
+   * Unlike `.map`, `.chain` can also be used for cases where the
+   * transformation might fail. If the transformation fails, return an error
+   * with an optional message with `err(...)`. If not, then return the
+   * transformed value with `ok(...)`.
+   *
+   * @example A parser for date strings, returns `Date` objects on success.
+   * ```ts
+   * const DateType = v.string().chain((s) => {
+   *   const date = new Date(s);
+   *   if (isNaN(+date)) {
+   *     return v.err("invalid date");
+   *   }
+   *   return v.ok(date);
+   * });
+   *
+   * Date.parse("2022-01-01");
+   * // 2022-01-01T00:00:00.000Z
+   * Date.parse("foo");
+   * // ValitaError: custom_error at . (invalid date)
+   * ```
+   *
+   * @param func - The parsing function.
+   */
   chain<T extends Literal>(
     func: (v: Output, options: ParseOptions) => ValitaResult<T>,
   ): Type<T>;
