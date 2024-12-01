@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.3.15
+
+### Patch Changes
+
+- [`4a1e635`](https://github.com/badrap/valita/commit/4a1e63595ddaa40afdff60daaf5a1e904ab61dbc) Thanks [@jviide](https://github.com/jviide)! - Fix more slow types pointed out by JSR
+
 ## 0.3.14
 
 ### Patch Changes
