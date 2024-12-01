@@ -715,7 +715,7 @@ abstract class AbstractType<Output = unknown> {
 }
 
 /**
- * A base class for all concreate validators/parsers.
+ * A base class for all concrete validators/parsers.
  */
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   /**
