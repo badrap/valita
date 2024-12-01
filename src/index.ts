@@ -526,17 +526,6 @@ abstract class AbstractType<Output = unknown> {
     return value;
   }
 
-  /**
-   * Return new optional type that can not be used as a standalone
-   * validator. Rather, it's meant to be used as a with object validators,
-   * to mark one of the object's properties as _optional_. Optional property
-   * types accept both the original type, `undefined` and missing properties.
-   *
-   * The optional `defaultFn` function, if provided, will be called each
-   * time a value that is missing or `undefined` is parsed.
-   *
-   * @param [defaultFn] - An optional function returning the default value.
-   */
   // Use `<X extends T>() => X` instead of `() => T` to make literal
   // inference work when an optionals with defaultFn is used as a
   // ObjectType property.
@@ -555,6 +544,17 @@ abstract class AbstractType<Output = unknown> {
   ): Type<Exclude<Output, undefined>>;
   optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
   optional(): Optional<Output>;
+  /**
+   * Return new optional type that can not be used as a standalone
+   * validator. Rather, it's meant to be used as a with object validators,
+   * to mark one of the object's properties as _optional_. Optional property
+   * types accept both the original type, `undefined` and missing properties.
+   *
+   * The optional `defaultFn` function, if provided, will be called each
+   * time a value that is missing or `undefined` is parsed.
+   *
+   * @param [defaultFn] - An optional function returning the default value.
+   */
   optional<T>(
     defaultFn?: () => T,
   ): Type<Exclude<Output, undefined> | T> | Optional<Output> {
@@ -641,6 +641,10 @@ abstract class AbstractType<Output = unknown> {
     );
   }
 
+  map<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => T,
+  ): Type<T>;
+  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
   /**
    * Derive a new validator that uses the provided mapping function to
    * perform custom mapping for the source validator's output values.
@@ -660,10 +664,6 @@ abstract class AbstractType<Output = unknown> {
    *
    * @param func - The mapping function.
    */
-  map<T extends Literal>(
-    func: (v: Output, options: ParseOptions) => T,
-  ): Type<T>;
-  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
   map<T>(func: (v: Output, options: ParseOptions) => T): Type<T> {
     return new TransformType(this, (v, options) => ({
       ok: true,
@@ -671,6 +671,12 @@ abstract class AbstractType<Output = unknown> {
     }));
   }
 
+  chain<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
+  chain<T>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
   /**
    * Derive a new validator that uses the provided mapping function to
    * perform custom parsing for the source validator's output values.
@@ -698,12 +704,6 @@ abstract class AbstractType<Output = unknown> {
    *
    * @param func - The parsing function.
    */
-  chain<T extends Literal>(
-    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
-  ): Type<T>;
-  chain<T>(
-    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
-  ): Type<T>;
   chain<T>(
     func: (v: Output, options: ParseOptions) => ValitaResult<T>,
   ): Type<T> {
