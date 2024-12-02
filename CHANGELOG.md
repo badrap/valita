@@ -12,7 +12,7 @@
 
 ### Patch Changes
 
-- [`59b89be`](https://github.com/badrap/valita/commit/59b89bef1e0a8371571e66a05cdedf915d07c23f) Thanks [@jviide](https://github.com/jviide)! - Revert changes since v0.3.12 as they were backwards incompatible
+- [`59b89be`](https://github.com/badrap/valita/commit/59b89bef1e0a8371571e66a05cdedf915d07c23f) Thanks [@arv](https://github.com/arv) for reporting this! - Revert changes since v0.3.12 as they were backwards incompatible
 
 ## 0.3.15
 
