@@ -542,24 +542,6 @@ abstract class AbstractType<Output = unknown> {
     return value;
   }
 
-  // Use `<X extends T>() => X` instead of `() => T` to make literal
-  // inference work when an optionals with defaultFn is used as a
-  // ObjectType property.
-  // The same could be accomplished by replacing the `| T` in the
-  // output type with `NoInfer<T>`, but it's supported only from
-  // TypeScript 5.4 onwards.
-  optional<T extends Literal>(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
-    defaultFn: <X extends T>() => X,
-  ): Type<Exclude<Output, undefined> | T>;
-  // Support parsers like `v.array(t).optional(() => [])`
-  // so that the output type is `Infer<typeof t>[]` instead of
-  // `Infer<typeof t>[] | never[]`.
-  optional(
-    defaultFn: () => Exclude<Output, undefined>,
-  ): Type<Exclude<Output, undefined>>;
-  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
-  optional(): Optional<Output>;
   /**
    * Return new optional type that can not be used as a standalone
    * validator. Rather, it's meant to be used as a with object validators,
@@ -571,23 +553,26 @@ abstract class AbstractType<Output = unknown> {
    *
    * @param [defaultFn] - An optional function returning the default value.
    */
-  optional<T>(
-    defaultFn?: () => T,
-  ): Type<Exclude<Output, undefined> | T> | Optional<Output> {
-    // If this type is already Optional there's no need to wrap it inside
-    // a new Optional instance.
-    const optional =
-      this.name === "optional"
-        ? (this as unknown as Optional<Output>)
-        : new Optional(this);
-
-    if (!defaultFn) {
-      return optional;
-    }
-    return new TransformType(optional, (v) => {
-      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
-    });
-  }
+  // Use `<X extends T>() => X` instead of `() => T` to make literal
+  // inference work when an optionals with defaultFn is used as a
+  // ObjectType property.
+  // The same could be accomplished by replacing the `| T` in the
+  // output type with `NoInfer<T>`, but it's supported only from
+  // TypeScript 5.4 onwards.
+  abstract optional<T extends Literal>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  // Support parsers like `v.array(t).optional(() => [])`
+  // so that the output type is `Infer<typeof t>[]` instead of
+  // `Infer<typeof t>[] | never[]`.
+  abstract optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  abstract optional<T>(
+    defaultFn: () => T,
+  ): Type<Exclude<Output, undefined> | T>;
+  abstract optional(): Optional<Output>;
 
   /**
    * @deprecated Instead of `.default(x)` use `.optional(() => x)`.
@@ -657,10 +642,6 @@ abstract class AbstractType<Output = unknown> {
     );
   }
 
-  map<T extends Literal>(
-    func: (v: Output, options: ParseOptions) => T,
-  ): Type<T>;
-  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
   /**
    * Derive a new validator that uses the provided mapping function to
    * perform custom mapping for the source validator's output values.
@@ -680,6 +661,10 @@ abstract class AbstractType<Output = unknown> {
    *
    * @param func - The mapping function.
    */
+  map<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => T,
+  ): Type<T>;
+  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
   map<T>(func: (v: Output, options: ParseOptions) => T): Type<T> {
     return new TransformType(this, (v, options) => ({
       ok: true,
@@ -687,12 +672,6 @@ abstract class AbstractType<Output = unknown> {
     }));
   }
 
-  chain<T extends Literal>(
-    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
-  ): Type<T>;
-  chain<T>(
-    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
-  ): Type<T>;
   /**
    * Derive a new validator that uses the provided mapping function to
    * perform custom parsing for the source validator's output values.
@@ -720,6 +699,12 @@ abstract class AbstractType<Output = unknown> {
    *
    * @param func - The parsing function.
    */
+  chain<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
+  chain<T>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
   chain<T>(
     func: (v: Output, options: ParseOptions) => ValitaResult<T>,
   ): Type<T> {
@@ -751,6 +736,27 @@ type TypeName =
  */
 abstract class Type<Output = unknown> extends AbstractType<Output> {
   abstract name: TypeName;
+
+  optional<T extends Literal>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
+  optional(): Optional<Output>;
+  optional(defaultFn?: () => unknown): unknown {
+    // If this type is already Optional there's no need to wrap it inside
+    // a new Optional instance.
+    const optional = new Optional(this);
+    if (!defaultFn) {
+      return optional;
+    }
+    return new TransformType(optional, (v) => {
+      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
+    });
+  }
 
   /**
    * Return new validator that accepts both the original type and `null`.
@@ -848,15 +854,30 @@ class Nullable<Output = unknown> extends Type<Output | null> {
 class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   readonly name = "optional";
 
-  constructor(
-    /** @internal */
-    private readonly _type: AbstractType<Output>,
-  ) {
+  constructor(readonly type: Type<Output>) {
     super();
   }
 
+  optional<T extends Literal>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
+  optional(): Optional<Output>;
+  optional(defaultFn?: () => unknown): unknown {
+    if (!defaultFn) {
+      return this;
+    }
+    return new TransformType(this, (v) => {
+      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
+    });
+  }
+
   _createMatcher(): TaggedMatcher {
-    const matcher = this._type._matcher;
+    const matcher = this.type._matcher;
 
     return taggedMatcher(TAG_OPTIONAL, (v, flags) =>
       v === undefined || flags & FLAG_MISSING_VALUE
@@ -868,7 +889,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   _toTerminals(func: (t: TerminalType) => void): void {
     func(this);
     func(undefined_() as TerminalType);
-    this._type._toTerminals(func);
+    this.type._toTerminals(func);
   }
 }
 
