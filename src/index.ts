@@ -87,7 +87,13 @@ type Issue = Readonly<
   | { code: "missing_value"; path: Key[] }
   | { code: "invalid_literal"; path: Key[]; expected: Literal[] }
   | { code: "unrecognized_keys"; path: Key[]; keys: Key[] }
-  | { code: "invalid_union"; path: Key[]; tree: IssueTree }
+  | {
+      code: "invalid_union";
+      path: Key[];
+      issues: Issue[];
+      /** @deprecated Instead of `.tree` use `.issues`. */
+      tree: IssueTree;
+    }
   | {
       code: "invalid_length";
       path: Key[];
@@ -123,7 +129,7 @@ function cloneIssueWithPath(tree: IssueLeaf, path: Key[]): Issue {
     case "unrecognized_keys":
       return { code, path, keys: tree.keys };
     case "invalid_union":
-      return { code, path, tree: tree.tree };
+      return { code, path, tree: tree.tree, issues: collectIssues(tree.tree) };
     case "custom_error":
       return { code, path, error: tree.error };
   }
