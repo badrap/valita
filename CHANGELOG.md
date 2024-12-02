@@ -1,5 +1,13 @@
 # @badrap/valita
 
+## 0.4.0
+
+### Minor Changes
+
+- [`c4f7eaf`](https://github.com/badrap/valita/commit/c4f7eaf5303672abd0e7eae78fe161f89c5233d1) Thanks [@jviide](https://github.com/jviide)! - Require Node.js v18
+
+- [`01ff112`](https://github.com/badrap/valita/commit/01ff112217b249eed30218fe936a989428dccaca) Thanks [@jviide](https://github.com/jviide)! - Mark multiple internal methods and properties as internal
+
 ## 0.3.16
 
 ### Patch Changes
