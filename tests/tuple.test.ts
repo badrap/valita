@@ -4,25 +4,25 @@ import * as v from "../src";
 describe("tuple()", () => {
   it("returns a fixed-length tuple", () => {
     const t = v.tuple([v.number(), v.number()]);
-    expect(t.prefix).toHaveLength(2);
-    expect(t.rest).toBe(undefined);
-    expect(t.suffix).toHaveLength(0);
+    expect(t._prefix).toHaveLength(2);
+    expect(t._rest).toBe(undefined);
+    expect(t._suffix).toHaveLength(0);
   });
 
   describe("concat()", () => {
     it("creates a fixed-length tuple from two fixed-length tuples", () => {
       const t = v.tuple([v.number()]).concat(v.tuple([v.string()]));
-      expect(t.prefix).toHaveLength(2);
-      expect(t.rest).toBe(undefined);
-      expect(t.suffix).toHaveLength(0);
+      expect(t._prefix).toHaveLength(2);
+      expect(t._rest).toBe(undefined);
+      expect(t._suffix).toHaveLength(0);
     });
 
     it("creates a variadic tuple from a fixed-length tuple and an array", () => {
       const s = v.string();
       const t = v.tuple([v.number(), v.number()]).concat(v.array(v.string()));
-      expect(t.prefix).toHaveLength(2);
-      expect(t.rest).toStrictEqual(s);
-      expect(t.suffix).toHaveLength(0);
+      expect(t._prefix).toHaveLength(2);
+      expect(t._rest).toStrictEqual(s);
+      expect(t._suffix).toHaveLength(0);
     });
 
     it("creates a variadic tuple from a variadic and a fixed-length tuple", () => {
@@ -33,9 +33,9 @@ describe("tuple()", () => {
 
       const t1 = v.tuple([n, b]).concat(v.array(s));
       const t = t1.concat(v.tuple([u]));
-      expect(t.prefix).toEqual([n, b]);
-      expect(t.rest).toStrictEqual(s);
-      expect(t.suffix).toEqual([u]);
+      expect(t._prefix).toEqual([n, b]);
+      expect(t._rest).toStrictEqual(s);
+      expect(t._suffix).toEqual([u]);
     });
 
     it("creates a variadic tuple from a fixed-length and a variadic tuple", () => {
@@ -51,9 +51,9 @@ describe("tuple()", () => {
         .concat(v.array(s))
         .concat(v.tuple([u]));
       const t = t1.concat(t2);
-      expect(t.prefix).toEqual([n, b, i]);
-      expect(t.rest).toStrictEqual(s);
-      expect(t.suffix).toEqual([u]);
+      expect(t._prefix).toEqual([n, b, i]);
+      expect(t._rest).toStrictEqual(s);
+      expect(t._suffix).toEqual([u]);
     });
 
     it("prohibits concatenating variadic types at type level", () => {

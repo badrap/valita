@@ -277,10 +277,14 @@ function formatIssueTree(tree: IssueTree): string {
  * ```
  */
 export class ValitaError extends Error {
+  /** @internal */
   private _issues?: Issue[];
 
-  constructor(private readonly issueTree: IssueTree) {
-    super(formatIssueTree(issueTree));
+  constructor(
+    /** @internal */
+    private readonly _issueTree: IssueTree,
+  ) {
+    super(formatIssueTree(_issueTree));
     Object.setPrototypeOf(this, new.target.prototype);
     this.name = new.target.name;
     this._issues = undefined;
@@ -288,7 +292,7 @@ export class ValitaError extends Error {
 
   get issues(): readonly Issue[] {
     if (this._issues === undefined) {
-      this._issues = collectIssues(this.issueTree);
+      this._issues = collectIssues(this._issueTree);
     }
     return this._issues;
   }
@@ -364,30 +368,37 @@ export type ValitaResult<V> = Ok<V> | Err;
 
 class ErrImpl implements Err {
   readonly ok = false;
+
+  /** @internal */
   private _issues?: Issue[];
+
+  /** @internal */
   private _message?: string;
 
-  constructor(private readonly issueTree: IssueTree) {
+  constructor(
+    /** @internal */
+    private readonly _issueTree: IssueTree,
+  ) {
     this._issues = undefined;
     this._message = undefined;
   }
 
   get issues(): readonly Issue[] {
     if (this._issues === undefined) {
-      this._issues = collectIssues(this.issueTree);
+      this._issues = collectIssues(this._issueTree);
     }
     return this._issues;
   }
 
   get message(): string {
     if (this._message === undefined) {
-      this._message = formatIssueTree(this.issueTree);
+      this._message = formatIssueTree(this._issueTree);
     }
     return this._message;
   }
 
   throw(): never {
-    throw new ValitaError(this.issueTree);
+    throw new ValitaError(this._issueTree);
   }
 }
 
@@ -517,12 +528,17 @@ function callMatcher(
 
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
-  abstract toTerminals(func: (t: TerminalType) => void): void;
-  abstract createMatcher(): TaggedMatcher;
 
-  get matcher(): TaggedMatcher {
-    const value = this.createMatcher();
-    Object.defineProperty(this, "matcher", { value });
+  /** @internal */
+  abstract _toTerminals(func: (t: TerminalType) => void): void;
+
+  /** @internal */
+  abstract _createMatcher(): TaggedMatcher;
+
+  /** @internal */
+  get _matcher(): TaggedMatcher {
+    const value = this._createMatcher();
+    Object.defineProperty(this, "_matcher", { value });
     return value;
   }
 
@@ -709,15 +725,33 @@ abstract class AbstractType<Output = unknown> {
   ): Type<T> {
     return new TransformType(this, (v, options) => {
       const r = func(v as Output, options);
-      return r.ok ? r : (r as unknown as { issueTree: IssueTree }).issueTree;
+      return r.ok ? r : (r as unknown as { _issueTree: IssueTree })._issueTree;
     });
   }
 }
+
+type TypeName =
+  | "unknown"
+  | "never"
+  | "string"
+  | "number"
+  | "bigint"
+  | "boolean"
+  | "null"
+  | "undefined"
+  | "literal"
+  | "object"
+  | "array"
+  | "union"
+  | "lazy"
+  | "transform";
 
 /**
  * A base class for all concrete validators/parsers.
  */
 abstract class Type<Output = unknown> extends AbstractType<Output> {
+  abstract name: TypeName;
+
   /**
    * Return new validator that accepts both the original type and `null`.
    */
@@ -725,7 +759,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
     return new Nullable(this);
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
+  _toTerminals(func: (t: TerminalType) => void): void {
     func(this as TerminalType);
   }
 
@@ -733,7 +767,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value without throwing.
    */
   try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
-    const r = this.matcher.match(
+    const r = this._matcher.match(
       v,
       options === undefined
         ? FLAG_FORBID_EXTRA_KEYS
@@ -756,7 +790,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value. Throw a ValitaError on failure.
    */
   parse(v: unknown, options?: ParseOptions): Infer<this> {
-    const r = this.matcher.match(
+    const r = this._matcher.match(
       v,
       options === undefined
         ? FLAG_FORBID_EXTRA_KEYS
@@ -779,21 +813,24 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 class Nullable<Output = unknown> extends Type<Output | null> {
   readonly name = "union";
 
-  constructor(private readonly type: Type<Output>) {
+  constructor(
+    /** @internal */
+    private readonly _type: Type<Output>,
+  ) {
     super();
   }
 
-  createMatcher(): TaggedMatcher {
-    const matcher = this.type.matcher;
+  _createMatcher(): TaggedMatcher {
+    const matcher = this._type._matcher;
 
     return taggedMatcher(TAG_UNION, (v, flags) =>
       v === null ? undefined : callMatcher(matcher, v, flags),
     );
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
+  _toTerminals(func: (t: TerminalType) => void): void {
     func(null_() as TerminalType);
-    this.type.toTerminals(func);
+    this._type._toTerminals(func);
   }
 
   nullable(): Type<Output | null> {
@@ -811,12 +848,15 @@ class Nullable<Output = unknown> extends Type<Output | null> {
 class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   readonly name = "optional";
 
-  constructor(private readonly type: AbstractType<Output>) {
+  constructor(
+    /** @internal */
+    private readonly _type: AbstractType<Output>,
+  ) {
     super();
   }
 
-  createMatcher(): TaggedMatcher {
-    const matcher = this.type.matcher;
+  _createMatcher(): TaggedMatcher {
+    const matcher = this._type._matcher;
 
     return taggedMatcher(TAG_OPTIONAL, (v, flags) =>
       v === undefined || flags & FLAG_MISSING_VALUE
@@ -825,10 +865,10 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     );
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
+  _toTerminals(func: (t: TerminalType) => void): void {
     func(this);
     func(undefined_() as TerminalType);
-    this.type.toTerminals(func);
+    this._type._toTerminals(func);
   }
 }
 
@@ -896,8 +936,10 @@ class ObjectType<
 
   constructor(
     readonly shape: Shape,
-    private readonly restType: Rest,
-    private readonly checks?: {
+    /** @internal */
+    private readonly _restType: Rest,
+    /** @internal */
+    private readonly _checks?: {
       func: (v: unknown) => boolean;
       issue: IssueLeaf;
     }[],
@@ -905,8 +947,8 @@ class ObjectType<
     super();
   }
 
-  createMatcher(): TaggedMatcher {
-    const func = createObjectMatcher(this.shape, this.restType, this.checks);
+  _createMatcher(): TaggedMatcher {
+    const func = createObjectMatcher(this.shape, this._restType, this._checks);
 
     return taggedMatcher(TAG_OBJECT, (v, flags) =>
       isObject(v) ? func(v, flags) : ISSUE_EXPECTED_OBJECT,
@@ -918,8 +960,8 @@ class ObjectType<
     error?: CustomError,
   ): ObjectType<Shape, Rest> {
     const issue: IssueLeaf = { ok: false, code: "custom_error", error };
-    return new ObjectType(this.shape, this.restType, [
-      ...(this.checks ?? []),
+    return new ObjectType(this.shape, this._restType, [
+      ...(this._checks ?? []),
       {
         func: func as (v: unknown) => boolean,
         issue,
@@ -936,7 +978,7 @@ class ObjectType<
   ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
     return new ObjectType(
       { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
-      this.restType,
+      this._restType,
     );
   }
 
@@ -957,7 +999,7 @@ class ObjectType<
     for (const key of keys) {
       delete shape[key];
     }
-    return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
+    return new ObjectType(shape as Omit<Shape, K[number]>, this._restType);
   }
 
   partial(): ObjectType<
@@ -968,7 +1010,7 @@ class ObjectType<
     for (const key of Object.keys(this.shape)) {
       set(shape, key, this.shape[key].optional());
     }
-    const rest = this.restType?.optional();
+    const rest = this._restType?.optional();
     return new ObjectType(
       shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
       rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined,
@@ -1009,14 +1051,14 @@ function createObjectMatcher(
     const type = shape[key];
 
     let optional = false as boolean;
-    type.toTerminals((t) => {
+    type._toTerminals((t) => {
       optional ||= t.name === "optional";
     });
 
     return {
       key,
       index,
-      matcher: type.matcher,
+      matcher: type._matcher,
       optional,
       missing: prependPath(key, ISSUE_MISSING_VALUE),
     } satisfies Entry;
@@ -1027,7 +1069,7 @@ function createObjectMatcher(
     keyedEntries[entry.key] = entry;
   }
 
-  const restMatcher = rest?.matcher;
+  const restMatcher = rest?._matcher;
 
   // A fast path for record(unknown()) without checks
   const fastPath =
@@ -1207,21 +1249,21 @@ class ArrayOrTupleType<
   readonly name = "array";
 
   constructor(
-    readonly prefix: Head,
-    readonly rest: Rest | undefined,
-    readonly suffix: Tail,
+    readonly _prefix: Head,
+    readonly _rest: Rest | undefined,
+    readonly _suffix: Tail,
   ) {
     super();
   }
 
-  createMatcher(): TaggedMatcher {
-    const prefix = this.prefix.map((t) => t.matcher);
-    const suffix = this.suffix.map((t) => t.matcher);
+  _createMatcher(): TaggedMatcher {
+    const prefix = this._prefix.map((t) => t._matcher);
+    const suffix = this._suffix.map((t) => t._matcher);
     const rest =
-      this.rest?.matcher ?? taggedMatcher(1, () => ISSUE_MISSING_VALUE);
+      this._rest?._matcher ?? taggedMatcher(1, () => ISSUE_MISSING_VALUE);
 
     const minLength = prefix.length + suffix.length;
-    const maxLength = this.rest ? Infinity : minLength;
+    const maxLength = this._rest ? Infinity : minLength;
     const invalidLength: IssueLeaf = {
       ok: false,
       code: "invalid_length",
@@ -1274,26 +1316,26 @@ class ArrayOrTupleType<
   }
 
   concat(type: ArrayType | TupleType | VariadicTupleType): ArrayOrTupleType {
-    if (this.rest) {
-      if (type.rest) {
+    if (this._rest) {
+      if (type._rest) {
         throw new TypeError("can not concatenate two variadic types");
       }
-      return new ArrayOrTupleType(this.prefix, this.rest, [
-        ...this.suffix,
-        ...type.prefix,
-        ...type.suffix,
+      return new ArrayOrTupleType(this._prefix, this._rest, [
+        ...this._suffix,
+        ...type._prefix,
+        ...type._suffix,
       ]);
-    } else if (type.rest) {
+    } else if (type._rest) {
       return new ArrayOrTupleType(
-        [...this.prefix, ...this.suffix, ...type.prefix],
-        type.rest,
-        type.suffix,
+        [...this._prefix, ...this._suffix, ...type._prefix],
+        type._rest,
+        type._suffix,
       );
     } else {
       return new ArrayOrTupleType(
-        [...this.prefix, ...this.suffix, ...type.prefix, ...type.suffix],
-        type.rest,
-        type.suffix,
+        [...this._prefix, ...this._suffix, ...type._prefix, ...type._suffix],
+        type._rest,
+        type._suffix,
       );
     }
   }
@@ -1305,9 +1347,15 @@ class ArrayOrTupleType<
 interface ArrayType<Element extends Type = Type>
   extends Type<Infer<Element>[]> {
   readonly name: "array";
-  readonly prefix: Type[];
-  readonly rest: Element;
-  readonly suffix: Type[];
+
+  /** @internal */
+  readonly _prefix: Type[];
+
+  /** @internal */
+  readonly _rest: Element;
+
+  /** @internal */
+  readonly _suffix: Type[];
 
   concat<Suffix extends Type[]>(
     type: TupleType<Suffix>,
@@ -1321,9 +1369,15 @@ interface ArrayType<Element extends Type = Type>
 interface TupleType<Elements extends Type[] = Type[]>
   extends Type<TupleOutput<Elements>> {
   readonly name: "array";
-  readonly prefix: Elements;
-  readonly rest: undefined;
-  readonly suffix: Type[];
+
+  /** @internal */
+  readonly _prefix: Elements;
+
+  /** @internal */
+  readonly _rest: undefined;
+
+  /** @internal */
+  readonly _suffix: Type[];
 
   concat<ConcatPrefix extends Type[]>(
     type: TupleType<ConcatPrefix>,
@@ -1350,9 +1404,15 @@ interface VariadicTupleType<
   Suffix extends Type[] = Type[],
 > extends Type<ArrayOutput<Prefix, Rest, Suffix>> {
   readonly name: "array";
-  readonly prefix: Prefix;
-  readonly rest: Rest;
-  readonly suffix: Suffix;
+
+  /** @internal */
+  readonly _prefix: Prefix;
+
+  /** @internal */
+  readonly _rest: Rest;
+
+  /** @internal */
+  readonly _suffix: Suffix;
 
   concat<OtherPrefix extends Type[]>(
     type: TupleType<OtherPrefix>,
@@ -1446,7 +1506,7 @@ function createObjectKeyMatcher(
 ): Matcher<Record<string, unknown>> | undefined {
   const list: { root: AbstractType; terminal: TerminalType }[] = [];
   for (const { root, terminal } of objects) {
-    terminal.shape[key].toTerminals((t) => list.push({ root, terminal: t }));
+    terminal.shape[key]._toTerminals((t) => list.push({ root, terminal: t }));
   }
 
   const { types, literals, optionals, unknowns, expectedTypes } =
@@ -1485,7 +1545,7 @@ function createObjectKeyMatcher(
     literals.size > 0 ? new Map<unknown, TaggedMatcher>() : undefined;
   if (byLiteral) {
     for (const [literal, options] of literals) {
-      byLiteral.set(literal, options[0].matcher);
+      byLiteral.set(literal, options[0]._matcher);
     }
   }
 
@@ -1493,11 +1553,11 @@ function createObjectKeyMatcher(
     types.size > 0 ? ({} as Record<string, TaggedMatcher>) : undefined;
   if (byType) {
     for (const [type, options] of types) {
-      byType[type] = options[0].matcher;
+      byType[type] = options[0]._matcher;
     }
   }
 
-  const optional = optionals[0]?.matcher as TaggedMatcher | undefined;
+  const optional = optionals[0]?._matcher as TaggedMatcher | undefined;
   return (obj, flags) => {
     const value = obj[key];
     if (value === undefined && !(key in obj)) {
@@ -1569,7 +1629,7 @@ function createUnionBaseMatcher(
     for (const [literal, options] of literals) {
       byLiteral.set(
         literal,
-        options.map((t) => t.matcher),
+        options.map((t) => t._matcher),
       );
     }
   }
@@ -1578,12 +1638,12 @@ function createUnionBaseMatcher(
     types.size > 0 ? ({} as Record<string, TaggedMatcher[]>) : undefined;
   if (byType) {
     for (const [type, options] of types) {
-      byType[type] = options.map((t) => t.matcher);
+      byType[type] = options.map((t) => t._matcher);
     }
   }
 
-  const optionalMatchers = optionals.map((t) => t.matcher);
-  const unknownMatchers = unknowns.map((t) => t.matcher);
+  const optionalMatchers = optionals.map((t) => t._matcher);
+  const unknownMatchers = unknowns.map((t) => t._matcher);
   return (value: unknown, flags: number) => {
     const options =
       flags & FLAG_MISSING_VALUE
@@ -1612,20 +1672,23 @@ function createUnionBaseMatcher(
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
 
-  constructor(readonly options: T) {
+  constructor(
+    /** @internal */
+    private readonly _options: T,
+  ) {
     super();
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
-    for (const option of this.options) {
-      option.toTerminals(func);
+  _toTerminals(func: (t: TerminalType) => void): void {
+    for (const option of this._options) {
+      option._toTerminals(func);
     }
   }
 
-  createMatcher(): TaggedMatcher {
+  _createMatcher(): TaggedMatcher {
     const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
-    for (const option of this.options) {
-      option.toTerminals((terminal) => {
+    for (const option of this._options) {
+      option._toTerminals((terminal) => {
         flattened.push({ root: option, terminal });
       });
     }
@@ -1647,24 +1710,26 @@ class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
 
   constructor(
-    protected readonly transformed: AbstractType,
-    protected readonly transform: TransformFunc,
+    /** @internal */
+    protected readonly _transformed: AbstractType,
+    /** @internal */
+    protected readonly _transform: TransformFunc,
   ) {
     super();
   }
 
-  createMatcher(): TaggedMatcher {
+  _createMatcher(): TaggedMatcher {
     const chain: TransformFunc[] = [];
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let next: AbstractType = this;
     while (next instanceof TransformType) {
-      chain.push(next.transform);
-      next = next.transformed;
+      chain.push(next._transform);
+      next = next._transformed;
     }
     chain.reverse();
 
-    const matcher = next.matcher;
+    const matcher = next._matcher;
     const undef = ok(undefined);
 
     return taggedMatcher(TAG_TRANSFORM, (v, flags) => {
@@ -1703,84 +1768,87 @@ class TransformType<Output> extends Type<Output> {
     });
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
-    this.transformed.toTerminals(func);
+  _toTerminals(func: (t: TerminalType) => void): void {
+    this._transformed._toTerminals(func);
   }
 }
 
 class LazyType<T> extends Type<T> {
   readonly name = "lazy";
 
-  private recursing = false;
-  private type?: AbstractType;
-  private typeMatcher?: TaggedMatcher;
+  private _recursing = false;
+  private _type?: AbstractType;
+  private _typeMatcher?: TaggedMatcher;
 
-  constructor(private readonly definer: () => Type<T>) {
+  constructor(
+    /** @internal */
+    private readonly _definer: () => Type<T>,
+  ) {
     super();
-    this.type = undefined;
-    this.typeMatcher = undefined;
+    this._type = undefined;
+    this._typeMatcher = undefined;
   }
 
-  get matcher() {
-    if (this.typeMatcher !== undefined) {
-      return this.typeMatcher;
+  get _matcher() {
+    if (this._typeMatcher !== undefined) {
+      return this._typeMatcher;
     }
-    return this.createMatcher();
+    return this._createMatcher();
   }
 
-  createMatcher(): TaggedMatcher {
-    let matcher = this.typeMatcher;
+  _createMatcher(): TaggedMatcher {
+    let matcher = this._typeMatcher;
     if (matcher === undefined) {
       matcher = taggedMatcher(TAG_UNKNOWN, () => undefined);
-      this.typeMatcher = matcher;
+      this._typeMatcher = matcher;
 
-      if (!this.type) {
-        this.type = this.definer();
+      if (!this._type) {
+        this._type = this._definer();
       }
 
-      const { tag, match } = this.type.matcher;
+      const { tag, match } = this._type._matcher;
       matcher.tag = tag;
       matcher.match = match;
     }
     return matcher;
   }
 
-  toTerminals(func: (t: TerminalType) => void): void {
-    if (this.recursing) {
+  _toTerminals(func: (t: TerminalType) => void): void {
+    if (this._recursing) {
       return;
     }
     try {
-      this.recursing = true;
-      if (!this.type) {
-        this.type = this.definer();
+      this._recursing = true;
+      if (!this._type) {
+        this._type = this._definer();
       }
-      this.type.toTerminals(func);
+      this._type._toTerminals(func);
     } finally {
-      this.recursing = false;
+      this._recursing = false;
     }
   }
 }
 
 function singleton<Output>(
-  name: string,
+  name: TypeName,
   tag: number,
   match: (value: unknown, flags: number) => MatcherResult,
 ): () => Type<Output> {
   const value = taggedMatcher(tag, match);
 
   class SimpleType extends Type<Output> {
-    readonly name: string;
+    readonly name: TypeName;
 
     constructor() {
       super();
       this.name = name;
     }
 
-    createMatcher(): TaggedMatcher {
+    _createMatcher(): TaggedMatcher {
       return value;
     }
   }
-  Object.defineProperty(SimpleType.prototype, "matcher", { value });
+  Object.defineProperty(SimpleType.prototype, "_matcher", { value });
 
   const instance = new SimpleType();
   return () => instance;
@@ -1865,7 +1933,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
     super();
   }
 
-  createMatcher(): TaggedMatcher {
+  _createMatcher(): TaggedMatcher {
     const value = this.value;
     const issue: IssueLeaf = {
       ok: false,

@@ -46,9 +46,9 @@ describe("array()", () => {
     it("creates a variadic tuple from an array and a fixed-length tuple", () => {
       const s = v.string();
       const t = v.tuple([v.number(), v.number()]).concat(v.array(v.string()));
-      expect(t.prefix).toHaveLength(2);
-      expect(t.rest).toStrictEqual(s);
-      expect(t.suffix).to.toHaveLength(0);
+      expect(t._prefix).toHaveLength(2);
+      expect(t._rest).toStrictEqual(s);
+      expect(t._suffix).to.toHaveLength(0);
     });
 
     it("prohibits concatenating variadic types at type level", () => {
