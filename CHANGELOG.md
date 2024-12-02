@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.4.1
+
+### Patch Changes
+
+- [`4b0a837`](https://github.com/badrap/valita/commit/4b0a837f2db81439f0cd9f6e570c10558895dec8) Thanks [@jviide](https://github.com/jviide)! - Make Optional#type public
+
 ## 0.4.0
 
 ### Minor Changes
