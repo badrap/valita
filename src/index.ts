@@ -1790,13 +1790,17 @@ function singleton<Output>(
  * Create a validator that matches any value,
  * analogous to the TypeScript type `unknown`.
  */
-const unknown = singleton<unknown>("unknown", TAG_UNKNOWN, () => undefined);
+const unknown: () => Type = singleton<unknown>(
+  "unknown",
+  TAG_UNKNOWN,
+  () => undefined,
+);
 
 /**
  * Create a validator that never matches any value,
  * analogous to the TypeScript type `never`.
  */
-const never = singleton<never>(
+const never: () => Type<never> = singleton<never>(
   "never",
   TAG_NEVER,
   () => ISSUE_EXPECTED_NOTHING,
