@@ -24,7 +24,7 @@
     "provenance": true
   },
   "engines": {
-    "node": ">= 16"
+    "node": ">= 18"
   },
   "scripts": {
     "lint": "eslint --max-warnings 0 .",
