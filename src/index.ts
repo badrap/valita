@@ -1805,43 +1805,53 @@ const never = singleton<never>(
 /**
  * Create a validator that matches any string value.
  */
-const string = singleton<string>("string", TAG_STRING, (v) =>
-  typeof v === "string" ? undefined : ISSUE_EXPECTED_STRING,
+const string: () => Type<string> = singleton<string>(
+  "string",
+  TAG_STRING,
+  (v) => (typeof v === "string" ? undefined : ISSUE_EXPECTED_STRING),
 );
 
 /**
  * Create a validator that matches any number value.
  */
-const number = singleton<number>("number", TAG_NUMBER, (v) =>
-  typeof v === "number" ? undefined : ISSUE_EXPECTED_NUMBER,
+const number: () => Type<number> = singleton<number>(
+  "number",
+  TAG_NUMBER,
+  (v) => (typeof v === "number" ? undefined : ISSUE_EXPECTED_NUMBER),
 );
 
 /**
  * Create a validator that matches any bigint value.
  */
-const bigint = singleton<bigint>("bigint", TAG_BIGINT, (v) =>
-  typeof v === "bigint" ? undefined : ISSUE_EXPECTED_BIGINT,
+const bigint: () => Type<bigint> = singleton<bigint>(
+  "bigint",
+  TAG_BIGINT,
+  (v) => (typeof v === "bigint" ? undefined : ISSUE_EXPECTED_BIGINT),
 );
 
 /**
  * Create a validator that matches any boolean value.
  */
-const boolean = singleton<boolean>("boolean", TAG_BOOLEAN, (v) =>
-  typeof v === "boolean" ? undefined : ISSUE_EXPECTED_BOOLEAN,
+const boolean: () => Type<boolean> = singleton<boolean>(
+  "boolean",
+  TAG_BOOLEAN,
+  (v) => (typeof v === "boolean" ? undefined : ISSUE_EXPECTED_BOOLEAN),
 );
 
 /**
  * Create a validator that matches `null`.
  */
-const null_ = singleton<null>("null", TAG_NULL, (v) =>
+const null_: () => Type<null> = singleton<null>("null", TAG_NULL, (v) =>
   v === null ? undefined : ISSUE_EXPECTED_NULL,
 );
 
 /**
  * Create a validator that matches `undefined`.
  */
-const undefined_ = singleton<undefined>("undefined", TAG_UNDEFINED, (v) =>
-  v === undefined ? undefined : ISSUE_EXPECTED_UNDEFINED,
+const undefined_: () => Type<undefined> = singleton<undefined>(
+  "undefined",
+  TAG_UNDEFINED,
+  (v) => (v === undefined ? undefined : ISSUE_EXPECTED_UNDEFINED),
 );
 
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
