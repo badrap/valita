@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.4.2
+
+### Patch Changes
+
+- [`c648586`](https://github.com/badrap/valita/commit/c6485866829a9f235d7bb6e790cb721a0a321c1a) Thanks [@jviide](https://github.com/jviide)! - Include an array of sub-issues in "invalid_union" issues
+
 ## 0.4.1
 
 ### Patch Changes
