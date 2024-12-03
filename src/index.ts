@@ -419,9 +419,9 @@ class ErrImpl implements Err {
  * // "Hello, world!"
  * ```
  */
-function ok<T extends Literal>(value: T): Ok<T>;
-function ok<T>(value: T): Ok<T>;
-function ok<T>(value: T): Ok<T> {
+export function ok<T extends Literal>(value: T): Ok<T>;
+export function ok<T>(value: T): Ok<T>;
+export function ok<T>(value: T): Ok<T> {
   return { ok: true, value };
 }
 
@@ -438,7 +438,7 @@ function ok<T>(value: T): Ok<T> {
  * // ValitaError: custom_error at . (bad value)
  * ```
  */
-function err(error?: CustomError): Err {
+export function err(error?: CustomError): Err {
   return new ErrImpl({ ok: false, code: "custom_error", error });
 }
 
@@ -1878,14 +1878,14 @@ function singleton<Output>(
   Object.defineProperty(SimpleType.prototype, "_matcher", { value });
 
   const instance = new SimpleType();
-  return () => instance;
+  return /*#__NO_SIDE_EFFECTS__*/ () => instance;
 }
 
 /**
  * Create a validator that matches any value,
  * analogous to the TypeScript type `unknown`.
  */
-const unknown: () => Type = singleton<unknown>(
+export const unknown: () => Type = /*#__PURE__*/ singleton<unknown>(
   "unknown",
   TAG_UNKNOWN,
   () => undefined,
@@ -1895,7 +1895,7 @@ const unknown: () => Type = singleton<unknown>(
  * Create a validator that never matches any value,
  * analogous to the TypeScript type `never`.
  */
-const never: () => Type<never> = singleton<never>(
+export const never: () => Type<never> = /*#__PURE__*/ singleton<never>(
   "never",
   TAG_NEVER,
   () => ISSUE_EXPECTED_NOTHING,
@@ -1904,7 +1904,7 @@ const never: () => Type<never> = singleton<never>(
 /**
  * Create a validator that matches any string value.
  */
-const string: () => Type<string> = singleton<string>(
+export const string: () => Type<string> = /*#__PURE__*/ singleton<string>(
   "string",
   TAG_STRING,
   (v) => (typeof v === "string" ? undefined : ISSUE_EXPECTED_STRING),
@@ -1913,7 +1913,7 @@ const string: () => Type<string> = singleton<string>(
 /**
  * Create a validator that matches any number value.
  */
-const number: () => Type<number> = singleton<number>(
+export const number: () => Type<number> = /*#__PURE__*/ singleton<number>(
   "number",
   TAG_NUMBER,
   (v) => (typeof v === "number" ? undefined : ISSUE_EXPECTED_NUMBER),
@@ -1922,7 +1922,7 @@ const number: () => Type<number> = singleton<number>(
 /**
  * Create a validator that matches any bigint value.
  */
-const bigint: () => Type<bigint> = singleton<bigint>(
+export const bigint: () => Type<bigint> = /*#__PURE__*/ singleton<bigint>(
   "bigint",
   TAG_BIGINT,
   (v) => (typeof v === "bigint" ? undefined : ISSUE_EXPECTED_BIGINT),
@@ -1931,7 +1931,7 @@ const bigint: () => Type<bigint> = singleton<bigint>(
 /**
  * Create a validator that matches any boolean value.
  */
-const boolean: () => Type<boolean> = singleton<boolean>(
+export const boolean: () => Type<boolean> = /*#__PURE__*/ singleton<boolean>(
   "boolean",
   TAG_BOOLEAN,
   (v) => (typeof v === "boolean" ? undefined : ISSUE_EXPECTED_BOOLEAN),
@@ -1940,18 +1940,22 @@ const boolean: () => Type<boolean> = singleton<boolean>(
 /**
  * Create a validator that matches `null`.
  */
-const null_: () => Type<null> = singleton<null>("null", TAG_NULL, (v) =>
-  v === null ? undefined : ISSUE_EXPECTED_NULL,
+const null_: () => Type<null> = /*#__PURE__*/ singleton<null>(
+  "null",
+  TAG_NULL,
+  (v) => (v === null ? undefined : ISSUE_EXPECTED_NULL),
 );
+export { null_ as null };
 
 /**
  * Create a validator that matches `undefined`.
  */
-const undefined_: () => Type<undefined> = singleton<undefined>(
+const undefined_: () => Type<undefined> = /*#__PURE__*/ singleton<undefined>(
   "undefined",
   TAG_UNDEFINED,
   (v) => (v === undefined ? undefined : ISSUE_EXPECTED_UNDEFINED),
 );
+export { undefined_ as undefined };
 
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
@@ -1974,48 +1978,56 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
 /**
  * Create a validator for a specific string, number, bigint or boolean value.
  */
-function literal<T extends Literal>(value: T): Type<T> {
-  return new LiteralType(value);
-}
+export const literal = <T extends Literal>(value: T): Type<T> => {
+  return /*#__PURE__*/ new LiteralType(value);
+};
 
 /**
  * Create a validator for an object type.
  */
-function object<T extends Record<string, AbstractType>>(
+export const object = <T extends Record<string, AbstractType>>(
   obj: T,
-): ObjectType<T, undefined> {
-  return new ObjectType(obj, undefined);
-}
+): ObjectType<T, undefined> => {
+  return /*#__PURE__*/ new ObjectType(obj, undefined);
+};
 
 /**
  * Create a validator for a record type `Record<string, T>`,
  * where `T` is the output type of the given subvalidator.
  */
-function record<T extends Type>(valueType?: T): Type<Record<string, Infer<T>>> {
-  return new ObjectType({}, valueType ?? unknown()) as Type<
+export const record = <T extends Type>(
+  valueType?: T,
+): Type<Record<string, Infer<T>>> => {
+  return /*#__PURE__*/ new ObjectType({}, valueType ?? unknown()) as Type<
     Record<string, Infer<T>>
   >;
-}
+};
 
 /**
  * Create a validator for an array type `T[]`,
  * where `T` is the output type of the given subvalidator.
  */
-function array<T extends Type>(item?: T): ArrayType<T> {
-  return new ArrayOrTupleType(
+export const array = <T extends Type>(item?: T): ArrayType<T> => {
+  return /*#__PURE__*/ new ArrayOrTupleType(
     [],
     item ?? unknown(),
     [],
   ) as unknown as ArrayType<T>;
-}
+};
 
 /**
  * Create a validator for an array type `[T1, T2, ..., Tn]`,
  * where `T1`, `T2`, ..., `Tn` are the output types of the given subvalidators.
  */
-function tuple<T extends [] | [Type, ...Type[]]>(items: T): TupleType<T> {
-  return new ArrayOrTupleType(items, undefined, []) as unknown as TupleType<T>;
-}
+export const tuple = <T extends [] | [Type, ...Type[]]>(
+  items: T,
+): TupleType<T> => {
+  return /*#__PURE__*/ new ArrayOrTupleType(
+    items,
+    undefined,
+    [],
+  ) as unknown as TupleType<T>;
+};
 
 /**
  * Create a validator that matches any type `T1 | T2 | ... | Tn`,
@@ -2023,9 +2035,9 @@ function tuple<T extends [] | [Type, ...Type[]]>(items: T): TupleType<T> {
  *
  * This is analogous to how TypeScript's union types are constructed.
  */
-function union<T extends Type[]>(...options: T): UnionType<T> {
-  return new UnionType(options);
-}
+export const union = <T extends Type[]>(...options: T): UnionType<T> => {
+  return /*#__PURE__*/ new UnionType(options);
+};
 
 /**
  * Create a validator that can reference itself, directly or indirectly.
@@ -2041,9 +2053,9 @@ function union<T extends Type[]>(...options: T): UnionType<T> {
  * const type: v.Type<T> = v.lazy(() => v.union(v.string(), v.array(type)));
  * ```
  */
-function lazy<T>(definer: () => Type<T>): Type<T> {
+export const lazy = <T>(definer: () => Type<T>): Type<T> => {
   return new LazyType(definer);
-}
+};
 
 type TerminalType =
   | (Type & {
@@ -2061,26 +2073,6 @@ type TerminalType =
   | ObjectType
   | ArrayOrTupleType
   | Optional;
-
-export {
-  never,
-  unknown,
-  number,
-  bigint,
-  string,
-  boolean,
-  object,
-  record,
-  array,
-  tuple,
-  literal,
-  union,
-  null_ as null,
-  undefined_ as undefined,
-  lazy,
-  ok,
-  err,
-};
 
 export type { Type, Optional };
 export type { ObjectType, ArrayType, TupleType, VariadicTupleType, UnionType };
