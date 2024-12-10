@@ -258,6 +258,15 @@ function formatIssueTree(tree: IssueTree): string {
   return msg;
 }
 
+function lazyProperty<T>(
+  obj: object,
+  prop: string | number | symbol,
+  value: T,
+): T {
+  Object.defineProperty(obj, prop, { value });
+  return value;
+}
+
 /**
  * An error type representing one or more validation/parsing errors.
  *
@@ -283,9 +292,6 @@ function formatIssueTree(tree: IssueTree): string {
  * ```
  */
 export class ValitaError extends Error {
-  /** @internal */
-  private _issues?: Issue[];
-
   constructor(
     /** @internal */
     private readonly _issueTree: IssueTree,
@@ -293,14 +299,10 @@ export class ValitaError extends Error {
     super(formatIssueTree(_issueTree));
     Object.setPrototypeOf(this, new.target.prototype);
     this.name = new.target.name;
-    this._issues = undefined;
   }
 
   get issues(): readonly Issue[] {
-    if (this._issues === undefined) {
-      this._issues = collectIssues(this._issueTree);
-    }
-    return this._issues;
+    return lazyProperty(this, "issues", collectIssues(this._issueTree));
   }
 }
 
@@ -375,32 +377,17 @@ export type ValitaResult<V> = Ok<V> | Err;
 class ErrImpl implements Err {
   readonly ok = false;
 
-  /** @internal */
-  private _issues?: Issue[];
-
-  /** @internal */
-  private _message?: string;
-
   constructor(
     /** @internal */
     private readonly _issueTree: IssueTree,
-  ) {
-    this._issues = undefined;
-    this._message = undefined;
-  }
+  ) {}
 
   get issues(): readonly Issue[] {
-    if (this._issues === undefined) {
-      this._issues = collectIssues(this._issueTree);
-    }
-    return this._issues;
+    return lazyProperty(this, "issues", collectIssues(this._issueTree));
   }
 
   get message(): string {
-    if (this._message === undefined) {
-      this._message = formatIssueTree(this._issueTree);
-    }
-    return this._message;
+    return lazyProperty(this, "message", formatIssueTree(this._issueTree));
   }
 
   throw(): never {
@@ -482,6 +469,7 @@ const TAG_OBJECT = 10;
 const TAG_ARRAY = 11;
 const TAG_UNION = 12;
 const TAG_TRANSFORM = 13;
+const TAG_OTHER = 14;
 
 type MatcherResult = undefined | Ok<unknown> | IssueTree;
 
@@ -532,6 +520,8 @@ function callMatcher(
   }
 }
 
+const MATCHER_SYMBOL: unique symbol = Symbol.for("@valita/internal");
+
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
 
@@ -539,14 +529,7 @@ abstract class AbstractType<Output = unknown> {
   abstract _toTerminals(func: (t: TerminalType) => void): void;
 
   /** @internal */
-  abstract _createMatcher(): TaggedMatcher;
-
-  /** @internal */
-  get _matcher(): TaggedMatcher {
-    const value = this._createMatcher();
-    Object.defineProperty(this, "_matcher", { value });
-    return value;
-  }
+  abstract readonly [MATCHER_SYMBOL]: TaggedMatcher;
 
   /**
    * Return new optional type that can not be used as a standalone
@@ -779,7 +762,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value without throwing.
    */
   try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
-    const r = this._matcher.match(
+    const r = this[MATCHER_SYMBOL].match(
       v,
       options === undefined
         ? FLAG_FORBID_EXTRA_KEYS
@@ -802,7 +785,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value. Throw a ValitaError on failure.
    */
   parse(v: unknown, options?: ParseOptions): Infer<this> {
-    const r = this._matcher.match(
+    const r = this[MATCHER_SYMBOL].match(
       v,
       options === undefined
         ? FLAG_FORBID_EXTRA_KEYS
@@ -832,11 +815,14 @@ class Nullable<Output = unknown> extends Type<Output | null> {
     super();
   }
 
-  _createMatcher(): TaggedMatcher {
-    const matcher = this._type._matcher;
-
-    return taggedMatcher(TAG_UNION, (v, flags) =>
-      v === null ? undefined : callMatcher(matcher, v, flags),
+  get [MATCHER_SYMBOL](): TaggedMatcher {
+    const matcher = this._type[MATCHER_SYMBOL];
+    return lazyProperty(
+      this,
+      MATCHER_SYMBOL,
+      taggedMatcher(TAG_UNION, (v, flags) =>
+        v === null ? undefined : callMatcher(matcher, v, flags),
+      ),
     );
   }
 
@@ -882,13 +868,16 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     });
   }
 
-  _createMatcher(): TaggedMatcher {
-    const matcher = this.type._matcher;
-
-    return taggedMatcher(TAG_OPTIONAL, (v, flags) =>
-      v === undefined || flags & FLAG_MISSING_VALUE
-        ? undefined
-        : callMatcher(matcher, v, flags),
+  get [MATCHER_SYMBOL](): TaggedMatcher {
+    const matcher = this.type[MATCHER_SYMBOL];
+    return lazyProperty(
+      this,
+      MATCHER_SYMBOL,
+      taggedMatcher(TAG_OPTIONAL, (v, flags) =>
+        v === undefined || flags & FLAG_MISSING_VALUE
+          ? undefined
+          : callMatcher(matcher, v, flags),
+      ),
     );
   }
 
@@ -974,11 +963,14 @@ class ObjectType<
     super();
   }
 
-  _createMatcher(): TaggedMatcher {
+  get [MATCHER_SYMBOL](): TaggedMatcher {
     const func = createObjectMatcher(this.shape, this._restType, this._checks);
-
-    return taggedMatcher(TAG_OBJECT, (v, flags) =>
-      isObject(v) ? func(v, flags) : ISSUE_EXPECTED_OBJECT,
+    return lazyProperty(
+      this,
+      MATCHER_SYMBOL,
+      taggedMatcher(TAG_OBJECT, (v, flags) =>
+        isObject(v) ? func(v, flags) : ISSUE_EXPECTED_OBJECT,
+      ),
     );
   }
 
@@ -1085,7 +1077,7 @@ function createObjectMatcher(
     return {
       key,
       index,
-      matcher: type._matcher,
+      matcher: type[MATCHER_SYMBOL],
       optional,
       missing: prependPath(key, ISSUE_MISSING_VALUE),
     } satisfies Entry;
@@ -1096,7 +1088,7 @@ function createObjectMatcher(
     keyedEntries[entry.key] = entry;
   }
 
-  const restMatcher = rest?._matcher;
+  const restMatcher = rest?.[MATCHER_SYMBOL];
 
   // A fast path for record(unknown()) without checks
   const fastPath =
@@ -1283,11 +1275,12 @@ class ArrayOrTupleType<
     super();
   }
 
-  _createMatcher(): TaggedMatcher {
-    const prefix = this._prefix.map((t) => t._matcher);
-    const suffix = this._suffix.map((t) => t._matcher);
+  get [MATCHER_SYMBOL](): TaggedMatcher {
+    const prefix = this._prefix.map((t) => t[MATCHER_SYMBOL]);
+    const suffix = this._suffix.map((t) => t[MATCHER_SYMBOL]);
     const rest =
-      this._rest?._matcher ?? taggedMatcher(1, () => ISSUE_MISSING_VALUE);
+      this._rest?.[MATCHER_SYMBOL] ??
+      taggedMatcher(1, () => ISSUE_MISSING_VALUE);
 
     const minLength = prefix.length + suffix.length;
     const maxLength = this._rest ? Infinity : minLength;
@@ -1298,48 +1291,52 @@ class ArrayOrTupleType<
       maxLength: maxLength === Infinity ? undefined : maxLength,
     };
 
-    return taggedMatcher(TAG_ARRAY, (arr, flags) => {
-      if (!Array.isArray(arr)) {
-        return ISSUE_EXPECTED_ARRAY;
-      }
+    return lazyProperty(
+      this,
+      MATCHER_SYMBOL,
+      taggedMatcher(TAG_ARRAY, (arr, flags) => {
+        if (!Array.isArray(arr)) {
+          return ISSUE_EXPECTED_ARRAY;
+        }
 
-      const length = arr.length;
-      if (length < minLength || length > maxLength) {
-        return invalidLength;
-      }
+        const length = arr.length;
+        if (length < minLength || length > maxLength) {
+          return invalidLength;
+        }
 
-      const headEnd = prefix.length;
-      const tailStart = arr.length - suffix.length;
+        const headEnd = prefix.length;
+        const tailStart = arr.length - suffix.length;
 
-      let issueTree: IssueTree | undefined = undefined;
-      let output: unknown[] = arr;
-      for (let i = 0; i < arr.length; i++) {
-        const entry =
-          i < headEnd
-            ? prefix[i]
-            : i >= tailStart
-              ? suffix[i - tailStart]
-              : rest;
-        const r = callMatcher(entry, arr[i], flags);
-        if (r !== undefined) {
-          if (r.ok) {
-            if (output === arr) {
-              output = arr.slice();
+        let issueTree: IssueTree | undefined = undefined;
+        let output: unknown[] = arr;
+        for (let i = 0; i < arr.length; i++) {
+          const entry =
+            i < headEnd
+              ? prefix[i]
+              : i >= tailStart
+                ? suffix[i - tailStart]
+                : rest;
+          const r = callMatcher(entry, arr[i], flags);
+          if (r !== undefined) {
+            if (r.ok) {
+              if (output === arr) {
+                output = arr.slice();
+              }
+              output[i] = r.value;
+            } else {
+              issueTree = joinIssues(issueTree, prependPath(i, r));
             }
-            output[i] = r.value;
-          } else {
-            issueTree = joinIssues(issueTree, prependPath(i, r));
           }
         }
-      }
-      if (issueTree) {
-        return issueTree;
-      } else if (arr === output) {
-        return undefined;
-      } else {
-        return { ok: true, value: output };
-      }
-    });
+        if (issueTree) {
+          return issueTree;
+        } else if (arr === output) {
+          return undefined;
+        } else {
+          return { ok: true, value: output };
+        }
+      }),
+    );
   }
 
   concat(type: ArrayType | TupleType | VariadicTupleType): ArrayOrTupleType {
@@ -1572,7 +1569,7 @@ function createObjectKeyMatcher(
     literals.size > 0 ? new Map<unknown, TaggedMatcher>() : undefined;
   if (byLiteral) {
     for (const [literal, options] of literals) {
-      byLiteral.set(literal, options[0]._matcher);
+      byLiteral.set(literal, options[0][MATCHER_SYMBOL]);
     }
   }
 
@@ -1580,11 +1577,11 @@ function createObjectKeyMatcher(
     types.size > 0 ? ({} as Record<string, TaggedMatcher>) : undefined;
   if (byType) {
     for (const [type, options] of types) {
-      byType[type] = options[0]._matcher;
+      byType[type] = options[0][MATCHER_SYMBOL];
     }
   }
 
-  const optional = optionals[0]?._matcher as TaggedMatcher | undefined;
+  const optional = optionals[0]?.[MATCHER_SYMBOL] as TaggedMatcher | undefined;
   return (obj, flags) => {
     const value = obj[key];
     if (value === undefined && !(key in obj)) {
@@ -1656,7 +1653,7 @@ function createUnionBaseMatcher(
     for (const [literal, options] of literals) {
       byLiteral.set(
         literal,
-        options.map((t) => t._matcher),
+        options.map((t) => t[MATCHER_SYMBOL]),
       );
     }
   }
@@ -1665,12 +1662,12 @@ function createUnionBaseMatcher(
     types.size > 0 ? ({} as Record<string, TaggedMatcher[]>) : undefined;
   if (byType) {
     for (const [type, options] of types) {
-      byType[type] = options.map((t) => t._matcher);
+      byType[type] = options.map((t) => t[MATCHER_SYMBOL]);
     }
   }
 
-  const optionalMatchers = optionals.map((t) => t._matcher);
-  const unknownMatchers = unknowns.map((t) => t._matcher);
+  const optionalMatchers = optionals.map((t) => t[MATCHER_SYMBOL]);
+  const unknownMatchers = unknowns.map((t) => t[MATCHER_SYMBOL]);
   return (value: unknown, flags: number) => {
     const options =
       flags & FLAG_MISSING_VALUE
@@ -1712,7 +1709,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     }
   }
 
-  _createMatcher(): TaggedMatcher {
+  get [MATCHER_SYMBOL](): TaggedMatcher {
     const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
     for (const option of this._options) {
       option._toTerminals((terminal) => {
@@ -1721,8 +1718,12 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
     }
     const base = createUnionBaseMatcher(flattened);
     const object = createUnionObjectMatcher(flattened);
-    return taggedMatcher(TAG_UNION, (v, f) =>
-      object !== undefined && isObject(v) ? object(v, f) : base(v, f),
+    return lazyProperty(
+      this,
+      MATCHER_SYMBOL,
+      taggedMatcher(TAG_UNION, (v, f) =>
+        object !== undefined && isObject(v) ? object(v, f) : base(v, f),
+      ),
     );
   }
 }
@@ -1745,7 +1746,7 @@ class TransformType<Output> extends Type<Output> {
     super();
   }
 
-  _createMatcher(): TaggedMatcher {
+  get [MATCHER_SYMBOL](): TaggedMatcher {
     const chain: TransformFunc[] = [];
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -1756,43 +1757,47 @@ class TransformType<Output> extends Type<Output> {
     }
     chain.reverse();
 
-    const matcher = next._matcher;
+    const matcher = next[MATCHER_SYMBOL];
     const undef = ok(undefined);
 
-    return taggedMatcher(TAG_TRANSFORM, (v, flags) => {
-      let result = callMatcher(matcher, v, flags);
-      if (result !== undefined && !result.ok) {
-        return result;
-      }
-
-      let current: unknown;
-      if (result !== undefined) {
-        current = result.value;
-      } else if (flags & FLAG_MISSING_VALUE) {
-        current = undefined;
-        result = undef;
-      } else {
-        current = v;
-      }
-
-      const options =
-        flags & FLAG_FORBID_EXTRA_KEYS
-          ? STRICT
-          : flags & FLAG_STRIP_EXTRA_KEYS
-            ? STRIP
-            : PASSTHROUGH;
-      for (let i = 0; i < chain.length; i++) {
-        const r = chain[i](current, options);
-        if (r !== undefined) {
-          if (!r.ok) {
-            return r;
-          }
-          current = r.value;
-          result = r;
+    return lazyProperty(
+      this,
+      MATCHER_SYMBOL,
+      taggedMatcher(TAG_TRANSFORM, (v, flags) => {
+        let result = callMatcher(matcher, v, flags);
+        if (result !== undefined && !result.ok) {
+          return result;
         }
-      }
-      return result;
-    });
+
+        let current: unknown;
+        if (result !== undefined) {
+          current = result.value;
+        } else if (flags & FLAG_MISSING_VALUE) {
+          current = undefined;
+          result = undef;
+        } else {
+          current = v;
+        }
+
+        const options =
+          flags & FLAG_FORBID_EXTRA_KEYS
+            ? STRICT
+            : flags & FLAG_STRIP_EXTRA_KEYS
+              ? STRIP
+              : PASSTHROUGH;
+        for (let i = 0; i < chain.length; i++) {
+          const r = chain[i](current, options);
+          if (r !== undefined) {
+            if (!r.ok) {
+              return r;
+            }
+            current = r.value;
+            result = r;
+          }
+        }
+        return result;
+      }),
+    );
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
@@ -1803,55 +1808,39 @@ class TransformType<Output> extends Type<Output> {
 class LazyType<T> extends Type<T> {
   readonly name = "lazy";
 
+  /** @internal */
   private _recursing = false;
-  private _type?: AbstractType;
-  private _typeMatcher?: TaggedMatcher;
 
   constructor(
     /** @internal */
     private readonly _definer: () => Type<T>,
   ) {
     super();
-    this._type = undefined;
-    this._typeMatcher = undefined;
   }
 
-  get _matcher() {
-    if (this._typeMatcher !== undefined) {
-      return this._typeMatcher;
-    }
-    return this._createMatcher();
+  get type() {
+    return lazyProperty(this, "type", this._definer());
   }
 
-  _createMatcher(): TaggedMatcher {
-    let matcher = this._typeMatcher;
-    if (matcher === undefined) {
-      matcher = taggedMatcher(TAG_UNKNOWN, () => undefined);
-      this._typeMatcher = matcher;
-
-      if (!this._type) {
-        this._type = this._definer();
-      }
-
-      const { tag, match } = this._type._matcher;
-      matcher.tag = tag;
-      matcher.match = match;
-    }
+  get [MATCHER_SYMBOL]() {
+    const matcher = taggedMatcher(TAG_OTHER, (value, flags) => {
+      const typeMatcher = this.type[MATCHER_SYMBOL];
+      matcher.tag = typeMatcher.tag;
+      matcher.match = typeMatcher.match;
+      lazyProperty(this, MATCHER_SYMBOL, typeMatcher);
+      return callMatcher(typeMatcher, value, flags);
+    });
     return matcher;
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
-    if (this._recursing) {
-      return;
-    }
-    try {
+    if (!this._recursing) {
       this._recursing = true;
-      if (!this._type) {
-        this._type = this._definer();
+      try {
+        this.type._toTerminals(func);
+      } finally {
+        this._recursing = false;
       }
-      this._type._toTerminals(func);
-    } finally {
-      this._recursing = false;
     }
   }
 }
@@ -1865,17 +1854,14 @@ function singleton<Output>(
 
   class SimpleType extends Type<Output> {
     readonly name: TypeName;
+    readonly [MATCHER_SYMBOL]: TaggedMatcher;
 
     constructor() {
       super();
       this.name = name;
-    }
-
-    _createMatcher(): TaggedMatcher {
-      return value;
+      this[MATCHER_SYMBOL] = value;
     }
   }
-  Object.defineProperty(SimpleType.prototype, "_matcher", { value });
 
   const instance = new SimpleType();
   return /*#__NO_SIDE_EFFECTS__*/ () => instance;
@@ -1959,19 +1945,19 @@ export { undefined_ as undefined };
 
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
+  readonly [MATCHER_SYMBOL]: TaggedMatcher;
 
   constructor(readonly value: Out) {
     super();
-  }
 
-  _createMatcher(): TaggedMatcher {
-    const value = this.value;
     const issue: IssueLeaf = {
       ok: false,
       code: "invalid_literal",
       expected: [value],
     };
-    return taggedMatcher(TAG_LITERAL, (v) => (v === value ? undefined : issue));
+    this[MATCHER_SYMBOL] = taggedMatcher(TAG_LITERAL, (v) =>
+      v === value ? undefined : issue,
+    );
   }
 }
 
