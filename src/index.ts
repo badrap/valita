@@ -468,8 +468,9 @@ const TAG_OPTIONAL = 9;
 const TAG_OBJECT = 10;
 const TAG_ARRAY = 11;
 const TAG_UNION = 12;
-const TAG_TRANSFORM = 13;
-const TAG_OTHER = 14;
+const TAG_SIMPLE_UNION = 13;
+const TAG_TRANSFORM = 14;
+const TAG_OTHER = 15;
 
 type MatcherResult = undefined | Ok<unknown> | IssueTree;
 
@@ -512,6 +513,8 @@ function callMatcher(
     case TAG_ARRAY:
       return matcher.match(value, flags);
     case TAG_UNION:
+      return matcher.match(value, flags);
+    case TAG_SIMPLE_UNION:
       return matcher.match(value, flags);
     case TAG_TRANSFORM:
       return matcher.match(value, flags);
@@ -751,7 +754,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Return new validator that accepts both the original type and `null`.
    */
   nullable(): Type<null | Output> {
-    return new Nullable(this);
+    return new SimpleUnion([null_(), this]);
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
@@ -805,34 +808,36 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   }
 }
 
-class Nullable<Output = unknown> extends Type<Output | null> {
+class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
   readonly name = "union";
 
-  constructor(
-    /** @internal */
-    private readonly _type: Type<Output>,
-  ) {
+  constructor(readonly options: Options) {
     super();
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
-    const matcher = this._type[MATCHER_SYMBOL];
+    const options = this.options.map((o) => o[MATCHER_SYMBOL]);
     return lazyProperty(
       this,
       MATCHER_SYMBOL,
-      taggedMatcher(TAG_UNION, (v, flags) =>
-        v === null ? undefined : callMatcher(matcher, v, flags),
-      ),
+      taggedMatcher(TAG_SIMPLE_UNION, (v, flags) => {
+        let issue: IssueTree = ISSUE_EXPECTED_NOTHING;
+        for (const option of options) {
+          const result = callMatcher(option, v, flags);
+          if (result === undefined || result.ok) {
+            return result;
+          }
+          issue = result;
+        }
+        return issue;
+      }),
     );
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
-    func(null_() as TerminalType);
-    this._type._toTerminals(func);
-  }
-
-  nullable(): Type<Output | null> {
-    return this;
+    for (const option of this.options) {
+      option._toTerminals(func);
+    }
   }
 }
 
@@ -1696,22 +1701,19 @@ function createUnionBaseMatcher(
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
 
-  constructor(
-    /** @internal */
-    private readonly _options: T,
-  ) {
+  constructor(readonly options: T) {
     super();
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
-    for (const option of this._options) {
+    for (const option of this.options) {
       option._toTerminals(func);
     }
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
     const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
-    for (const option of this._options) {
+    for (const option of this.options) {
       option._toTerminals((terminal) => {
         flattened.push({ root: option, terminal });
       });
