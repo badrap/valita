@@ -262,8 +262,13 @@ function lazyProperty<T>(
   obj: object,
   prop: string | number | symbol,
   value: T,
+  enumerable: boolean,
 ): T {
-  Object.defineProperty(obj, prop, { value });
+  Object.defineProperty(obj, prop, {
+    value,
+    enumerable,
+    writable: false,
+  });
   return value;
 }
 
@@ -302,7 +307,7 @@ export class ValitaError extends Error {
   }
 
   get issues(): readonly Issue[] {
-    return lazyProperty(this, "issues", collectIssues(this._issueTree));
+    return lazyProperty(this, "issues", collectIssues(this._issueTree), true);
   }
 }
 
@@ -383,11 +388,16 @@ class ErrImpl implements Err {
   ) {}
 
   get issues(): readonly Issue[] {
-    return lazyProperty(this, "issues", collectIssues(this._issueTree));
+    return lazyProperty(this, "issues", collectIssues(this._issueTree), true);
   }
 
   get message(): string {
-    return lazyProperty(this, "message", formatIssueTree(this._issueTree));
+    return lazyProperty(
+      this,
+      "message",
+      formatIssueTree(this._issueTree),
+      true,
+    );
   }
 
   throw(): never {
@@ -831,6 +841,7 @@ class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
         }
         return issue;
       }),
+      false,
     );
   }
 
@@ -883,6 +894,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
           ? undefined
           : callMatcher(matcher, v, flags),
       ),
+      false,
     );
   }
 
@@ -976,6 +988,7 @@ class ObjectType<
       taggedMatcher(TAG_OBJECT, (v, flags) =>
         isObject(v) ? func(v, flags) : ISSUE_EXPECTED_OBJECT,
       ),
+      false,
     );
   }
 
@@ -1341,6 +1354,7 @@ class ArrayOrTupleType<
           return { ok: true, value: output };
         }
       }),
+      false,
     );
   }
 
@@ -1726,6 +1740,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
       taggedMatcher(TAG_UNION, (v, f) =>
         object !== undefined && isObject(v) ? object(v, f) : base(v, f),
       ),
+      false,
     );
   }
 }
@@ -1799,6 +1814,7 @@ class TransformType<Output> extends Type<Output> {
         }
         return result;
       }),
+      false,
     );
   }
 
@@ -1821,7 +1837,7 @@ class LazyType<T> extends Type<T> {
   }
 
   get type() {
-    return lazyProperty(this, "type", this._definer());
+    return lazyProperty(this, "type", this._definer(), true);
   }
 
   get [MATCHER_SYMBOL]() {
@@ -1829,7 +1845,7 @@ class LazyType<T> extends Type<T> {
       const typeMatcher = this.type[MATCHER_SYMBOL];
       matcher.tag = typeMatcher.tag;
       matcher.match = typeMatcher.match;
-      lazyProperty(this, MATCHER_SYMBOL, typeMatcher);
+      lazyProperty(this, MATCHER_SYMBOL, typeMatcher, false);
       return callMatcher(typeMatcher, value, flags);
     });
     return matcher;
