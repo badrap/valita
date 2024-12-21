@@ -8,6 +8,7 @@ describe("object()", () => {
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
   });
+
   it("infers required keys object({})", () => {
     const _t = v.object({
       a: v.object({}),
@@ -15,36 +16,42 @@ describe("object()", () => {
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: {} }>();
   });
+
   it("infers optional keys for optional()", () => {
     const _t = v.object({
       a: v.undefined().optional(),
     });
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a?: undefined }>();
   });
+
   it("infers required keys for never()", () => {
     const _t = v.object({
       a: v.never(),
     });
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: never }>();
   });
+
   it("infers required keys for undefined()", () => {
     const _t = v.object({
       a: v.undefined(),
     });
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: undefined }>();
   });
+
   it("infers required keys for unknown()", () => {
     const _t = v.object({
       a: v.unknown(),
     });
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: unknown }>();
   });
+
   it("throws on missing required keys", () => {
     const t = v.object({ a: v.string() });
     expect(() => t.parse({}))
       .to.throw(v.ValitaError)
       .with.nested.property("issues[0].code", "missing_value");
   });
+
   it("reports multiple missing required keys", () => {
     const result = v.object({ a: v.string(), b: v.number() }).try({});
     expect(!result.ok && result.issues).to.have.deep.members([
@@ -58,15 +65,18 @@ describe("object()", () => {
       },
     ]);
   });
+
   it("does not throw on missing optional keys", () => {
     const t = v.object({ a: v.string().optional() });
     expect(t.parse({})).to.deep.equal({});
   });
+
   it("returns the original object instance if possible", () => {
     const t = v.object({ a: v.number() });
     const o = { a: 1 };
     expect(t.parse(o)).to.equal(o);
   });
+
   it("returns a new object instance if the fields change", () => {
     const t = v.object({
       a: v.number().map(() => "test"),
@@ -74,6 +84,7 @@ describe("object()", () => {
     const o = { a: 1 };
     expect(t.parse(o)).to.not.equal(o);
   });
+
   it("supports more than 32 keys (33rd key required)", () => {
     const shape: Record<string, v.Type | v.Optional> = {};
     for (let i = 0; i < 32; i++) {
@@ -85,6 +96,7 @@ describe("object()", () => {
       "missing_value at .key-32 (missing value)",
     );
   });
+
   it("supports more than 32 keys (33rd key optional)", () => {
     const shape: Record<string, v.Type | v.Optional> = {};
     shape["key-0"] = v.unknown();
@@ -96,6 +108,7 @@ describe("object()", () => {
       "missing_value at .key-0 (missing value)",
     );
   });
+
   it("doesn't lose enumerable optional keys when there are transformed non-enumerable optional keys", () => {
     const o = { a: 1 };
     Object.defineProperty(o, "b", {
@@ -111,11 +124,13 @@ describe("object()", () => {
     });
     expect(t.parse(o)).to.deep.equal({ a: 1, b: 3 });
   });
+
   it("sets cloned output's prototype to Object.prototype when data doesn't contain __proto__", () => {
     const t = v.object({ a: v.unknown().map(() => 1) });
     const r = t.parse({ a: "test" });
     expect(Object.getPrototypeOf(r)).toBe(Object.prototype);
   });
+
   it("sets cloned output's prototype to Object.prototype when the data contains __proto__", () => {
     const o = Object.create(null) as Record<string, v.Type>;
     o.__proto__ = v.unknown().map(() => ({ a: 1 }));
@@ -123,6 +138,7 @@ describe("object()", () => {
     const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
     expect(Object.getPrototypeOf(r)).toBe(Object.prototype);
   });
+
   it("safely sets __proto__ in a cloned output when __proto__ is transformed", () => {
     const o = Object.create(null) as Record<string, v.Type>;
     o.__proto__ = v.unknown().map(() => ({ a: 1 }));
@@ -132,6 +148,7 @@ describe("object()", () => {
     expect(r).to.not.have.property("b");
     expect(r).to.have.deep.own.property("__proto__", { a: 1 });
   });
+
   it("safely sets __proto__ in cloned output when __proto__ is transformed as a part of rest()", () => {
     const t = v.object({}).rest(v.unknown().map(() => ({ a: 1 })));
     const r = t.parse(JSON.parse('{ "__proto__": { "b": 2 } }'));
@@ -139,12 +156,14 @@ describe("object()", () => {
     expect(r).to.not.have.property("b");
     expect(r).to.have.deep.own.property("__proto__", { a: 1 });
   });
+
   it("safely sets __proto__ in a cloned output another key is transformed", () => {
     const t = v.object({ x: v.unknown().map((x) => !x) }).rest(v.unknown());
     const r = t.parse(JSON.parse('{ "x": 1, "__proto__": { "b": 2 } }'));
     expect(r).to.not.have.property("b");
     expect(r).to.have.deep.own.property("__proto__", { b: 2 });
   });
+
   it("safely sets __proto__ when it's added to output (causing cloning)", () => {
     const o = Object.create(null) as Record<string, v.Type>;
     o.__proto__ = v.unknown().default({ a: 1 });
@@ -155,6 +174,7 @@ describe("object()", () => {
     expect(r).to.not.have.property("a");
     expect(r).to.have.deep.own.property("__proto__", { a: 1 });
   });
+
   it("safely sets __proto__ when it's added to already cloned output", () => {
     const o = Object.create(null) as Record<string, v.Type>;
     // eslint-disable-next-line @typescript-eslint/no-deprecated
@@ -167,6 +187,7 @@ describe("object()", () => {
     expect(r).to.not.have.property("a");
     expect(r).to.have.deep.own.property("__proto__", { a: 1 });
   });
+
   it("sets __proto__ property as own-writable-enumerable-configurable in cloned output", () => {
     const o = Object.create(null) as Record<string, v.Type>;
     o.__proto__ = v.unknown().map(() => ({ a: 1 }));
@@ -179,6 +200,7 @@ describe("object()", () => {
       configurable: true,
     });
   });
+
   it("safely sets __proto__ in a cloned output when the input is cloned in the 'strip' mode", () => {
     const o = Object.create(null) as Record<string, v.Type>;
     o.__proto__ = v.unknown().map(() => ({ a: 1 }));
@@ -191,12 +213,14 @@ describe("object()", () => {
     expect(r).to.not.have.property("b");
     expect(r).to.have.deep.own.property("__proto__", { a: 1 });
   });
+
   it("rejects other types", () => {
     const t = v.object({});
     for (const val of ["1", 1n, true, null, undefined, []]) {
       expect(() => t.parse(val)).to.throw(v.ValitaError);
     }
   });
+
   it("checks non-enumerable required keys", () => {
     const t = v.object({ a: v.string() });
     const o = {};
@@ -213,6 +237,7 @@ describe("object()", () => {
         expected: ["string"],
       });
   });
+
   it("checks non-enumerable optional keys", () => {
     const t = v.object({ a: v.string().optional() });
     const o = {};
@@ -229,6 +254,7 @@ describe("object()", () => {
         expected: ["string"],
       });
   });
+
   it("fails on unrecognized keys by default", () => {
     const t = v.object({ a: v.number() });
     expect(() => t.parse({ a: 1, b: 2 }))
@@ -238,6 +264,7 @@ describe("object()", () => {
         "issues[0].keys": ["b"],
       });
   });
+
   it("fails on unrecognized keys when mode=strict", () => {
     const t = v.object({ a: v.number() });
     expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
@@ -247,6 +274,7 @@ describe("object()", () => {
         "issues[0].keys": ["b"],
       });
   });
+
   it("reports multiple unrecognized keys when mode=strict", () => {
     const t = v.object({});
     expect(() => t.parse({ a: 1, b: 2 }, { mode: "strict" }))
@@ -256,21 +284,25 @@ describe("object()", () => {
         "issues[0].keys": ["a", "b"],
       });
   });
+
   it("passes through unrecognized keys when mode=passthrough", () => {
     const t = v.object({ a: v.number() });
     const o = t.parse({ a: 1, b: 2 }, { mode: "passthrough" });
     expect(o).to.deep.equal({ a: 1, b: 2 });
   });
+
   it("strips unrecognized keys when mode=strip", () => {
     const t = v.object({ a: v.number() });
     const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({ a: 1 });
   });
+
   it("strips unrecognized keys when mode=strip and there are transformed values", () => {
     const t = v.object({ a: v.number().map((x) => x + 1) });
     const o = t.parse({ a: 1, b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({ a: 2 });
   });
+
   it("doesn't lose optional keys when mode=strip and there unrecognized non-enumerable keys", () => {
     const o = { a: 1 } as Record<string, unknown>;
     o.b = 2;
@@ -281,6 +313,7 @@ describe("object()", () => {
     });
     expect(t.parse(o, { mode: "strip" })).to.deep.equal({ a: 1, c: 3 });
   });
+
   it("doesn't fail on unrecognized non-enumerable keys when mode=strict", () => {
     const o = { a: 1 };
     Object.defineProperty(o, "b", {
@@ -290,6 +323,7 @@ describe("object()", () => {
     const t = v.object({ a: v.number(), b: v.number() });
     expect(t.parse(o, { mode: "strict" })).to.equal(o);
   });
+
   it("doesn't get confused by recognized non-enumerable keys when mode=strict", () => {
     const o = { x: 1 };
     Object.defineProperties(o, {
@@ -310,11 +344,13 @@ describe("object()", () => {
         "issues[0].keys": ["x"],
       });
   });
+
   it("keeps missing optionals missing when mode=strip", () => {
     const t = v.object({ a: v.number().optional() });
     const o = t.parse({ b: 2 }, { mode: "strip" });
     expect(o).to.deep.equal({});
   });
+
   it("doesn't consider undefined() optional when mode=strict", () => {
     const t = v.object({ a: v.undefined() });
     expect(() => t.parse({}, { mode: "strict" }))
@@ -324,6 +360,7 @@ describe("object()", () => {
         "issues[0].path": ["a"],
       });
   });
+
   it("doesn't consider undefined() optional when mode=passthrough", () => {
     const t = v.object({ a: v.undefined() });
     expect(() => t.parse({}, { mode: "passthrough" }))
@@ -333,6 +370,7 @@ describe("object()", () => {
         "issues[0].path": ["a"],
       });
   });
+
   it("doesn't consider undefined() optional when mode=strip", () => {
     const t = v.object({ a: v.undefined() });
     expect(() => t.parse({}, { mode: "strip" }))
@@ -342,6 +380,7 @@ describe("object()", () => {
         "issues[0].path": ["a"],
       });
   });
+
   it("forwards parsing mode to nested types", () => {
     const t = v.object({ nested: v.object({ a: v.number() }) });
     const i = { nested: { a: 1, b: 2 } };
@@ -357,11 +396,13 @@ describe("object()", () => {
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
+
     it("allows zero arguments", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).omit();
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1; b: 2 }>();
       expect(t.parse({ a: 1, b: 2 })).to.deep.equal({ a: 1, b: 2 });
     });
+
     it("allows multiple", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2), c: v.literal(3) })
@@ -369,6 +410,7 @@ describe("object()", () => {
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ c: 3 }>();
       expect(t.parse({ c: 3 })).to.deep.equal({ c: 3 });
     });
+
     it("keeps rest", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2) })
@@ -380,6 +422,7 @@ describe("object()", () => {
       }>();
       expect(t.parse({ a: 1, b: 1000 })).to.deep.equal({ a: 1, b: 1000 });
     });
+
     it("removes checks", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2) })
@@ -396,12 +439,14 @@ describe("object()", () => {
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
+
     it("allows zero arguments", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick();
       // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
       expect(t.parse({})).to.deep.equal({});
     });
+
     it("allows multiple", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2), c: v.literal(3) })
@@ -409,6 +454,7 @@ describe("object()", () => {
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1; b: 2 }>();
       expect(t.parse({ a: 1, b: 2 })).to.deep.equal({ a: 1, b: 2 });
     });
+
     it("removes rest", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2) })
@@ -419,6 +465,7 @@ describe("object()", () => {
         v.ValitaError,
       );
     });
+
     it("removes checks", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2) })
@@ -437,6 +484,7 @@ describe("object()", () => {
       >();
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
+
     it("makes rest accept undefined as well as the original type", () => {
       const t = v
         .object({ a: v.literal(1) })
@@ -451,6 +499,7 @@ describe("object()", () => {
         y: 1000,
       });
     });
+
     it("removes checks", () => {
       const t = v
         .object({ a: v.literal(1), b: v.literal(2) })
@@ -468,6 +517,7 @@ describe("object()", () => {
       const t = v.object({}).rest(v.unknown());
       expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
     });
+
     it("requires the given type from defined keys", () => {
       const t = v.object({ a: v.number() }).rest(v.unknown());
       expect(() => t.parse({ a: "test", b: 1 }))
@@ -479,6 +529,7 @@ describe("object()", () => {
           expected: ["number"],
         });
     });
+
     it("adds an index signature to the inferred type", () => {
       const _t = v.object({ a: v.literal(1) }).rest(v.number());
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{
@@ -487,15 +538,18 @@ describe("object()", () => {
       }>();
       expectTypeOf<v.Infer<typeof _t>>().not.toEqualTypeOf<{ a: string }>();
     });
+
     it("accepts matching unexpected key values", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
       expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
     });
+
     it("returns the original object instance if possible", () => {
       const t = v.object({ a: v.number() }).rest(v.number());
       const o = { a: 1, b: 2 };
       expect(t.parse(o)).to.equal(o);
     });
+
     it("returns a new object instance if the fields change", () => {
       const t = v
         .object({
@@ -505,6 +559,7 @@ describe("object()", () => {
       const o = { a: 1, b: 2 };
       expect(t.parse(o)).to.not.equal(o);
     });
+
     it("doesn't lose the extra fields if the object has to be copied", () => {
       const t = v
         .object({
@@ -527,6 +582,7 @@ describe("object()", () => {
       });
       expect(t.parse(o)).to.deep.equal({ a: "test" });
     });
+
     it("rejects non-matching unexpected key values", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
       expect(() => t.parse({ a: "test", b: 2 }))
@@ -539,6 +595,7 @@ describe("object()", () => {
           expected: [1],
         });
     });
+
     it("applies only to unexpected keys", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
       expect(() => t.parse({ a: 1 }))
@@ -551,6 +608,7 @@ describe("object()", () => {
           expected: ["test"],
         });
     });
+
     it("takes precedence over mode=strict", () => {
       const t = v.object({}).rest(v.literal(1));
       expect(t.parse({ a: 1 }, { mode: "strict" })).to.deep.equal({ a: 1 });
@@ -564,6 +622,7 @@ describe("object()", () => {
           expected: [1],
         });
     });
+
     it("takes precedence over mode=strip", () => {
       const t = v.object({}).rest(v.literal(1));
       expect(t.parse({ a: 1 }, { mode: "strip" })).to.deep.equal({ a: 1 });
@@ -577,6 +636,7 @@ describe("object()", () => {
           expected: [1],
         });
     });
+
     it("takes precedence over mode=passthrough", () => {
       const t = v.object({}).rest(v.literal(1));
       expect(t.parse({ a: 1 }, { mode: "passthrough" })).to.deep.equal({
@@ -608,6 +668,7 @@ describe("object()", () => {
         expected: ["test"],
       });
   });
+
   it("attaches nested paths to issues", () => {
     const t = v.object({
       type: v.literal(2),
@@ -624,6 +685,7 @@ describe("object()", () => {
         expected: ["test"],
       });
   });
+
   describe("extend()", () => {
     it("extends the base shape", () => {
       const t = v.object({ a: v.string() }).extend({ b: v.number() });
@@ -633,6 +695,7 @@ describe("object()", () => {
         b: number;
       }>();
     });
+
     it("overwrites already existing keys", () => {
       const t = v.object({ a: v.string() }).extend({ a: v.number() });
       expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
@@ -640,15 +703,27 @@ describe("object()", () => {
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: number }>();
     });
   });
+
+  describe("shape", () => {
+    it("contains the object property validators", () => {
+      const s = v.string();
+      const n = v.number();
+      const t = v.object({ s, n });
+      expect(t.shape).toEqual({ s, n });
+    });
+  });
+
   describe("check()", () => {
     it("accepts a function returning boolean", () => {
       const t = v.object({ a: v.string() }).check((_v) => true);
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
+
     it("doesn't affect the base shape", () => {
       const _t = v.object({ a: v.string() }).check((v): boolean => Boolean(v));
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: string }>();
     });
+
     it("skips all checks if any property fails to parse", () => {
       let didRun = false;
       const t = v.object({ a: v.string(), b: v.number() }).check(() => {
@@ -658,6 +733,7 @@ describe("object()", () => {
       expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
       expect(didRun).toBe(false);
     });
+
     it("runs multiple checks in order", () => {
       const t = v
         .object({ a: v.string() })
@@ -678,6 +754,7 @@ describe("object()", () => {
           error: "first",
         });
     });
+
     it("runs checks after the object has otherwise been parsed", () => {
       const t = v
         .object({ a: v.string() })
@@ -696,6 +773,7 @@ describe("object()", () => {
         b: 2,
       });
     });
+
     it("allows extending the base type after adding checks", () => {
       const t = v
         .object({ a: v.string() })
@@ -707,6 +785,7 @@ describe("object()", () => {
         b: number;
       }>();
     });
+
     it("creates a custom error on failure", () => {
       const t = v.object({ a: v.string() }).check(() => false);
       expect(() => t.parse({ a: "test" }))
@@ -714,6 +793,7 @@ describe("object()", () => {
         .with.nested.property("issues[0]")
         .that.includes({ code: "custom_error" });
     });
+
     it("allows passing in a custom error message", () => {
       const t = v.object({ a: v.string() }).check(() => false, "test");
       expect(() => t.parse({ a: "test" }))
@@ -724,6 +804,7 @@ describe("object()", () => {
           error: "test",
         });
     });
+
     it("allows passing in a custom error message in an object", () => {
       const t = v
         .object({ a: v.string() })
@@ -736,6 +817,7 @@ describe("object()", () => {
           error: { message: "test" },
         });
     });
+
     it("allows passing in a error path", () => {
       const t = v
         .object({ a: v.string() })
