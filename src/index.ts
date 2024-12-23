@@ -763,7 +763,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   /**
    * Return new validator that accepts both the original type and `null`.
    */
-  nullable(): Type<null | Output> {
+  nullable(): UnionType<[Type<null>, this]> {
     return new SimpleUnion([null_(), this]);
   }
 
