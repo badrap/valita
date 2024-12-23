@@ -821,7 +821,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
   readonly name = "union";
 
-  constructor(readonly options: Options) {
+  constructor(readonly options: Readonly<Options>) {
     super();
   }
 
@@ -1715,7 +1715,7 @@ function createUnionBaseMatcher(
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
 
-  constructor(readonly options: T) {
+  constructor(readonly options: Readonly<T>) {
     super();
   }
 
@@ -2040,7 +2040,7 @@ export const tuple = <T extends [] | [Type, ...Type[]]>(
  * This is analogous to how TypeScript's union types are constructed.
  */
 export const union = <T extends Type[]>(...options: T): UnionType<T> => {
-  return /*#__PURE__*/ new UnionType(options);
+  return /*#__PURE__*/ new UnionType(options) as UnionType<T>;
 };
 
 /**
