@@ -775,7 +775,8 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * Parse a value without throwing.
    */
   try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
-    const r = this[MATCHER_SYMBOL].match(
+    const r = callMatcher(
+      this[MATCHER_SYMBOL],
       v,
       options === undefined
         ? FLAG_FORBID_EXTRA_KEYS
@@ -785,20 +786,17 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
             ? 0
             : FLAG_FORBID_EXTRA_KEYS,
     );
-    if (r === undefined) {
-      return { ok: true, value: v as Infer<this> };
-    } else if (r.ok) {
-      return { ok: true, value: r.value as Infer<this> };
-    } else {
-      return new ErrImpl(r);
-    }
+    return r === undefined || r.ok
+      ? { ok: true, value: (r === undefined ? v : r.value) as Infer<this> }
+      : new ErrImpl(r);
   }
 
   /**
    * Parse a value. Throw a ValitaError on failure.
    */
   parse(v: unknown, options?: ParseOptions): Infer<this> {
-    const r = this[MATCHER_SYMBOL].match(
+    const r = callMatcher(
+      this[MATCHER_SYMBOL],
       v,
       options === undefined
         ? FLAG_FORBID_EXTRA_KEYS
@@ -808,13 +806,10 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
             ? 0
             : FLAG_FORBID_EXTRA_KEYS,
     );
-    if (r === undefined) {
-      return v as Infer<this>;
-    } else if (r.ok) {
-      return r.value as Infer<this>;
-    } else {
-      throw new ValitaError(r);
+    if (r === undefined || r.ok) {
+      return (r === undefined ? v : r.value) as Infer<this>;
     }
+    throw new ValitaError(r);
   }
 }
 
