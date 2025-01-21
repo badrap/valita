@@ -1132,6 +1132,11 @@ function createObjectMatcher(
           if (flags & FLAG_FORBID_EXTRA_KEYS) {
             if (unrecognized === undefined) {
               unrecognized = [key];
+              issues = joinIssues(issues, {
+                ok: false,
+                code: "unrecognized_keys",
+                keys: unrecognized,
+              });
             } else {
               unrecognized.push(key);
             }
@@ -1238,24 +1243,18 @@ function createObjectMatcher(
       }
     }
 
-    if (unrecognized !== undefined) {
-      return joinIssues(issues, {
-        ok: false,
-        code: "unrecognized_keys",
-        keys: unrecognized,
-      });
-    } else if (issues !== undefined) {
+    if (issues !== undefined) {
       return issues;
-    } else {
-      if (checks !== undefined) {
-        for (const { func, issue } of checks) {
-          if (!func(output ?? obj)) {
-            return issue;
-          }
+    }
+
+    if (checks !== undefined) {
+      for (const { func, issue } of checks) {
+        if (!func(output ?? obj)) {
+          return issue;
         }
       }
-      return output && { ok: true, value: output };
     }
+    return output && { ok: true, value: output };
   };
 }
 
