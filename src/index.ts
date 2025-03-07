@@ -461,7 +461,7 @@ const FLAG_MISSING_VALUE = 1 << 2;
 export type Infer<T extends AbstractType> =
   T extends AbstractType<infer I> ? I : never;
 
-type ParseOptions = {
+export type ParseOptions = {
   mode?: "passthrough" | "strict" | "strip";
 };
 
