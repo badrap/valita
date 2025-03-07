@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.4.3
+
+### Patch Changes
+
+- [#76](https://github.com/badrap/valita/pull/76) [`4acc481`](https://github.com/badrap/valita/commit/4acc481afe701fcdfe8be35b6d5b2ce13138c715) Thanks [@jozan](https://github.com/jozan)! - export `ParseOptions` type
+
 ## 0.4.2
 
 ### Patch Changes
