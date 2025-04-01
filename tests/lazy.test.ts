@@ -41,7 +41,7 @@ describe("lazy()", () => {
         };
     expectTypeOf(
       v.lazy(() => v.union(v.undefined(), v.object({ t: v.number() }))),
-    ).not.toMatchTypeOf<v.Type<T>>();
+    ).not.toExtend<v.Type<T>>();
   });
   it("parses recursively", () => {
     type T =

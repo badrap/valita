@@ -3,10 +3,10 @@ import * as v from "../src";
 
 describe("Type", () => {
   it("is not assignable from Optional", () => {
-    expectTypeOf(v.unknown().optional()).not.toMatchTypeOf<v.Type>();
+    expectTypeOf(v.unknown().optional()).not.toExtend<v.Type>();
   });
   it("is not assignable to Optional", () => {
-    expectTypeOf(v.unknown()).not.toMatchTypeOf<v.Optional>();
+    expectTypeOf(v.unknown()).not.toExtend<v.Optional>();
   });
 
   describe("try", () => {
@@ -26,11 +26,11 @@ describe("Type", () => {
     it("returns type discriminated by .ok", () => {
       const result = v.number().try(1);
       if (result.ok) {
-        expectTypeOf(result).toMatchTypeOf<{ value: number }>();
-        expectTypeOf(result).not.toMatchTypeOf<{ message: string }>();
+        expectTypeOf(result.value).toEqualTypeOf<number>();
+        expectTypeOf(result).not.toMatchObjectType<{ message: string }>();
       } else {
-        expectTypeOf(result).not.toMatchTypeOf<{ value: number }>();
-        expectTypeOf(result).toMatchTypeOf<{ message: string }>();
+        expectTypeOf(result).not.toMatchObjectType<{ value: number }>();
+        expectTypeOf(result.message).toEqualTypeOf<string>();
       }
     });
     it("returns { ok: true, value: ... } on success", () => {
@@ -324,8 +324,8 @@ describe("Type", () => {
   });
   describe("optional", () => {
     it("returns an Optional", () => {
-      expectTypeOf(v.unknown().optional()).toMatchTypeOf<v.Optional>();
-      expectTypeOf(v.unknown().optional()).not.toMatchTypeOf<v.Type>();
+      expectTypeOf(v.unknown().optional()).toExtend<v.Optional>();
+      expectTypeOf(v.unknown().optional()).not.toExtend<v.Type>();
     });
     it("accepts missing values", () => {
       const t = v.object({
