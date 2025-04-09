@@ -297,13 +297,16 @@ function lazyProperty<T>(
  * ```
  */
 export class ValitaError extends Error {
-  constructor(
-    /** @internal */
-    private readonly _issueTree: IssueTree,
-  ) {
-    super(formatIssueTree(_issueTree));
+  /** @internal */
+  private readonly _issueTree: IssueTree;
+
+  constructor(issueTree: IssueTree) {
+    super(formatIssueTree(issueTree));
+
     Object.setPrototypeOf(this, new.target.prototype);
+
     this.name = new.target.name;
+    this._issueTree = issueTree;
   }
 
   get issues(): readonly Issue[] {
@@ -382,10 +385,12 @@ export type ValitaResult<V> = Ok<V> | Err;
 class ErrImpl implements Err {
   readonly ok = false;
 
-  constructor(
-    /** @internal */
-    private readonly _issueTree: IssueTree,
-  ) {}
+  /** @internal */
+  private readonly _issueTree: IssueTree;
+
+  constructor(issueTree: IssueTree) {
+    this._issueTree = issueTree;
+  }
 
   get issues(): readonly Issue[] {
     return lazyProperty(this, "issues", collectIssues(this._issueTree), true);
@@ -833,9 +838,11 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
 class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
   readonly name = "union";
+  readonly options: Readonly<Options>;
 
-  constructor(readonly options: Readonly<Options>) {
+  constructor(options: Readonly<Options>) {
     super();
+    this.options = options;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -874,9 +881,11 @@ class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
  */
 class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   readonly name = "optional";
+  readonly type: Type<Output>;
 
-  constructor(readonly type: Type<Output>) {
+  constructor(type: Type<Output>) {
     super();
+    this.type = type;
   }
 
   optional<T extends Literal>(
@@ -979,18 +988,29 @@ class ObjectType<
   Rest extends AbstractType | undefined = AbstractType | undefined,
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
+  readonly shape: Shape;
+
+  /** @internal */
+  private readonly _restType: Rest;
+
+  /** @internal */
+  private readonly _checks?: {
+    func: (v: unknown) => boolean;
+    issue: IssueLeaf;
+  }[];
 
   constructor(
-    readonly shape: Shape,
-    /** @internal */
-    private readonly _restType: Rest,
-    /** @internal */
-    private readonly _checks?: {
+    shape: Shape,
+    restType: Rest,
+    checks?: {
       func: (v: unknown) => boolean;
       issue: IssueLeaf;
     }[],
   ) {
     super();
+    this.shape = shape;
+    this._restType = restType;
+    this._checks = checks;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1296,13 +1316,15 @@ class ArrayOrTupleType<
   Tail extends Type[] = Type[],
 > extends Type<ArrayOutput<Head, Rest, Tail>> {
   readonly name = "array";
+  readonly _prefix: Head;
+  readonly _rest: Rest | undefined;
+  readonly _suffix: Tail;
 
-  constructor(
-    readonly _prefix: Head,
-    readonly _rest: Rest | undefined,
-    readonly _suffix: Tail,
-  ) {
+  constructor(prefix: Head, rest: Rest | undefined, suffix: Tail) {
     super();
+    this._prefix = prefix;
+    this._rest = rest;
+    this._suffix = suffix;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1726,9 +1748,11 @@ function createUnionBaseMatcher(
 
 class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   readonly name = "union";
+  readonly options: Readonly<T>;
 
-  constructor(readonly options: Readonly<T>) {
+  constructor(options: Readonly<T>) {
     super();
+    this.options = options;
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
@@ -1766,13 +1790,16 @@ const PASSTHROUGH = Object.freeze({ mode: "passthrough" }) as ParseOptions;
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
 
-  constructor(
-    /** @internal */
-    protected readonly _transformed: AbstractType,
-    /** @internal */
-    protected readonly _transform: TransformFunc,
-  ) {
+  /** @internal */
+  protected readonly _transformed: AbstractType;
+
+  /** @internal */
+  protected readonly _transform: TransformFunc;
+
+  constructor(transformed: AbstractType, transform: TransformFunc) {
     super();
+    this._transformed = transformed;
+    this._transform = transform;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1841,11 +1868,12 @@ class LazyType<T> extends Type<T> {
   /** @internal */
   private _recursing = false;
 
-  constructor(
-    /** @internal */
-    private readonly _definer: () => Type<T>,
-  ) {
+  /** @internal */
+  private readonly _definer: () => Type<T>;
+
+  constructor(definer: () => Type<T>) {
     super();
+    this._definer = definer;
   }
 
   get type() {
@@ -1976,8 +2004,9 @@ export { undefined_ as undefined };
 class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   readonly name = "literal";
   readonly [MATCHER_SYMBOL]: TaggedMatcher;
+  readonly value: Out;
 
-  constructor(readonly value: Out) {
+  constructor(value: Out) {
     super();
 
     const issue: IssueLeaf = {
@@ -1988,6 +2017,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
     this[MATCHER_SYMBOL] = taggedMatcher(TAG_LITERAL, (v) =>
       v === value ? undefined : issue,
     );
+    this.value = value;
   }
 }
 
