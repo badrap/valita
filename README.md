@@ -442,6 +442,19 @@ name.parse("Acme Inc.");
 name.parse(null);
 ```
 
+Similarly to `.optional()`, a default value function can be used to replace a `null` values with some other default value:
+
+```ts
+const name = v.string().nullable(() => "Unknown");
+
+name.parse("Jane Doe");
+// "Jane Doe"
+name.parse(null);
+// "Unknown"
+```
+
+The default function is re-evaluated every for every `null` value to avoid accidentally sharing mutable default values like objects or arrays between different parsed values.
+
 ### Recursive Types
 
 Some types can contain arbitrary nesting, like `type T = string | T[]`. We can express such types with `.lazy(...)`.

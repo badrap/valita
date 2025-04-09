@@ -327,34 +327,40 @@ describe("Type", () => {
       expectTypeOf(v.unknown().optional()).toExtend<v.Optional>();
       expectTypeOf(v.unknown().optional()).not.toExtend<v.Type>();
     });
+
     it("accepts missing values", () => {
       const t = v.object({
         a: v.string().optional(),
       });
       expect(t.parse({})).to.deep.equal({});
     });
+
     it("accepts undefined", () => {
       const t = v.object({
         a: v.string().optional(),
       });
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
     });
+
     it("accepts the original type", () => {
       const t = v.object({
         a: v.string().optional(),
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
+
     it("adds undefined to output", () => {
       const _t = v.string().optional();
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string | undefined>();
     });
+
     it("makes the output type optional", () => {
       const _t = v.object({ a: v.number().optional() });
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{
         a?: number | undefined;
       }>();
     });
+
     it("short-circuits previous optionals", () => {
       const t = v.object({
         a: v
@@ -366,6 +372,7 @@ describe("Type", () => {
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a?: 1 | undefined }>();
     });
+
     it("short-circuits undefined()", () => {
       const t = v.object({
         a: v
@@ -376,6 +383,7 @@ describe("Type", () => {
       expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a?: 1 | undefined }>();
     });
+
     it("passes undefined to assert() for missing values", () => {
       let value: unknown = null;
       const t = v.object({
@@ -390,6 +398,7 @@ describe("Type", () => {
       t.parse({});
       expect(value).toBe(undefined);
     });
+
     it("passes undefined to map() for missing values", () => {
       let value: unknown = null;
       const t = v.object({
@@ -403,6 +412,7 @@ describe("Type", () => {
       t.parse({});
       expect(value).toBe(undefined);
     });
+
     it("passes undefined to chain() for missing values", () => {
       let value: unknown = null;
       const t = v.object({
@@ -516,6 +526,7 @@ describe("Type", () => {
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number | string>();
     });
   });
+
   describe("nullable()", () => {
     it("accepts null", () => {
       const t = v.object({
@@ -523,20 +534,24 @@ describe("Type", () => {
       });
       expect(t.parse({ a: null })).to.deep.equal({ a: null });
     });
+
     it("accepts the original type", () => {
       const t = v.object({
         a: v.string().nullable(),
       });
       expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
     });
+
     it("adds null to output", () => {
       const _t = v.string().nullable();
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string | null>();
     });
+
     it("makes the output type nullable", () => {
       const _t = v.object({ a: v.number().nullable() });
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: number | null }>();
     });
+
     it("short-circuits previous nulls", () => {
       const t = v.object({
         a: v
@@ -548,6 +563,7 @@ describe("Type", () => {
       expect(t.parse({ a: null })).to.deep.equal({ a: null });
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 | null }>();
     });
+
     it("short-circuits null()", () => {
       const t = v.object({
         a: v
@@ -558,13 +574,97 @@ describe("Type", () => {
       expect(t.parse({ a: null })).to.deep.equal({ a: null });
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 | null }>();
     });
+
+    it("accepts a default value function that maps null input to a value", () => {
+      const t = v.string().nullable(() => 1);
+      expect(t.parse(null)).toEqual(1);
+    });
+
+    it("applies the default value function when the wrapped parser maps to `null`", () => {
+      const t = v
+        .string()
+        .map(() => null)
+        .nullable(() => 1);
+      expect(t.parse("foo")).toEqual(1);
+    });
+
+    it("includes the default value function output type to the inferred output type", () => {
+      const _t = v.string().nullable(() => Math.random());
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string | number>();
+    });
+
+    it("replaces `null` with the default value function's output type", () => {
+      const _t = v.null().nullable(() => Math.random());
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number>();
+    });
+
+    it("infers literal outputs from default value functions when possible when used standalone", () => {
+      const _t1 = v.string().nullable(() => 1);
+      expectTypeOf<v.Infer<typeof _t1>>().toEqualTypeOf<string | 1>();
+
+      const _t2 = v.number().nullable(() => "foo");
+      expectTypeOf<v.Infer<typeof _t2>>().toEqualTypeOf<number | "foo">();
+
+      const _t3 = v.number().nullable(() => true);
+      expectTypeOf<v.Infer<typeof _t3>>().toEqualTypeOf<number | true>();
+
+      const _t4 = v.string().nullable(() => 1n);
+      expectTypeOf<v.Infer<typeof _t4>>().toEqualTypeOf<string | 1n>();
+
+      const _t5 = v.string().nullable(() => null);
+      expectTypeOf<v.Infer<typeof _t5>>().toEqualTypeOf<string | null>();
+
+      const _t6 = v.string().nullable(() => undefined);
+      expectTypeOf<v.Infer<typeof _t6>>().toEqualTypeOf<string | undefined>();
+    });
+
+    it("infers literal outputs from default value functions when possible when used as a property", () => {
+      const _t1 = v.object({ a: v.string().nullable(() => 1) });
+      expectTypeOf<v.Infer<typeof _t1>>().toEqualTypeOf<{ a: string | 1 }>();
+
+      const _t2 = v.object({ a: v.number().nullable(() => "foo") });
+      expectTypeOf<v.Infer<typeof _t2>>().toEqualTypeOf<{
+        a: number | "foo";
+      }>();
+
+      const _t3 = v.object({ a: v.number().nullable(() => true) });
+      expectTypeOf<v.Infer<typeof _t3>>().toEqualTypeOf<{ a: number | true }>();
+
+      const _t4 = v.object({ a: v.string().nullable(() => 1n) });
+      expectTypeOf<v.Infer<typeof _t4>>().toEqualTypeOf<{ a: string | 1n }>();
+
+      const _t5 = v.object({ a: v.string().nullable(() => null) });
+      expectTypeOf<v.Infer<typeof _t5>>().toEqualTypeOf<{ a: string | null }>();
+
+      const _t6 = v.object({ a: v.string().nullable(() => undefined) });
+      expectTypeOf<v.Infer<typeof _t6>>().toEqualTypeOf<{
+        a: string | undefined;
+      }>();
+    });
+
+    it("infers original non-literal output type from the default value function when possible", () => {
+      const _t = v.array(v.object({ a: v.string() })).nullable(() => []);
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: string }[]>();
+    });
+
+    it("creates a new default value for each validation call", () => {
+      const t = v.string().nullable(() => []);
+      expect(t.parse(null)).not.toBe(t.parse(null));
+    });
+
+    it("allows widening the default value function's output type with an explicit annotation", () => {
+      const _t = v.null().nullable<number | string>(() => 1);
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number | string>();
+    });
   });
+
   describe("default", () => {
     it("accepts undefined", () => {
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const t = v.number().default(2);
       expect(t.parse(undefined)).to.deep.equal(2);
     });
+
     it("maps undefined output from any parser", () => {
       const t = v
         .string()
@@ -572,6 +672,7 @@ describe("Type", () => {
         .default(2); // eslint-disable-line @typescript-eslint/no-deprecated
       expect(t.parse("test")).to.deep.equal(2);
     });
+
     it("makes input optional", () => {
       const t = v.object({
         // eslint-disable-next-line @typescript-eslint/no-deprecated
@@ -579,11 +680,13 @@ describe("Type", () => {
       });
       expect(t.parse({})).to.deep.equal({ a: 2 });
     });
+
     it("infers literals when possible", () => {
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const _t = v.undefined().default(2);
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<2>();
     });
+
     it("removes undefined from the return type", () => {
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const _t = v.union(v.string(), v.undefined()).default(2);

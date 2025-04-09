@@ -762,9 +762,27 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
   /**
    * Return new validator that accepts both the original type and `null`.
+   *
+   * The optional `defaultFn` function, if provided, will be called each
+   * time a `null` is parsed.
+   *
+   * @param [defaultFn] - An optional function returning the default value.
    */
-  nullable(): UnionType<[Type<null>, this]> {
-    return new SimpleUnion([null_(), this]);
+  nullable<T extends Literal>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, null> | T>;
+  nullable(defaultFn: () => Exclude<Output, null>): Type<Exclude<Output, null>>;
+  nullable<T>(defaultFn: () => T): Type<Exclude<Output, null> | T>;
+  nullable(): UnionType<[Type<null>, this]>;
+  nullable(defaultFn?: () => unknown): unknown {
+    const nullable = new SimpleUnion([null_(), this]);
+    if (!defaultFn) {
+      return nullable;
+    }
+    return new TransformType(nullable, (v) => {
+      return v === null ? { ok: true, value: defaultFn() } : undefined;
+    });
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
