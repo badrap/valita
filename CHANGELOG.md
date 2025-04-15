@@ -1,5 +1,13 @@
 # @badrap/valita
 
+## 0.4.4
+
+### Patch Changes
+
+- [`b9d9c30`](https://github.com/badrap/valita/commit/b9d9c30dd365dedf33f80540b71b08c8f4dd3825) Thanks [@jviide](https://github.com/jviide)! - Add support for `.nullable(() => x)`
+
+  The `.nullable()` method now supports default value functions_similarly to `.optional()`.
+
 ## 0.4.3
 
 ### Patch Changes
