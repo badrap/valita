@@ -934,7 +934,7 @@ type ObjectOutput<
   R extends AbstractType | undefined,
 > = PrettyIntersection<
   {
-    [K in keyof T as T[K] extends Optional ? K : never]?: Infer<T[K]>;
+    [K in keyof T]?: T[K] extends Optional ? Infer<T[K]> : unknown;
   } & {
     [K in keyof T as T[K] extends Optional ? never : K]: Infer<T[K]>;
   } & (R extends Type<infer I>
