@@ -644,8 +644,8 @@ abstract class AbstractType<Output = unknown> {
     error?: CustomError,
   ): Type<T> {
     const err: IssueLeaf = { ok: false, code: "custom_error", error };
-    return new TransformType(this, (v, options) =>
-      func(v as Output, options) ? undefined : err,
+    return new TransformType(this, (v, flags) =>
+      func(v as Output, flagsToOptions(flags)) ? undefined : err,
     );
   }
 
@@ -673,9 +673,9 @@ abstract class AbstractType<Output = unknown> {
   ): Type<T>;
   map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
   map<T>(func: (v: Output, options: ParseOptions) => T): Type<T> {
-    return new TransformType(this, (v, options) => ({
+    return new TransformType(this, (v, flags) => ({
       ok: true,
-      value: func(v as Output, options),
+      value: func(v as Output, flagsToOptions(flags)),
     }));
   }
 
@@ -712,13 +712,21 @@ abstract class AbstractType<Output = unknown> {
   chain<T>(
     func: (v: Output, options: ParseOptions) => ValitaResult<T>,
   ): Type<T>;
-  chain<T>(
-    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
-  ): Type<T> {
-    return new TransformType(this, (v, options) => {
-      const r = func(v as Output, options);
-      return r.ok ? r : (r as unknown as { _issueTree: IssueTree })._issueTree;
-    });
+  chain<T>(type: Type<T>): Type<T>;
+  chain(
+    input: Type | ((v: Output, options: ParseOptions) => ValitaResult<unknown>),
+  ): Type {
+    if (typeof input === "function") {
+      return new TransformType(this, (v, flags) => {
+        const r = input(v as Output, flagsToOptions(flags));
+        return r.ok
+          ? r
+          : (r as unknown as { _issueTree: IssueTree })._issueTree;
+      });
+    }
+    return new TransformType(this, (v, flags) =>
+      callMatcher(input[MATCHER_SYMBOL], v, flags),
+    );
   }
 }
 
@@ -1781,11 +1789,19 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   }
 }
 
-type TransformFunc = (value: unknown, options: ParseOptions) => MatcherResult;
+type TransformFunc = (value: unknown, flags: number) => MatcherResult;
 
 const STRICT = Object.freeze({ mode: "strict" }) as ParseOptions;
 const STRIP = Object.freeze({ mode: "strip" }) as ParseOptions;
 const PASSTHROUGH = Object.freeze({ mode: "passthrough" }) as ParseOptions;
+
+function flagsToOptions(flags: number): ParseOptions {
+  return flags & FLAG_FORBID_EXTRA_KEYS
+    ? STRICT
+    : flags & FLAG_STRIP_EXTRA_KEYS
+      ? STRIP
+      : PASSTHROUGH;
+}
 
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
@@ -1835,14 +1851,8 @@ class TransformType<Output> extends Type<Output> {
           current = v;
         }
 
-        const options =
-          flags & FLAG_FORBID_EXTRA_KEYS
-            ? STRICT
-            : flags & FLAG_STRIP_EXTRA_KEYS
-              ? STRIP
-              : PASSTHROUGH;
         for (let i = 0; i < chain.length; i++) {
-          const r = chain[i](current, options);
+          const r = chain[i](current, flags);
           if (r !== undefined) {
             if (!r.ok) {
               return r;

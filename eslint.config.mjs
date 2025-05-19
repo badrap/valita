@@ -35,6 +35,7 @@ export default [
       "@typescript-eslint/consistent-indexed-object-style": "off",
       "@typescript-eslint/prefer-return-this-type": "off",
       "@typescript-eslint/unbound-method": "off",
+      "@typescript-eslint/unified-signatures": "off",
       "@typescript-eslint/restrict-template-expressions": [
         "error",
         {

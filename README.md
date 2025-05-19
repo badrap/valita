@@ -651,6 +651,23 @@ CompanyString.parse('{ "name": "Acme Inc.", "ceo": "Wiley E. Coyote" }', {
 // { name: 'Acme Inc.' }
 ```
 
+Turns out that composing parsers like this is relatively common. Therefore you can pass types to `.chain(...)`. The following is equal to the above definition of `CompanyString`:
+
+```ts
+const Company = v.object({ name: v.string() });
+
+// We now have a handy common helper for parsing JSON strings!
+const JsonString = v.string().chain((json) => {
+  try {
+    return v.ok(JSON.parse(json));
+  } catch {
+    return v.err("not valid JSON");
+  }
+});
+
+const CompanyString = JsonString.chain(Company);
+```
+
 ### Inferring Output Types
 
 The exact output type of a validator can be _inferred_ from a type validator's using with `v.Infer<typeof ...>`:

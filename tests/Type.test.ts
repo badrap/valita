@@ -232,15 +232,25 @@ describe("Type", () => {
     });
   });
   describe("chain", () => {
-    it("changes the output type to the function's return type", () => {
+    it("changes the output type to the given function's return type", () => {
       const _t = v.number().chain((n) => v.ok(String(n)));
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string>();
     });
-    it("infers literals when possible", () => {
+
+    it("changes the output type to given type's output type", () => {
+      const _t = v
+        .number()
+        .map((n) => String(n))
+        .chain(v.literal("1"));
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<"1">();
+    });
+
+    it("infers literals as the given function's output type when possible", () => {
       const _t = v.number().chain(() => ({ ok: true, value: "test" }));
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<"test">();
     });
-    it("passes in the parsed value", () => {
+
+    it("passes in the parsed value to the given function", () => {
       let value: unknown;
       const t = v.number().chain((n) => {
         value = n;
@@ -249,7 +259,20 @@ describe("Type", () => {
       t.parse(1000);
       expect(value).to.equal(1000);
     });
-    it("passes in normalized parse options", () => {
+
+    it("passes in the parsed value to the given type", () => {
+      let value: unknown;
+      const t = v.number().chain(
+        v.unknown().chain((n) => {
+          value = n;
+          return v.ok("test");
+        }),
+      );
+      t.parse(1000);
+      expect(value).to.equal(1000);
+    });
+
+    it("passes in normalized parse options to the given function", () => {
       let options: unknown;
       const t = v.number().chain((n, opts) => {
         options = opts;
@@ -264,11 +287,36 @@ describe("Type", () => {
       t.parse(1, { mode: "strict" });
       expect(options).to.deep.equal({ mode: "strict" });
     });
-    it("passes on the success value", () => {
+
+    it("propagates parse options to the given type", () => {
+      let options: unknown;
+      const t = v.number().chain(
+        v.unknown().chain((n, opts) => {
+          options = opts;
+          return v.ok("test");
+        }),
+      );
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+      t.parse(1, { mode: "strip" });
+      expect(options).to.deep.equal({ mode: "strip" });
+      t.parse(1, { mode: "passthrough" });
+      expect(options).to.deep.equal({ mode: "passthrough" });
+      t.parse(1, { mode: "strict" });
+      expect(options).to.deep.equal({ mode: "strict" });
+    });
+
+    it("passes on the success value from the given function", () => {
       const t = v.number().chain(() => v.ok("test"));
       expect(t.parse(1)).to.equal("test");
     });
-    it("fails on error result", () => {
+
+    it("passes on the success value from the given type", () => {
+      const t = v.number().chain(v.unknown().map(() => "test"));
+      expect(t.parse(1)).to.equal("test");
+    });
+
+    it("fails on error result from the given function", () => {
       const t = v.number().chain(() => v.err());
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
@@ -277,7 +325,19 @@ describe("Type", () => {
           code: "custom_error",
         });
     });
-    it("allows passing in a custom error message", () => {
+
+    it("fails on error result from the given type", () => {
+      const t = v.number().chain(v.string());
+      expect(() => t.parse(1))
+        .to.throw(v.ValitaError)
+        .with.nested.property("issues[0]")
+        .that.deep.includes({
+          code: "invalid_type",
+          expected: ["string"],
+        });
+    });
+
+    it("allows passing in a custom error message from the given function", () => {
       const t = v.number().chain(() => v.err("test"));
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
@@ -287,7 +347,8 @@ describe("Type", () => {
           error: "test",
         });
     });
-    it("allows passing in a custom error message in an object", () => {
+
+    it("allows passing in a custom error message in an object from the given function", () => {
       const t = v.number().chain(() => v.err({ message: "test" }));
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
@@ -297,7 +358,8 @@ describe("Type", () => {
           error: { message: "test" },
         });
     });
-    it("allows passing in an error path", () => {
+
+    it("allows passing in an error path from the given function", () => {
       const t = v.number().chain(() => v.err({ path: ["test"] }));
       expect(() => t.parse(1))
         .to.throw(v.ValitaError)
@@ -307,13 +369,16 @@ describe("Type", () => {
           path: ["test"],
         });
     });
+
     it("runs multiple chains in order", () => {
       const t = v
         .string()
         .chain((s) => v.ok(s + "b"))
-        .chain((s) => v.ok(s + "c"));
-      expect(t.parse("a")).to.equal("abc");
+        .chain((s) => v.ok(s + "c"))
+        .chain(v.string().map((s) => s + "d"));
+      expect(t.parse("a")).to.equal("abcd");
     });
+
     it("works together with .try()", () => {
       const s = v.string();
       const t = v.unknown().chain((x) => s.try(x));
@@ -322,6 +387,7 @@ describe("Type", () => {
       expect(() => t.parse(1)).to.throw(v.ValitaError);
     });
   });
+
   describe("optional", () => {
     it("returns an Optional", () => {
       expectTypeOf(v.unknown().optional()).toExtend<v.Optional>();
