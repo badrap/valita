@@ -1,5 +1,32 @@
 # @badrap/valita
 
+## 0.4.5
+
+### Patch Changes
+
+- [`d312e6d`](https://github.com/badrap/valita/commit/d312e6da5813887d2baa8e7d6806280b9324b4b9) Thanks [@jviide](https://github.com/jviide)! - feat: always normalize custom errors
+
+  Custom errors listed in issue lists (`ValitaError.issue` and `ValitaResult.issue`) are now always normalized to match the type `{ code: "custom_error", path: (string | number)[], message?: string | undefined }`.
+
+- [`e66a42e`](https://github.com/badrap/valita/commit/e66a42e994254429583febbe58f0f8df915ccc5c) Thanks [@jviide](https://github.com/jviide)! - Allow passing a type to .chain()
+
+  The `.chain()` method of types now accepts other types as-is:
+
+  ```ts
+  v.string() // Accept strings as input,
+    .map((s) => Number(s)) // then parse the strings to numbers,
+    .chain(v.literal(1)); // and ensure that the parsed number is 1.
+  ```
+
+  The parsing mode is propagated to the chained type:
+
+  ```ts
+  const example = v.unknown().parse(v.object({ a: v.number() }));
+
+  example.parse({ a: 1, b: 2 }, { mode: "strip" });
+  // { a: 1 }
+  ```
+
 ## 0.4.4
 
 ### Patch Changes
