@@ -1,6 +1,7 @@
 {
   "name": "@badrap/valita",
   "version": "0.4.5",
+  "type": "commonjs",
   "description": "A validation & parsing library for TypeScript",
   "main": "./dist/cjs/index.js",
   "module": "./dist/mjs/index.mjs",
