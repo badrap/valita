@@ -16,13 +16,11 @@ export default [
         projectService: {
           allowDefaultProject: ["eslint.config.mjs"],
         },
-        tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
       "prettier/prettier": "warn",
       eqeqeq: ["error", "smart"],
-      "linebreak-style": ["error", "unix"],
       "no-console": "error",
       "no-multi-assign": "error",
       "no-return-assign": "error",
