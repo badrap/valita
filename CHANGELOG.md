@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.4.6
+
+### Patch Changes
+
+- [`7c42103`](https://github.com/badrap/valita/commit/7c421030709162c44de0b321132bda768846ebef) Thanks [@jviide](https://github.com/jviide)! - Publish npm packages using trusted publishing
+
 ## 0.4.5
 
 ### Patch Changes
