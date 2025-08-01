@@ -42,16 +42,16 @@
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",
-    "@changesets/cli": "^2.29.4",
-    "@eslint/js": "^9.27.0",
-    "eslint": "^9.27.0",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-prettier": "^5.4.0",
-    "jsr": "^0.13.4",
-    "prettier": "^3.5.3",
+    "@changesets/cli": "^2.29.5",
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.3",
+    "jsr": "^0.13.5",
+    "prettier": "^3.6.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.32.1",
-    "vitest": "^3.1.4"
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4"
   },
   "files": [
     "src",
