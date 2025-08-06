@@ -3,6 +3,8 @@
     "target": "es2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "types": [],
+    "libReplacement": false,
     "strict": true,
     "noImplicitReturns": true,
     "declaration": true,
@@ -12,7 +14,9 @@
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo"
   },
   "include": ["mod.ts", "src/**/*", "tests/**/*"]
 }

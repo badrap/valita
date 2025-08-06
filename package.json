@@ -29,10 +29,10 @@
   },
   "scripts": {
     "fix": "node --run fix:prettier && node --run fix:eslint",
-    "fix:prettier": "prettier --write --experimental-cli .",
+    "fix:prettier": "prettier --write --cache .",
     "fix:eslint": "eslint --max-warnings=0 --fix --cache --cache-location=.cache/eslint .",
     "lint": "node --run lint:prettier && node --run lint:eslint",
-    "lint:prettier": "prettier --check --experimental-cli .",
+    "lint:prettier": "prettier --check --cache .",
     "lint:eslint": "eslint --max-warnings=0 --cache --cache-location=.cache/eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -52,8 +52,8 @@
     "eslint": "^9.32.0",
     "jsr": "^0.13.5",
     "prettier": "^3.6.2",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.0",
     "vitest": "^3.2.4"
   },
   "files": [
