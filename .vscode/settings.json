@@ -1,18 +1,10 @@
 {
-  "eslint.validate": ["javascript", "typescript"],
-  "files.exclude": {
-    "node_modules": true,
-    "dist": true
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
   },
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "eslint.format.enable": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
   "editor.tabSize": 2,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "[javascript]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
-  }
+  "explorer.excludeGitIgnore": true,
+  "typescript.tsdk": "./node_modules/typescript/lib"
 }
