@@ -5,6 +5,11 @@
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
   "editor.tabSize": 2,
-  "explorer.excludeGitIgnore": true,
-  "typescript.tsdk": "./node_modules/typescript/lib"
+  "files.exclude": {
+    "node_modules": true,
+    "dist": true,
+    ".cache": true
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "prettier.trailingComma": "all"
 }
