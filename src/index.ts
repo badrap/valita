@@ -981,7 +981,7 @@ function setBit(bits: BitSet, index: number): BitSet {
     for (let i = bits.length; i <= idx; i++) {
       bits.push(0);
     }
-    bits[idx] |= 1 << index % 32;
+    bits[idx] |= 1 << (index % 32);
     return bits;
   } else if (index < 32) {
     return bits | (1 << index);
@@ -995,7 +995,7 @@ function getBit(bits: BitSet, index: number): number {
   if (typeof bits === "number") {
     return index < 32 ? (bits >>> index) & 1 : 0;
   } else {
-    return (bits[index >> 5] >>> index % 32) & 1;
+    return (bits[index >> 5] >>> (index % 32)) & 1;
   }
 }
 
@@ -1437,8 +1437,9 @@ class ArrayOrTupleType<
 /**
  * A validator for arbitrary-length array types like `T[]`.
  */
-interface ArrayType<Element extends Type = Type>
-  extends Type<Infer<Element>[]> {
+interface ArrayType<Element extends Type = Type> extends Type<
+  Infer<Element>[]
+> {
   readonly name: "array";
 
   /** @internal */
@@ -1459,8 +1460,9 @@ interface ArrayType<Element extends Type = Type>
  * A validator for a fixed-length tuple type like `[]`, `[T1, T2]`
  * or `[T1, T2, ..., Tn]`.
  */
-interface TupleType<Elements extends Type[] = Type[]>
-  extends Type<TupleOutput<Elements>> {
+interface TupleType<Elements extends Type[] = Type[]> extends Type<
+  TupleOutput<Elements>
+> {
   readonly name: "array";
 
   /** @internal */
