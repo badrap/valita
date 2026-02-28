@@ -5,12 +5,8 @@
   },
   "postCreateCommand": "npm ci",
   "remoteUser": "node",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
-  "mounts": [
-    "type=volume,target=/workspace/node_modules",
-    "type=volume,target=/workspace/dist"
-  ],
   "customizations": {
     "vscode": {
       "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
