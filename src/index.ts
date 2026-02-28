@@ -216,10 +216,7 @@ function formatIssueTree(tree: IssueTree): string {
   if (tree.code === "invalid_type") {
     message = `expected ${separatedList(tree.expected, "or")}`;
   } else if (tree.code === "invalid_literal") {
-    message = `expected ${separatedList(
-      tree.expected.map(formatLiteral),
-      "or",
-    )}`;
+    message = `expected ${separatedList(tree.expected.map(formatLiteral), "or")}`;
   } else if (tree.code === "missing_value") {
     message = `missing value`;
   } else if (tree.code === "unrecognized_keys") {
@@ -575,7 +572,7 @@ abstract class AbstractType<Output = unknown> {
   // output type with `NoInfer<T>`, but it's supported only from
   // TypeScript 5.4 onwards.
   abstract optional<T extends Literal>(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   // Support parsers like `v.array(t).optional(() => [])`
@@ -761,7 +758,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   abstract name: TypeName;
 
   optional<T extends Literal>(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   optional(
@@ -790,7 +787,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * @param [defaultFn] - An optional function returning the default value.
    */
   nullable<T extends Literal>(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, null> | T>;
   nullable(defaultFn: () => Exclude<Output, null>): Type<Exclude<Output, null>>;
@@ -905,7 +902,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
 
   optional<T extends Literal>(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   optional(
@@ -1831,7 +1828,7 @@ class TransformType<Output> extends Type<Output> {
   get [MATCHER_SYMBOL](): TaggedMatcher {
     const chain: TransformFunc[] = [];
 
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    // oxlint-disable-next-line @typescript-eslint/no-this-alias
     let next: AbstractType = this;
     while (next instanceof TransformType) {
       chain.push(next._transform);

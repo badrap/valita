@@ -23,8 +23,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
+      - run: npm run check
       - run: npm test
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
         with:

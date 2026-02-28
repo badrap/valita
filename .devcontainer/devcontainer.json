@@ -9,7 +9,7 @@
   "workspaceFolder": "/workspace",
   "customizations": {
     "vscode": {
-      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+      "extensions": ["oxc.oxc-vscode"]
     }
   }
 }

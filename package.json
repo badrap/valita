@@ -1,8 +1,19 @@
 {
   "name": "@badrap/valita",
   "version": "0.4.6",
-  "type": "commonjs",
   "description": "A validation & parsing library for TypeScript",
+  "license": "MIT",
+  "author": "Joachim Viide <jviide@iki.fi>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/badrap/valita.git"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "type": "commonjs",
+  "sideEffects": false,
   "main": "./dist/cjs/index.js",
   "module": "./dist/mjs/index.mjs",
   "exports": {
@@ -14,27 +25,16 @@
     },
     "default": "./dist/mjs/index.mjs"
   },
-  "sideEffects": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/badrap/valita.git"
-  },
-  "author": "Joachim Viide <jviide@iki.fi>",
-  "license": "MIT",
   "publishConfig": {
     "provenance": true
   },
-  "engines": {
-    "node": ">= 18"
-  },
   "scripts": {
-    "fix": "node --run fix:prettier && node --run fix:eslint",
-    "fix:prettier": "prettier --write --cache .",
-    "fix:eslint": "eslint --max-warnings=0 --fix --cache --cache-location=.cache/eslint .",
-    "lint": "node --run lint:prettier && node --run lint:eslint",
-    "lint:prettier": "prettier --check --cache .",
-    "lint:eslint": "eslint --max-warnings=0 --cache --cache-location=.cache/eslint .",
-    "typecheck": "tsc --noEmit",
+    "fix": "node --run fix:oxfmt && node --run fix:oxlint",
+    "fix:oxfmt": "oxfmt",
+    "fix:oxlint": "oxlint --type-aware --fix",
+    "check": "node --run check:oxfmt && node --run check:oxlint",
+    "check:oxfmt": "oxfmt --check",
+    "check:oxlint": "oxlint --type-aware --type-check --deny-warnings --report-unused-disable-directives",
     "test": "vitest run",
     "build": "rm -rf dist/* && node --run build:cjs && node --run build:mjs && node --run build:node-mjs && node --run build:node-cjs",
     "build:cjs": "tsc -p ./tsconfig.cjs.json --outDir ./dist/cjs",
@@ -48,15 +48,13 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
     "@changesets/cli": "^2.29.8",
-    "@eslint/js": "^9.39.2",
-    "eslint": "^9.39.2",
-    "prettier": "^3.7.4",
+    "oxfmt": "^0.35.0",
+    "oxlint": "^1.50.0",
+    "oxlint-tsgolint": "^0.15.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.50.1",
     "vitest": "^4.0.16"
   },
-  "files": [
-    "src",
-    "dist"
-  ]
+  "engines": {
+    "node": ">= 18"
+  }
 }

@@ -74,7 +74,7 @@ describe("ValitaError", () => {
           .chain(() => v.err())
           .parse({ foo: 1 }),
       ).toThrowError(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -94,7 +94,7 @@ describe("ValitaError", () => {
           .chain(() => v.err())
           .parse(1),
       ).toThrowError(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -112,7 +112,7 @@ describe("ValitaError", () => {
           .chain(() => v.err({ path: ["foo"] }))
           .parse(1),
       ).toThrowError(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -130,7 +130,7 @@ describe("ValitaError", () => {
           .chain(() => v.err({ message: "test", path: ["bar"] }))
           .parse(1),
       ).toThrowError(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -148,7 +148,7 @@ describe("ValitaError", () => {
           .chain(() => v.err({ message: "test" }))
           .parse(1),
       ).toThrowError(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -166,7 +166,7 @@ describe("ValitaError", () => {
           .chain(() => v.err("test"))
           .parse(1),
       ).toThrowError(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
         expect.objectContaining({
           issues: [
             expect.objectContaining({

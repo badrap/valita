@@ -5,7 +5,7 @@ describe("object()", () => {
   it("acceps empty objects", () => {
     const t = v.object({});
     expect(t.parse({})).to.deep.equal({});
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
     expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
   });
 
@@ -13,7 +13,7 @@ describe("object()", () => {
     const _t = v.object({
       a: v.object({}),
     });
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: {} }>();
   });
 
@@ -158,7 +158,7 @@ describe("object()", () => {
   });
 
   it("safely sets __proto__ in a cloned output another key is transformed", () => {
-    const t = v.object({ x: v.unknown().map((x) => !x) }).rest(v.unknown());
+    const t = v.object({ x: v.number().map((x) => x + 1) }).rest(v.unknown());
     const r = t.parse(JSON.parse('{ "x": 1, "__proto__": { "b": 2 } }'));
     expect(r).to.not.have.property("b");
     expect(r).to.have.deep.own.property("__proto__", { b: 2 });
@@ -177,7 +177,7 @@ describe("object()", () => {
 
   it("safely sets __proto__ when it's added to already cloned output", () => {
     const o = Object.create(null) as Record<string, v.Type>;
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    // oxlint-disable-next-line @typescript-eslint/no-deprecated
     o.x = v.unknown().default(true);
     o.__proto__ = v.unknown().default({ a: 1 });
     const t = v.object(o);
@@ -442,7 +442,7 @@ describe("object()", () => {
 
     it("allows zero arguments", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick();
-      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+      // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
       expect(t.parse({})).to.deep.equal({});
     });
