@@ -73,8 +73,7 @@ describe("ValitaError", () => {
           })
           .chain(() => v.err())
           .parse({ foo: 1 }),
-      ).toThrowError(
-        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
+      ).toThrow(
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -93,8 +92,7 @@ describe("ValitaError", () => {
           .unknown()
           .chain(() => v.err())
           .parse(1),
-      ).toThrowError(
-        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
+      ).toThrow(
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -111,8 +109,7 @@ describe("ValitaError", () => {
           .unknown()
           .chain(() => v.err({ path: ["foo"] }))
           .parse(1),
-      ).toThrowError(
-        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
+      ).toThrow(
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -129,8 +126,7 @@ describe("ValitaError", () => {
           .unknown()
           .chain(() => v.err({ message: "test", path: ["bar"] }))
           .parse(1),
-      ).toThrowError(
-        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
+      ).toThrow(
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -147,8 +143,7 @@ describe("ValitaError", () => {
           .unknown()
           .chain(() => v.err({ message: "test" }))
           .parse(1),
-      ).toThrowError(
-        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
+      ).toThrow(
         expect.objectContaining({
           issues: [
             expect.objectContaining({
@@ -165,8 +160,7 @@ describe("ValitaError", () => {
           .unknown()
           .chain(() => v.err("test"))
           .parse(1),
-      ).toThrowError(
-        // oxlint-disable-next-line @typescript-eslint/no-unsafe-argument
+      ).toThrow(
         expect.objectContaining({
           issues: [
             expect.objectContaining({
