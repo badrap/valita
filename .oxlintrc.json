@@ -6,6 +6,12 @@
     "suspicious": "error",
     "pedantic": "error"
   },
+  "options": {
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "warn",
+    "typeAware": true,
+    "typeCheck": true
+  },
   "rules": {
     // category: "correctness" (overrides, enabled in categories)
     "@typescript-eslint/restrict-template-expressions": [
@@ -35,6 +41,7 @@
     "no-else-return": "off",
     "no-inline-comments": "off",
     "no-negated-condition": "off",
+    "require-await": "off",
     "@typescript-eslint/ban-types": "off",
     "@typescript-eslint/no-confusing-void-expression": "off",
     "@typescript-eslint/restrict-plus-operands": [
@@ -51,17 +58,18 @@
       "error",
       "error-handling-correctness-only"
     ],
+    "@typescript-eslint/strict-boolean-expressions": "off",
 
     // category: "restriction" (not enabled via categories)
     "no-empty": "error",
     "no-empty-function": "error",
     "no-regex-spaces": "error",
     "no-var": "error",
-    "no-console": "error",
+    "no-console": "warn",
     "@typescript-eslint/no-empty-object-type": "error",
     "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/no-invalid-void-type": "error",
-    "@typescript-eslint/no-namespace": "error",
+    "@typescript-eslint/no-namespace": ["error", { "allowDeclarations": true }],
     "@typescript-eslint/no-non-null-asserted-nullish-coalescing": "error",
     "@typescript-eslint/no-require-imports": "error",
     "@typescript-eslint/non-nullable-type-assertion-style": "error",

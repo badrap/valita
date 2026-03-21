@@ -29,12 +29,8 @@
     "provenance": true
   },
   "scripts": {
-    "fix": "node --run fix:oxfmt && node --run fix:oxlint",
-    "fix:oxfmt": "oxfmt",
-    "fix:oxlint": "oxlint --type-aware --fix",
-    "check": "node --run check:oxfmt && node --run check:oxlint",
-    "check:oxfmt": "oxfmt --check",
-    "check:oxlint": "oxlint --type-aware --type-check --deny-warnings --report-unused-disable-directives",
+    "fix": "oxfmt && oxlint --fix",
+    "check": "oxfmt --check && oxlint",
     "test": "vitest run",
     "build": "rm -rf dist/* && node --run build:cjs && node --run build:mjs && node --run build:node-mjs && node --run build:node-cjs",
     "build:cjs": "tsc -p ./tsconfig.cjs.json --outDir ./dist/cjs",
@@ -48,9 +44,9 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
     "@changesets/cli": "^2.29.8",
-    "oxfmt": "^0.35.0",
-    "oxlint": "^1.50.0",
-    "oxlint-tsgolint": "^0.15.0",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.56.0",
+    "oxlint-tsgolint": "^0.17.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
