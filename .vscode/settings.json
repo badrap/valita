@@ -10,7 +10,5 @@
     "dist": true,
     ".cache": true
   },
-  "oxc.typeAware": true,
-  "oxc.unusedDisableDirectives": "deny",
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }
