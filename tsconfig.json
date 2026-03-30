@@ -10,12 +10,14 @@
     "declaration": true,
     "isolatedModules": true,
     "erasableSyntaxOnly": true,
+    "rootDir": "./src",
     "outDir": "./dist/main",
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "incremental": true,
+    "stableTypeOrdering": true,
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo"
   },
   "include": ["mod.ts", "src/**/*", "tests/**/*"]
