@@ -1,0 +1,19 @@
+# Disable automatic notifications about new pnpm versions.
+updateNotifier: false
+
+# Allow only package versions that were released *at least* 2 days ago.
+minimumReleaseAge: 2880
+# Ignore minimumReleaseAge for these explicitly listed packages.
+# Try to keep this list temporary, aim for an empty list of exclusions.
+minimumReleaseAgeExclude: []
+
+# Don't allow package trust levels has decreased compared to previous releases.
+trustPolicy: no-downgrade
+# Ignore trustPolicy for these explicitly listed packages.
+# Try to keep this list temporary, aim for an empty list of exclusions.
+trustPolicyExclude: []
+
+# Package matchers to explicitly allow or disallow script execution.
+# Err on the side of disallowing script execution.
+# Check every now and then whether any of these entries can be removed.
+allowBuilds: {}

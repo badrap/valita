@@ -34,7 +34,7 @@ vehicle.parse({ type: "bike" });
 ### For Node.js
 
 ```sh
-npm i @badrap/valita
+pnpm add @badrap/valita
 ```
 
 ### For Deno

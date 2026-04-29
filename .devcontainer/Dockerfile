@@ -1,4 +1,5 @@
 FROM node:24-alpine
+RUN corepack enable
 RUN apk add --no-cache \
   git \
   openssh \

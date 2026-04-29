@@ -22,11 +22,14 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 24
+      - run: corepack enable
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
           # Allow caching, as this job can't write and doesn't produce any artifacts.
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
+          cache: pnpm
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run test
       - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
         with:
           deno-version: "2.5.1"
@@ -47,17 +50,17 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 24
-          # Disable package manager cache to so that other jobs can't poison the NPM cache.
+          # Disable package manager cache to so that other jobs can't poison the cache.
           package-manager-cache: false
+      - run: corepack enable
       - name: Install dependencies
-        run: npm ci
+        run: pnpm i --frozen-lockfile
       - name: Create release pull request or GitHub release
         id: changesets
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
-          version: npm run bump
-          publish: npm run tag
+          version: pnpm run bump
+          publish: pnpm run tag
 
   build:
     needs: changesets
@@ -74,14 +77,15 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 24
-          # Disable package manager cache to so that other jobs can't poison the NPM cache.
+          # Disable package manager cache to so that other jobs can't poison the cache.
           package-manager-cache: false
+      - run: corepack enable
       - name: Install dependencies
-        run: npm ci
+        run: pnpm i --frozen-lockfile
       - name: Build & pack the package
         id: pack
         run: |
-          npm run build
+          pnpm run build
           TARBALL=$(npm pack)
           echo "tarball=${TARBALL}" >> ${GITHUB_OUTPUT}
       - name: Upload build artifact
@@ -104,7 +108,7 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 24
-          # Disable package manager cache to so that other jobs can't poison the NPM cache.
+          # Disable package manager cache to so that other jobs can't poison the cache.
           package-manager-cache: false
       - name: Download build artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
