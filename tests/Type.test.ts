@@ -579,7 +579,7 @@ describe("Type", () => {
 
     it("infers original non-literal output type from the default value function when possible", () => {
       const _t = v.array(v.object({ a: v.string() })).optional(() => []);
-      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: string }[]>();
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<Array<{ a: string }>>();
     });
 
     it("creates a new default value for each validation call", () => {
@@ -710,7 +710,7 @@ describe("Type", () => {
 
     it("infers original non-literal output type from the default value function when possible", () => {
       const _t = v.array(v.object({ a: v.string() })).nullable(() => []);
-      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: string }[]>();
+      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<Array<{ a: string }>>();
     });
 
     it("creates a new default value for each validation call", () => {

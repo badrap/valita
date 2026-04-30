@@ -1007,18 +1007,18 @@ class ObjectType<
   private readonly _restType: Rest;
 
   /** @internal */
-  private readonly _checks?: {
+  private readonly _checks?: Array<{
     func: (v: unknown) => boolean;
     issue: IssueLeaf;
-  }[];
+  }>;
 
   constructor(
     shape: Shape,
     restType: Rest,
-    checks?: {
+    checks?: Array<{
       func: (v: unknown) => boolean;
       issue: IssueLeaf;
-    }[],
+    }>,
   ) {
     super();
     this.shape = shape;
@@ -1065,7 +1065,7 @@ class ObjectType<
     );
   }
 
-  pick<K extends (string & keyof Shape)[]>(
+  pick<K extends Array<string & keyof Shape>>(
     ...keys: K
   ): ObjectType<Pick<Shape, K[number]>, undefined> {
     const shape = {} as Pick<Shape, K[number]>;
@@ -1075,7 +1075,7 @@ class ObjectType<
     return new ObjectType(shape, undefined);
   }
 
-  omit<K extends (string & keyof Shape)[]>(
+  omit<K extends Array<string & keyof Shape>>(
     ...keys: K
   ): ObjectType<Omit<Shape, K[number]>, Rest> {
     const shape = { ...this.shape };
@@ -1117,10 +1117,10 @@ function set(obj: Record<string, unknown>, key: string, value: unknown): void {
 function createObjectMatcher(
   shape: ObjectShape,
   rest?: AbstractType,
-  checks?: {
+  checks?: Array<{
     func: (v: unknown) => boolean;
     issue: IssueLeaf;
-  }[],
+  }>,
 ): Matcher<Record<string, unknown>> {
   type Entry = {
     key: string;
@@ -1319,7 +1319,7 @@ type ArrayOutput<
   Tail extends Type[],
 > = [
   ...TupleOutput<Head>,
-  ...(Rest extends Type ? Infer<Rest>[] : []),
+  ...(Rest extends Type ? Array<Infer<Rest>> : []),
   ...TupleOutput<Tail>,
 ];
 
@@ -1435,7 +1435,7 @@ class ArrayOrTupleType<
  * A validator for arbitrary-length array types like `T[]`.
  */
 interface ArrayType<Element extends Type = Type> extends Type<
-  Infer<Element>[]
+  Array<Infer<Element>>
 > {
   readonly name: "array";
 
@@ -1529,7 +1529,7 @@ function dedup<T>(arr: T[]): T[] {
 }
 
 function groupTerminals(
-  terminals: { root: AbstractType; terminal: TerminalType }[],
+  terminals: Array<{ root: AbstractType; terminal: TerminalType }>,
 ): {
   types: Map<InputType, AbstractType[]>;
   literals: Map<unknown, AbstractType[]>;
@@ -1593,12 +1593,14 @@ function groupTerminals(
 }
 
 function createObjectKeyMatcher(
-  objects: { root: AbstractType; terminal: ObjectType }[],
+  objects: Array<{ root: AbstractType; terminal: ObjectType }>,
   key: string,
 ): Matcher<Record<string, unknown>> | undefined {
-  const list: { root: AbstractType; terminal: TerminalType }[] = [];
+  const list: Array<{ root: AbstractType; terminal: TerminalType }> = [];
   for (const { root, terminal } of objects) {
-    terminal.shape[key]._toTerminals((t) => list.push({ root, terminal: t }));
+    terminal.shape[key]._toTerminals((t) => {
+      list.push({ root, terminal: t });
+    });
   }
 
   const { types, literals, optionals, unknowns, expectedTypes } =
@@ -1663,9 +1665,9 @@ function createObjectKeyMatcher(
 }
 
 function createUnionObjectMatcher(
-  terminals: { root: AbstractType; terminal: TerminalType }[],
+  terminals: Array<{ root: AbstractType; terminal: TerminalType }>,
 ): Matcher<Record<string, unknown>> | undefined {
-  const objects: { root: AbstractType; terminal: ObjectType }[] = [];
+  const objects: Array<{ root: AbstractType; terminal: ObjectType }> = [];
   const keyCounts = new Map<string, number>();
 
   for (const { root, terminal } of terminals) {
@@ -1697,7 +1699,7 @@ function createUnionObjectMatcher(
 }
 
 function createUnionBaseMatcher(
-  terminals: { root: AbstractType; terminal: TerminalType }[],
+  terminals: Array<{ root: AbstractType; terminal: TerminalType }>,
 ): Matcher {
   const { expectedTypes, literals, types, unknowns, optionals } =
     groupTerminals(terminals);
@@ -1777,7 +1779,7 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
-    const flattened: { root: AbstractType; terminal: TerminalType }[] = [];
+    const flattened: Array<{ root: AbstractType; terminal: TerminalType }> = [];
     for (const option of this.options) {
       option._toTerminals((terminal) => {
         flattened.push({ root: option, terminal });

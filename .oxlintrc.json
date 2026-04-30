@@ -29,11 +29,14 @@
 
     // category: "suspicious" (overrides, enabled in categories)
     "no-shadow": "off",
+    "no-underscore-dangle": "off",
+    // noImplicitReturns handles e.g. returns from exhaustive switch
+    // statements better than @typescript-eslint/consistent-return.
+    "@typescript-eslint/consistent-return": "off",
     "@typescript-eslint/no-unsafe-type-assertion": "off",
 
     // category: "pedantic" (overrides, enabled in categories)
     "array-callback-return": "off",
-    "eqeqeq": ["error", "smart"],
     "max-classes-per-file": "off",
     "max-depth": "off",
     "max-lines": "off",
@@ -44,13 +47,14 @@
     "require-await": "off",
     "@typescript-eslint/ban-types": "off",
     "@typescript-eslint/no-confusing-void-expression": "off",
+    "@typescript-eslint/prefer-readonly-parameter-types": "off",
     "@typescript-eslint/restrict-plus-operands": [
       "error",
       {
         "allowAny": false,
         "allowBoolean": false,
         "allowNullish": false,
-        "allowNumberAndString": false,
+        "allowNumberAndString": true,
         "allowRegExp": false
       }
     ],
@@ -68,44 +72,74 @@
     "no-console": "warn",
     "@typescript-eslint/no-empty-object-type": "error",
     "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-invalid-void-type": "error",
+    "@typescript-eslint/no-invalid-void-type": [
+      "error",
+      {
+        "allowAsThisParameter": true
+      }
+    ],
     "@typescript-eslint/no-namespace": ["error", { "allowDeclarations": true }],
     "@typescript-eslint/no-non-null-asserted-nullish-coalescing": "error",
     "@typescript-eslint/no-require-imports": "error",
-    "@typescript-eslint/non-nullable-type-assertion-style": "error",
     "@typescript-eslint/prefer-literal-enum-member": "error",
     "@typescript-eslint/use-unknown-in-catch-callback-variable": "error",
 
     // category: "style" (not enabled via categories)
     "no-multi-assign": "error",
     "no-return-assign": "error",
-    "prefer-const": "error",
+    "prefer-const": [
+      "error",
+      {
+        "destructuring": "all"
+      }
+    ],
     "prefer-rest-params": "error",
     "prefer-spread": "error",
     "@typescript-eslint/adjacent-overload-signatures": "error",
-    "@typescript-eslint/array-type": "error",
+    "@typescript-eslint/array-type": ["error", { "default": "array-simple" }],
     "@typescript-eslint/class-literal-property-style": "error",
     "@typescript-eslint/consistent-generic-constructors": "error",
     "@typescript-eslint/consistent-type-assertions": "error",
+    "@typescript-eslint/dot-notation": "error",
     "@typescript-eslint/no-inferrable-types": "error",
     "@typescript-eslint/prefer-function-type": "error",
     "@typescript-eslint/prefer-reduce-type-parameter": "error",
+    "@typescript-eslint/prefer-regexp-exec": "error",
+    "@typescript-eslint/prefer-string-starts-ends-with": "error",
 
     // category: "nursery" (not enabled via categories)
     "no-unreachable": "error",
-    "@typescript-eslint/dot-notation": "error",
     "@typescript-eslint/no-unnecessary-condition": "error",
-    "@typescript-eslint/no-unnecessary-type-parameters": "error",
-    "@typescript-eslint/no-useless-default-assignment": "error",
     "@typescript-eslint/prefer-find": "error",
     "@typescript-eslint/prefer-optional-chain": "error",
-    "@typescript-eslint/prefer-regexp-exec": "error",
-    "@typescript-eslint/prefer-string-starts-ends-with": "error"
+
+    // Ensure that type-only imports can be elided when Node.js's
+    // type stripping is used enabled and/or tsconfig enables
+    // "verbatimModuleSyntax".
+    //
+    // The consistent-type-imports rule requires type-only imports to
+    // be explicit.
+    //
+    // The no-import-type-side-effects rule disallows imports like
+    // `import { type A } from "a"` that may get transpiled into empty
+    // imports like `import {} from "a"`. If such an empty import is
+    // actually needed (for its side-effects) then declare it explicitly
+    // with `import "a"`.
+    "@typescript-eslint/consistent-type-imports": [
+      "error",
+      { "fixStyle": "inline-type-imports" }
+    ],
+    "@typescript-eslint/no-import-type-side-effects": "error"
   },
   "overrides": [
     {
       "files": ["tests/*.test.ts"],
-      "plugins": ["vitest"]
+      "plugins": ["vitest"],
+      "rules": {
+        "vitest/valid-expect": "off",
+        "vitest/expect-expect": "off",
+        "vitest/no-conditional-in-test": "off"
+      }
     }
   ]
 }
