@@ -22,11 +22,12 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 24
+          package-manager-cache: false
       - run: corepack enable
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          # Allow caching, as this job can't write and doesn't produce any artifacts.
           cache: pnpm
+          package-manager-cache: false
       - run: pnpm i --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run test
@@ -50,6 +51,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
+          node-version: 24
           # Disable package manager cache to so that other jobs can't poison the cache.
           package-manager-cache: false
       - run: corepack enable
