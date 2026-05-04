@@ -137,7 +137,7 @@ describe("Type", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "test",
+          message: "test",
         });
     });
     it("allows passing in a custom error message in an object", () => {
@@ -147,7 +147,7 @@ describe("Type", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: { message: "test" },
+          message: "test",
         });
     });
     it("allows passing in a error path", () => {
@@ -170,14 +170,14 @@ describe("Type", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "a",
+          message: "a",
         });
       expect(() => t.parse("b"))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "b",
+          message: "b",
         });
     });
     it("always gets the value transformed by previous maps and chains", () => {
@@ -344,7 +344,7 @@ describe("Type", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "test",
+          message: "test",
         });
     });
 
@@ -355,7 +355,7 @@ describe("Type", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: { message: "test" },
+          message: "test",
         });
     });
 

@@ -744,14 +744,14 @@ describe("object()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "second",
+          message: "second",
         });
       expect(() => t.parse({ a: "other" }))
         .to.throw(v.ValitaError)
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "first",
+          message: "first",
         });
     });
 
@@ -801,7 +801,7 @@ describe("object()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: "test",
+          message: "test",
         });
     });
 
@@ -814,7 +814,7 @@ describe("object()", () => {
         .with.nested.property("issues[0]")
         .that.deep.includes({
           code: "custom_error",
-          error: { message: "test" },
+          message: "test",
         });
     });
 

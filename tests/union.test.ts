@@ -171,7 +171,7 @@ describe("union()", () => {
       .with.nested.property("issues[0]")
       .that.deep.includes({
         code: "custom_error",
-        error: "test",
+        message: "test",
       });
   });
 
@@ -185,7 +185,7 @@ describe("union()", () => {
       .with.nested.property("issues[0]")
       .that.deep.includes({
         code: "custom_error",
-        error: "unknown",
+        message: "unknown",
       });
   });
 

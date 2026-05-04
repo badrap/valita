@@ -86,8 +86,6 @@ type Issue = Readonly<
       code: "custom_error";
       path: Key[];
       message?: string | undefined;
-      /** @deprecated Instead of `.error` use `.message`. */
-      error: CustomError;
     }
   | { code: "invalid_type"; path: Key[]; expected: InputType[] }
   | { code: "missing_value"; path: Key[] }
@@ -97,8 +95,6 @@ type Issue = Readonly<
       code: "invalid_union";
       path: Key[];
       issues: Issue[];
-      /** @deprecated Instead of `.tree` use `.issues`. */
-      tree: IssueTree;
     }
   | {
       code: "invalid_length";
@@ -135,7 +131,7 @@ function cloneIssueWithPath(tree: IssueLeaf, path: Key[]): Issue {
     case "unrecognized_keys":
       return { code, path, keys: tree.keys };
     case "invalid_union":
-      return { code, path, tree: tree.tree, issues: collectIssues(tree.tree) };
+      return { code, path, issues: collectIssues(tree.tree) };
     case "custom_error":
       if (typeof tree.error === "object" && tree.error.path !== undefined) {
         path.push(...tree.error.path);
@@ -145,7 +141,6 @@ function cloneIssueWithPath(tree: IssueLeaf, path: Key[]): Issue {
         path,
         message:
           typeof tree.error === "string" ? tree.error : tree.error?.message,
-        error: tree.error,
       };
   }
 }
