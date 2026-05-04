@@ -8,8 +8,7 @@
   "files.exclude": {
     "node_modules": true,
     "dist": true,
-    ".pnpm-store": true,
-    ".cache": true
+    ".pnpm-store": true
   },
   "npm.packageManager": "pnpm",
   "js/ts.tsdk.path": "node_modules/typescript/lib"

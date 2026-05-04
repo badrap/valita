@@ -1,5 +1,5 @@
 import { describe, it, expect, expectTypeOf, assert } from "vitest";
-import * as v from "../src";
+import * as v from "../src/index.ts";
 
 describe("union()", () => {
   it("accepts two subvalidators", () => {

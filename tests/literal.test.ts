@@ -1,5 +1,5 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
-import * as v from "../src";
+import * as v from "../src/index.ts";
 
 describe("literal()", () => {
   it("accepts string literals", () => {

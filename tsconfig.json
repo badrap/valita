@@ -1,24 +1,24 @@
 {
   "compilerOptions": {
-    "target": "esnext",
+    "target": "es2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": [],
     "libReplacement": false,
+
     "strict": true,
     "noImplicitReturns": true,
-    "declaration": true,
     "isolatedModules": true,
     "erasableSyntaxOnly": true,
-    "rootDir": "./src",
-    "outDir": "./dist/main",
-    "sourceMap": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
     "allowImportingTsExtensions": true,
-    "incremental": true,
+    "rewriteRelativeImportExtensions": true,
     "stableTypeOrdering": true,
-    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo"
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "stripInternal": true
   },
-  "include": ["mod.ts", "src/**/*", "tests/**/*"]
+  "include": ["src/**/*", "tests/**/*"]
 }

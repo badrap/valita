@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import * as v from "../src";
+import * as v from "../src/index.ts";
 
 describe("ValitaError", () => {
   const error = new v.ValitaError({

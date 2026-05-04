@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from "vitest";
-import * as v from "../src";
+import * as v from "../src/index.ts";
 
 describe("ok()", () => {
   it("infers literals when possible", () => {
