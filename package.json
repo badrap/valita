@@ -1,6 +1,6 @@
 {
   "name": "@badrap/valita",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "description": "A validation & parsing library for TypeScript",
   "license": "MIT",
   "author": "Joachim Viide <jviide@iki.fi>",

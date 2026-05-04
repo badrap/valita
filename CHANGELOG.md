@@ -1,5 +1,21 @@
 # @badrap/valita
 
+## 0.5.0
+
+### Minor Changes
+
+- [`2c5e1b5`](https://github.com/badrap/valita/commit/2c5e1b53287ee318e2490b911ba6b40976a1e22d) Thanks [@jviide](https://github.com/jviide)! - **BREAKING:** Stop publishing to deno.land/x
+
+- [`086c1a9`](https://github.com/badrap/valita/commit/086c1a9d6fc52184f8b250b55db9822fcbaf6700) Thanks [@jviide](https://github.com/jviide)! - **BREAKING:** Remove `Issue#error` and `Issue#tree` properties
+
+- [`fa3c1a1`](https://github.com/badrap/valita/commit/fa3c1a173beade9825b4775906669488a13940e0) Thanks [@jviide](https://github.com/jviide)! - **BREAKING:** Switch to ESM-only publishing
+
+- [`ad4d464`](https://github.com/badrap/valita/commit/ad4d464cda64613d6b1efd0c92ea92ea4332ad8b) Thanks [@jviide](https://github.com/jviide)! - **BREAKING:** Remove `.default(x)` - use `.optional(() => x)` instead
+
+- [`0328b01`](https://github.com/badrap/valita/commit/0328b0122b6c9bac291cb635d586b019a7fbf6e9) Thanks [@jviide](https://github.com/jviide)! - **BREAKING:** Remove (undocumented) `ObjectType#check` method
+
+- [`bc2f69e`](https://github.com/badrap/valita/commit/bc2f69e143f627c264e3da205364106b44806642) Thanks [@jviide](https://github.com/jviide)! - **BREAKING:** Bump Node.js requirement to v22
+
 ## 0.4.6
 
 ### Patch Changes
