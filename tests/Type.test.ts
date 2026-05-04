@@ -723,40 +723,4 @@ describe("Type", () => {
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number | string>();
     });
   });
-
-  describe("default", () => {
-    it("accepts undefined", () => {
-      // oxlint-disable-next-line @typescript-eslint/no-deprecated
-      const t = v.number().default(2);
-      expect(t.parse(undefined)).to.deep.equal(2);
-    });
-
-    it("maps undefined output from any parser", () => {
-      const t = v
-        .string()
-        .map(() => undefined)
-        .default(2); // oxlint-disable-line @typescript-eslint/no-deprecated
-      expect(t.parse("test")).to.deep.equal(2);
-    });
-
-    it("makes input optional", () => {
-      const t = v.object({
-        // oxlint-disable-next-line @typescript-eslint/no-deprecated
-        a: v.number().default(2),
-      });
-      expect(t.parse({})).to.deep.equal({ a: 2 });
-    });
-
-    it("infers literals when possible", () => {
-      // oxlint-disable-next-line @typescript-eslint/no-deprecated
-      const _t = v.undefined().default(2);
-      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<2>();
-    });
-
-    it("removes undefined from the return type", () => {
-      // oxlint-disable-next-line @typescript-eslint/no-deprecated
-      const _t = v.union(v.string(), v.undefined()).default(2);
-      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string | 2>();
-    });
-  });
 });

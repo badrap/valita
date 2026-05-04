@@ -166,7 +166,7 @@ describe("object()", () => {
 
   it("safely sets __proto__ when it's added to output (causing cloning)", () => {
     const o = Object.create(null) as Record<string, v.Type>;
-    o.__proto__ = v.unknown().default({ a: 1 });
+    o.__proto__ = v.unknown().optional(() => ({ a: 1 }));
     const t = v.object(o);
 
     // Parse a __proto__-less object
@@ -177,9 +177,8 @@ describe("object()", () => {
 
   it("safely sets __proto__ when it's added to already cloned output", () => {
     const o = Object.create(null) as Record<string, v.Type>;
-    // oxlint-disable-next-line @typescript-eslint/no-deprecated
-    o.x = v.unknown().default(true);
-    o.__proto__ = v.unknown().default({ a: 1 });
+    o.x = v.unknown().optional(() => true);
+    o.__proto__ = v.unknown().optional(() => ({ a: 1 }));
     const t = v.object(o);
 
     // Parse a __proto__-less object

@@ -582,20 +582,6 @@ abstract class AbstractType<Output = unknown> {
   abstract optional(): Optional<Output>;
 
   /**
-   * @deprecated Instead of `.default(x)` use `.optional(() => x)`.
-   */
-  default<T extends Literal>(
-    defaultValue: T,
-  ): Type<Exclude<Output, undefined> | T>;
-  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T>;
-  default<T>(defaultValue: T): Type<Exclude<Output, undefined> | T> {
-    const defaultResult = ok(defaultValue);
-    return new TransformType(this.optional(), (v) => {
-      return v === undefined ? defaultResult : undefined;
-    });
-  }
-
-  /**
    * Derive a new validator that uses the provided predicate function to
    * perform custom validation for the source validator's output values.
    *
