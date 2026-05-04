@@ -987,28 +987,14 @@ class ObjectType<
   /** @internal */
   private readonly _restType: Rest;
 
-  /** @internal */
-  private readonly _checks?: Array<{
-    func: (v: unknown) => boolean;
-    issue: IssueLeaf;
-  }>;
-
-  constructor(
-    shape: Shape,
-    restType: Rest,
-    checks?: Array<{
-      func: (v: unknown) => boolean;
-      issue: IssueLeaf;
-    }>,
-  ) {
+  constructor(shape: Shape, restType: Rest) {
     super();
     this.shape = shape;
     this._restType = restType;
-    this._checks = checks;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
-    const func = createObjectMatcher(this.shape, this._restType, this._checks);
+    const func = createObjectMatcher(this.shape, this._restType);
     return lazyProperty(
       this,
       MATCHER_SYMBOL,
@@ -1017,20 +1003,6 @@ class ObjectType<
       ),
       false,
     );
-  }
-
-  check(
-    func: (v: ObjectOutput<Shape, Rest>) => boolean,
-    error?: CustomError,
-  ): ObjectType<Shape, Rest> {
-    const issue: IssueLeaf = { ok: false, code: "custom_error", error };
-    return new ObjectType(this.shape, this._restType, [
-      ...(this._checks ?? []),
-      {
-        func: func as (v: unknown) => boolean,
-        issue,
-      },
-    ]);
   }
 
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
@@ -1098,10 +1070,6 @@ function set(obj: Record<string, unknown>, key: string, value: unknown): void {
 function createObjectMatcher(
   shape: ObjectShape,
   rest?: AbstractType,
-  checks?: Array<{
-    func: (v: unknown) => boolean;
-    issue: IssueLeaf;
-  }>,
 ): Matcher<Record<string, unknown>> {
   type Entry = {
     key: string;
@@ -1135,11 +1103,8 @@ function createObjectMatcher(
 
   const restMatcher = rest?.[MATCHER_SYMBOL];
 
-  // A fast path for record(unknown()) without checks
-  const fastPath =
-    indexedEntries.length === 0 &&
-    rest?.name === "unknown" &&
-    checks === undefined;
+  // A fast path for record(unknown())
+  const fastPath = indexedEntries.length === 0 && rest?.name === "unknown";
 
   return (obj, flags) => {
     if (fastPath) {
@@ -1277,14 +1242,6 @@ function createObjectMatcher(
 
     if (issues !== undefined) {
       return issues;
-    }
-
-    if (checks !== undefined) {
-      for (const { func, issue } of checks) {
-        if (!func(output ?? obj)) {
-          return issue;
-        }
-      }
     }
     return output && { ok: true, value: output };
   };

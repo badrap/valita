@@ -421,15 +421,6 @@ describe("object()", () => {
       }>();
       expect(t.parse({ a: 1, b: 1000 })).to.deep.equal({ a: 1, b: 1000 });
     });
-
-    it("removes checks", () => {
-      const t = v
-        .object({ a: v.literal(1), b: v.literal(2) })
-        .check(() => false)
-        .omit("b");
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
-      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
-    });
   });
 
   describe("pick", () => {
@@ -464,15 +455,6 @@ describe("object()", () => {
         v.ValitaError,
       );
     });
-
-    it("removes checks", () => {
-      const t = v
-        .object({ a: v.literal(1), b: v.literal(2) })
-        .check(() => false)
-        .pick("a");
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{ a: 1 }>();
-      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
-    });
   });
 
   describe("partial", () => {
@@ -497,17 +479,6 @@ describe("object()", () => {
         x: undefined,
         y: 1000,
       });
-    });
-
-    it("removes checks", () => {
-      const t = v
-        .object({ a: v.literal(1), b: v.literal(2) })
-        .check(() => false)
-        .partial();
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<
-        Partial<{ a: 1; b: 2 }>
-      >();
-      expect(t.parse({ a: 1 })).to.deep.equal({ a: 1 });
     });
   });
 
@@ -709,125 +680,6 @@ describe("object()", () => {
       const n = v.number();
       const t = v.object({ s, n });
       expect(t.shape).toEqual({ s, n });
-    });
-  });
-
-  describe("check()", () => {
-    it("accepts a function returning boolean", () => {
-      const t = v.object({ a: v.string() }).check((_v) => true);
-      expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
-    });
-
-    it("doesn't affect the base shape", () => {
-      const _t = v.object({ a: v.string() }).check((v): boolean => Boolean(v));
-      expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: string }>();
-    });
-
-    it("skips all checks if any property fails to parse", () => {
-      let didRun = false;
-      const t = v.object({ a: v.string(), b: v.number() }).check(() => {
-        didRun = true;
-        return true;
-      });
-      expect(() => t.parse({ a: "test" })).to.throw(v.ValitaError);
-      expect(didRun).toBe(false);
-    });
-
-    it("runs multiple checks in order", () => {
-      const t = v
-        .object({ a: v.string() })
-        .check((v) => v.a === "test", "first")
-        .check(() => false, "second");
-      expect(() => t.parse({ a: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          message: "second",
-        });
-      expect(() => t.parse({ a: "other" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          message: "first",
-        });
-    });
-
-    it("runs checks after the object has otherwise been parsed", () => {
-      const t = v
-        .object({ a: v.string() })
-        .check((v) => (v as Record<string, unknown>).b === 2)
-        .extend({ b: v.undefined().map(() => 2) })
-        .check((v) => v.b === 2);
-      expect(() => t.parse({ a: "test", b: null }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "invalid_type",
-          path: ["b"],
-        });
-      expect(t.parse({ a: "test", b: undefined })).to.deep.equal({
-        a: "test",
-        b: 2,
-      });
-    });
-
-    it("allows extending the base type after adding checks", () => {
-      const t = v
-        .object({ a: v.string() })
-        .check((v): boolean => Boolean(v))
-        .extend({ b: v.number() });
-      expect(t.parse({ a: "test", b: 1 })).to.deep.equal({ a: "test", b: 1 });
-      expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{
-        a: string;
-        b: number;
-      }>();
-    });
-
-    it("creates a custom error on failure", () => {
-      const t = v.object({ a: v.string() }).check(() => false);
-      expect(() => t.parse({ a: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.includes({ code: "custom_error" });
-    });
-
-    it("allows passing in a custom error message", () => {
-      const t = v.object({ a: v.string() }).check(() => false, "test");
-      expect(() => t.parse({ a: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          message: "test",
-        });
-    });
-
-    it("allows passing in a custom error message in an object", () => {
-      const t = v
-        .object({ a: v.string() })
-        .check(() => false, { message: "test" });
-      expect(() => t.parse({ a: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          message: "test",
-        });
-    });
-
-    it("allows passing in a error path", () => {
-      const t = v
-        .object({ a: v.string() })
-        .check(() => false, { path: ["test"] });
-      expect(() => t.parse({ a: "test" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues[0]")
-        .that.deep.includes({
-          code: "custom_error",
-          path: ["test"],
-        });
     });
   });
 });
