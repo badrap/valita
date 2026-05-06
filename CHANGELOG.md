@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.5.1
+
+### Patch Changes
+
+- [`59b556e`](https://github.com/badrap/valita/commit/59b556e7095c3bee73bb0d7b88ed4a4e44e376ac) Thanks [@jviide](https://github.com/jviide)! - Don't publish declaration map
+
 ## 0.5.0
 
 ### Minor Changes
