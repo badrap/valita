@@ -16,7 +16,6 @@
     "stableTypeOrdering": true,
 
     "declaration": true,
-    "declarationMap": true,
     "sourceMap": true,
     "stripInternal": true
   },
