@@ -982,19 +982,18 @@ class ObjectType<
   Rest extends AbstractType | undefined = AbstractType | undefined,
 > extends Type<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
-  readonly shape: Shape;
 
-  /** @internal */
-  private readonly _restType: Rest;
+  readonly shape: Shape;
+  readonly restType: Rest;
 
   constructor(shape: Shape, restType: Rest) {
     super();
     this.shape = shape;
-    this._restType = restType;
+    this.restType = restType;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
-    const func = createObjectMatcher(this.shape, this._restType);
+    const func = createObjectMatcher(this.shape, this.restType);
     return lazyProperty(
       this,
       MATCHER_SYMBOL,
@@ -1014,7 +1013,7 @@ class ObjectType<
   ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
     return new ObjectType(
       { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
-      this._restType,
+      this.restType,
     );
   }
 
@@ -1035,7 +1034,7 @@ class ObjectType<
     for (const key of keys) {
       delete shape[key];
     }
-    return new ObjectType(shape as Omit<Shape, K[number]>, this._restType);
+    return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
   }
 
   partial(): ObjectType<
@@ -1046,7 +1045,7 @@ class ObjectType<
     for (const key of Object.keys(this.shape)) {
       set(shape, key, this.shape[key].optional());
     }
-    const rest = this._restType?.optional();
+    const rest = this.restType?.optional();
     return new ObjectType(
       shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
       rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined,

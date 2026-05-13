@@ -682,4 +682,18 @@ describe("object()", () => {
       expect(t.shape).toEqual({ s, n });
     });
   });
+
+  describe("restType", () => {
+    it("is undefined by default", () => {
+      const a = v.string();
+      const t = v.object({ a });
+      expect(t.restType).toBeUndefined();
+    });
+
+    it("contains the additional property validator", () => {
+      const a = v.string();
+      const t = v.object({}).rest(a);
+      expect(t.restType).toStrictEqual(a);
+    });
+  });
 });
