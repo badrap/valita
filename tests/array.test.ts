@@ -42,13 +42,50 @@ describe("array()", () => {
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number[]>();
   });
 
+  describe("prefix", () => {
+    it("is an empty array", () => {
+      const t = v.array(v.string());
+      expect(t.prefix).toStrictEqual([]);
+    });
+
+    it("is typed as an empty tuple", () => {
+      const t = v.array(v.string());
+      expectTypeOf(t.prefix).toEqualTypeOf<[]>();
+    });
+  });
+
+  describe("suffix", () => {
+    it("is an empty array", () => {
+      const t = v.array(v.string());
+      expect(t.suffix).toStrictEqual([]);
+    });
+
+    it("is typed as an empty tuple", () => {
+      const t = v.array(v.string());
+      expectTypeOf(t.suffix).toEqualTypeOf<[]>();
+    });
+  });
+
+  describe("restType", () => {
+    it("contains the array element type", () => {
+      const s = v.string();
+      const t = v.array(s);
+      expect(t.restType).toBe(s);
+    });
+
+    it("preserves the array element type", () => {
+      const t = v.array(v.number());
+      expectTypeOf<v.Infer<typeof t.restType>>().toEqualTypeOf<number>();
+    });
+  });
+
   describe("concat()", () => {
     it("creates a variadic tuple from an array and a fixed-length tuple", () => {
       const s = v.string();
       const t = v.tuple([v.number(), v.number()]).concat(v.array(v.string()));
-      expect(t._prefix).toHaveLength(2);
-      expect(t._rest).toStrictEqual(s);
-      expect(t._suffix).to.toHaveLength(0);
+      expect(t.prefix).toHaveLength(2);
+      expect(t.restType).toBe(s);
+      expect(t.suffix).to.toHaveLength(0);
     });
 
     it("prohibits concatenating variadic types at type level", () => {

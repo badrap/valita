@@ -1266,26 +1266,27 @@ class ArrayOrTupleType<
   Tail extends Type[] = Type[],
 > extends Type<ArrayOutput<Head, Rest, Tail>> {
   readonly name = "array";
-  readonly _prefix: Head;
-  readonly _rest: Rest | undefined;
-  readonly _suffix: Tail;
+
+  readonly prefix: Head;
+  readonly restType: Rest | undefined;
+  readonly suffix: Tail;
 
   constructor(prefix: Head, rest: Rest | undefined, suffix: Tail) {
     super();
-    this._prefix = prefix;
-    this._rest = rest;
-    this._suffix = suffix;
+    this.prefix = prefix;
+    this.restType = rest;
+    this.suffix = suffix;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
-    const prefix = this._prefix.map((t) => t[MATCHER_SYMBOL]);
-    const suffix = this._suffix.map((t) => t[MATCHER_SYMBOL]);
+    const prefix = this.prefix.map((t) => t[MATCHER_SYMBOL]);
+    const suffix = this.suffix.map((t) => t[MATCHER_SYMBOL]);
     const rest =
-      this._rest?.[MATCHER_SYMBOL] ??
+      this.restType?.[MATCHER_SYMBOL] ??
       taggedMatcher(1, () => ISSUE_MISSING_VALUE);
 
     const minLength = prefix.length + suffix.length;
-    const maxLength = this._rest ? Infinity : minLength;
+    const maxLength = this.restType ? Infinity : minLength;
     const invalidLength: IssueLeaf = {
       ok: false,
       code: "invalid_length",
@@ -1342,28 +1343,30 @@ class ArrayOrTupleType<
     );
   }
 
-  concat(type: ArrayType | TupleType | VariadicTupleType): ArrayOrTupleType {
-    if (this._rest) {
-      if (type._rest) {
+  concat(
+    type: ArrayType | TupleType | VariadicTupleType,
+  ): ArrayType | TupleType | VariadicTupleType {
+    if (this.restType) {
+      if (type.restType) {
         throw new TypeError("can not concatenate two variadic types");
       }
-      return new ArrayOrTupleType(this._prefix, this._rest, [
-        ...this._suffix,
-        ...type._prefix,
-        ...type._suffix,
-      ]);
-    } else if (type._rest) {
+      return new ArrayOrTupleType(this.prefix, this.restType, [
+        ...this.suffix,
+        ...type.prefix,
+        ...type.suffix,
+      ]) as VariadicTupleType;
+    } else if (type.restType) {
       return new ArrayOrTupleType(
-        [...this._prefix, ...this._suffix, ...type._prefix],
-        type._rest,
-        type._suffix,
-      );
+        [...this.prefix, ...this.suffix, ...type.prefix],
+        type.restType,
+        type.suffix,
+      ) as VariadicTupleType;
     } else {
       return new ArrayOrTupleType(
-        [...this._prefix, ...this._suffix, ...type._prefix, ...type._suffix],
-        type._rest,
-        type._suffix,
-      );
+        [...this.prefix, ...this.suffix, ...type.prefix, ...type.suffix],
+        type.restType,
+        type.suffix,
+      ) as TupleType;
     }
   }
 }
@@ -1376,14 +1379,9 @@ interface ArrayType<Element extends Type = Type> extends Type<
 > {
   readonly name: "array";
 
-  /** @internal */
-  readonly _prefix: Type[];
-
-  /** @internal */
-  readonly _rest: Element;
-
-  /** @internal */
-  readonly _suffix: Type[];
+  readonly prefix: [];
+  readonly restType: Element;
+  readonly suffix: [];
 
   concat<Suffix extends Type[]>(
     type: TupleType<Suffix>,
@@ -1399,14 +1397,9 @@ interface TupleType<Elements extends Type[] = Type[]> extends Type<
 > {
   readonly name: "array";
 
-  /** @internal */
-  readonly _prefix: Elements;
-
-  /** @internal */
-  readonly _rest: undefined;
-
-  /** @internal */
-  readonly _suffix: Type[];
+  readonly prefix: Elements;
+  readonly restType: undefined;
+  readonly suffix: [];
 
   concat<ConcatPrefix extends Type[]>(
     type: TupleType<ConcatPrefix>,
@@ -1434,14 +1427,9 @@ interface VariadicTupleType<
 > extends Type<ArrayOutput<Prefix, Rest, Suffix>> {
   readonly name: "array";
 
-  /** @internal */
-  readonly _prefix: Prefix;
-
-  /** @internal */
-  readonly _rest: Rest;
-
-  /** @internal */
-  readonly _suffix: Suffix;
+  readonly prefix: Prefix;
+  readonly restType: Rest;
+  readonly suffix: Suffix;
 
   concat<OtherPrefix extends Type[]>(
     type: TupleType<OtherPrefix>,
@@ -2073,7 +2061,9 @@ type TerminalType =
     })
   | LiteralType
   | ObjectType
-  | ArrayOrTupleType
+  | ArrayType
+  | TupleType
+  | VariadicTupleType
   | Optional;
 
 export type { Type, Optional };

@@ -4,25 +4,146 @@ import * as v from "../src/index.ts";
 describe("tuple()", () => {
   it("returns a fixed-length tuple", () => {
     const t = v.tuple([v.number(), v.number()]);
-    expect(t._prefix).toHaveLength(2);
-    expect(t._rest).toBe(undefined);
-    expect(t._suffix).toHaveLength(0);
+    expect(t.prefix).toHaveLength(2);
+    expect(t.restType).toBe(undefined);
+    expect(t.suffix).toHaveLength(0);
+  });
+
+  describe("prefix", () => {
+    it("is empty for an empty tuple", () => {
+      const t = v.tuple([]);
+      expectTypeOf(t.prefix).toEqualTypeOf<[]>();
+    });
+
+    it("contains the tuple prefix for non-empty fixed-length tuples", () => {
+      const s = v.string();
+      const n = v.number();
+      const t = v.tuple([s, n]);
+      expect(t.prefix).toStrictEqual([s, n]);
+      expectTypeOf(t.prefix).toEqualTypeOf<[typeof s, typeof n]>();
+    });
+
+    it("contains the tuple prefix for variadic tuples", () => {
+      const s = v.string();
+      const n = v.number();
+      const t = v.tuple([s, n]).concat(v.array());
+      expect(t.prefix).toStrictEqual([s, n]);
+      expectTypeOf(t.prefix).toEqualTypeOf<[typeof s, typeof n]>();
+    });
+
+    it("preserves identities and types over concatenating another tuple to a fixed-size tuple", () => {
+      const s = v.string();
+      const n = v.number();
+      const b = v.bigint();
+      const t = v.tuple([s, n]).concat(v.tuple([b]));
+      expect(t.prefix).toStrictEqual([s, n, b]);
+      expectTypeOf(t.prefix).toEqualTypeOf<[typeof s, typeof n, typeof b]>();
+    });
+
+    it("preserves identities and types over concatenating another tuple to a variadic tuple", () => {
+      const s = v.string();
+      const n = v.number();
+      const t = v
+        .tuple([s, n])
+        .concat(v.array())
+        .concat(v.tuple([v.bigint()]));
+      expect(t.prefix).toStrictEqual([s, n]);
+      expectTypeOf(t.prefix).toEqualTypeOf<[typeof s, typeof n]>();
+    });
+
+    it("preserves types over concatenating a variadic tuple to a fixed-size tuple", () => {
+      const s = v.string();
+      const n = v.number();
+      const b = v.bigint();
+      const t = v
+        .tuple([s, n])
+        .concat(v.tuple([b]).concat(v.array(v.bigint())));
+      expect(t.prefix).toStrictEqual([s, n, b]);
+      expectTypeOf(t.prefix).toEqualTypeOf<[typeof s, typeof n, typeof b]>();
+    });
+  });
+
+  describe("suffix", () => {
+    it("is empty for an empty tuple", () => {
+      const t = v.tuple([]);
+      expectTypeOf(t.suffix).toEqualTypeOf<[]>();
+    });
+
+    it("is empty for a non-empty fixed-length tuple", () => {
+      const t = v.tuple([v.number(), v.number()]);
+      expect(t.suffix).toStrictEqual([]);
+      expectTypeOf(t.suffix).toEqualTypeOf<[]>();
+    });
+
+    it("is empty for a variadic tuple without a suffix", () => {
+      const s = v.string();
+      const n = v.number();
+      const t = v.tuple([s, n]).concat(v.array());
+      expect(t.suffix).toStrictEqual([]);
+      expectTypeOf(t.suffix).toEqualTypeOf<[]>();
+    });
+
+    it("contains the tuple suffix for a variadic tuple a non-empty suffix", () => {
+      const s = v.string();
+      const n = v.number();
+      const t = v.array().concat(v.tuple([s, n]));
+      expect(t.suffix).toStrictEqual([s, n]);
+      expectTypeOf(t.suffix).toEqualTypeOf<[typeof s, typeof n]>();
+    });
+
+    it("preserves types over concatenating to a variadic tuple", () => {
+      const s = v.string();
+      const n = v.number();
+      const b = v.bigint();
+      const t = v
+        .tuple([s])
+        .concat(v.array())
+        .concat(v.tuple([n]))
+        .concat(v.tuple([b]));
+      expect(t.suffix).toStrictEqual([n, b]);
+      expectTypeOf(t.suffix).toEqualTypeOf<[typeof n, typeof b]>();
+    });
+  });
+
+  describe("restType", () => {
+    it("is undefined for a fixed-length tuple", () => {
+      const t = v.tuple([v.string()]);
+      expect(t.restType).toBe(undefined);
+      expectTypeOf(t.restType).toEqualTypeOf<undefined>();
+    });
+
+    it("preserved identity and type in a variadic tuple", () => {
+      const n = v.number();
+      const t = v.tuple([v.string()]).concat(v.array(n));
+      expect(t.restType).toBe(n);
+      expectTypeOf(t.restType).toEqualTypeOf<typeof n>();
+    });
+
+    it("preserves type and identity over concatenating to a variadic tuple", () => {
+      const n = v.number();
+      const t = v
+        .tuple([v.string()])
+        .concat(v.array(n))
+        .concat(v.tuple([v.bigint()]));
+      expect(t.restType).toBe(n);
+      expectTypeOf(t.restType).toEqualTypeOf<typeof n>();
+    });
   });
 
   describe("concat()", () => {
     it("creates a fixed-length tuple from two fixed-length tuples", () => {
       const t = v.tuple([v.number()]).concat(v.tuple([v.string()]));
-      expect(t._prefix).toHaveLength(2);
-      expect(t._rest).toBe(undefined);
-      expect(t._suffix).toHaveLength(0);
+      expect(t.prefix).toHaveLength(2);
+      expect(t.restType).toBe(undefined);
+      expect(t.suffix).toHaveLength(0);
     });
 
     it("creates a variadic tuple from a fixed-length tuple and an array", () => {
       const s = v.string();
       const t = v.tuple([v.number(), v.number()]).concat(v.array(v.string()));
-      expect(t._prefix).toHaveLength(2);
-      expect(t._rest).toStrictEqual(s);
-      expect(t._suffix).toHaveLength(0);
+      expect(t.prefix).toHaveLength(2);
+      expect(t.restType).toStrictEqual(s);
+      expect(t.suffix).toHaveLength(0);
     });
 
     it("creates a variadic tuple from a variadic and a fixed-length tuple", () => {
@@ -33,9 +154,9 @@ describe("tuple()", () => {
 
       const t1 = v.tuple([n, b]).concat(v.array(s));
       const t = t1.concat(v.tuple([u]));
-      expect(t._prefix).toEqual([n, b]);
-      expect(t._rest).toStrictEqual(s);
-      expect(t._suffix).toEqual([u]);
+      expect(t.prefix).toEqual([n, b]);
+      expect(t.restType).toStrictEqual(s);
+      expect(t.suffix).toEqual([u]);
     });
 
     it("creates a variadic tuple from a fixed-length and a variadic tuple", () => {
@@ -51,9 +172,9 @@ describe("tuple()", () => {
         .concat(v.array(s))
         .concat(v.tuple([u]));
       const t = t1.concat(t2);
-      expect(t._prefix).toEqual([n, b, i]);
-      expect(t._rest).toStrictEqual(s);
-      expect(t._suffix).toEqual([u]);
+      expect(t.prefix).toEqual([n, b, i]);
+      expect(t.restType).toStrictEqual(s);
+      expect(t.suffix).toEqual([u]);
     });
 
     it("prohibits concatenating variadic types at type level", () => {
