@@ -1,5 +1,13 @@
 # @badrap/valita
 
+## 0.5.2
+
+### Patch Changes
+
+- [`4eebd69`](https://github.com/badrap/valita/commit/4eebd695bb9eaa7cdf424f7ff255e69618353c32) Thanks [@jviide](https://github.com/jviide)! - Expose `.restType` for objects
+
+- [`0d581e0`](https://github.com/badrap/valita/commit/0d581e07c4a27cade9b39917539d07ac6c7e44a7) Thanks [@jviide](https://github.com/jviide)! - Expose `.prefix`, `.restType` and `.suffix` in arrays and tuples
+
 ## 0.5.1
 
 ### Patch Changes
