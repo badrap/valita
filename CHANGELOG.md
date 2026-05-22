@@ -1,5 +1,9 @@
 # @badrap/valita
 
+## 0.5.3
+
+Republish of v0.5.2 that lacked provenance attestations due to staged publishing and trusted publishing interaction.
+
 ## 0.5.2
 
 ### Patch Changes
