@@ -297,22 +297,22 @@ function lazyProperty<T>(
  * ```
  */
 export class ValitaError extends Error {
-  /** @internal */
-  private readonly _issueTree: IssueTree;
+  readonly #issueTree: IssueTree;
 
   constructor(issueTree: IssueTree) {
-    super(formatIssueTree(issueTree));
+    super();
+    this.#issueTree = issueTree;
+  }
 
-    Object.setPrototypeOf(this, new.target.prototype);
-
-    this.name = new.target.name;
-    this._issueTree = issueTree;
+  get message(): string {
+    return lazyProperty(this, "message", formatIssueTree(this.#issueTree), true);
   }
 
   get issues(): readonly Issue[] {
-    return lazyProperty(this, "issues", collectIssues(this._issueTree), true);
+    return lazyProperty(this, "issues", collectIssues(this.#issueTree), true);
   }
 }
+ValitaError.prototype.name = "ValitaError";
 
 /**
  * A successful validation/parsing result.
