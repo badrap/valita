@@ -305,7 +305,12 @@ export class ValitaError extends Error {
   }
 
   get message(): string {
-    return lazyProperty(this, "message", formatIssueTree(this.#issueTree), true);
+    return lazyProperty(
+      this,
+      "message",
+      formatIssueTree(this.#issueTree),
+      true,
+    );
   }
 
   get issues(): readonly Issue[] {
