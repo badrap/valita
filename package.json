@@ -31,13 +31,13 @@
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.31.0",
     "oxfmt": "^0.47.0",
-    "oxlint": "^1.62.0",
-    "oxlint-tsgolint": "^0.22.1",
+    "oxlint": "^1.66.0",
+    "oxlint-tsgolint": "^0.23.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   },
   "engines": {
     "node": ">= 22"
   },
-  "packageManager": "pnpm@11.0.0+sha512.5bd187500e49cc6c3d891d973b432c02b844a5eb7209172c90a517a3ef4f579ed5c23d409b699e6a9dc418ff7b2b1890e63f6d74f1d3fc49848f37779c89c84c"
+  "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215"
 }
