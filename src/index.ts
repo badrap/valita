@@ -1740,16 +1740,14 @@ function flagsToOptions(flags: number): ParseOptions {
 class TransformType<Output> extends Type<Output> {
   readonly name = "transform";
 
-  /** @internal */
-  protected readonly _transformed: AbstractType;
+  readonly #transformed: AbstractType;
 
-  /** @internal */
-  protected readonly _transform: TransformFunc;
+  readonly #transform: TransformFunc;
 
   constructor(transformed: AbstractType, transform: TransformFunc) {
     super();
-    this._transformed = transformed;
-    this._transform = transform;
+    this.#transformed = transformed;
+    this.#transform = transform;
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1758,8 +1756,8 @@ class TransformType<Output> extends Type<Output> {
     // oxlint-disable-next-line @typescript-eslint/no-this-alias
     let next: AbstractType = this;
     while (next instanceof TransformType) {
-      chain.push(next._transform);
-      next = next._transformed;
+      chain.push(next.#transform);
+      next = next.#transformed;
     }
     chain.reverse();
 
@@ -1802,26 +1800,23 @@ class TransformType<Output> extends Type<Output> {
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
-    this._transformed._toTerminals(func);
+    this.#transformed._toTerminals(func);
   }
 }
 
 class LazyType<T> extends Type<T> {
   readonly name = "lazy";
 
-  /** @internal */
-  private _recursing = false;
-
-  /** @internal */
-  private readonly _definer: () => Type<T>;
+  readonly #definer: () => Type<T>;
+  #recursing = false;
 
   constructor(definer: () => Type<T>) {
     super();
-    this._definer = definer;
+    this.#definer = definer;
   }
 
   get type() {
-    return lazyProperty(this, "type", this._definer(), true);
+    return lazyProperty(this, "type", this.#definer(), true);
   }
 
   get [MATCHER_SYMBOL]() {
@@ -1836,12 +1831,12 @@ class LazyType<T> extends Type<T> {
   }
 
   _toTerminals(func: (t: TerminalType) => void): void {
-    if (!this._recursing) {
-      this._recursing = true;
+    if (!this.#recursing) {
+      this.#recursing = true;
       try {
         this.type._toTerminals(func);
       } finally {
-        this._recursing = false;
+        this.#recursing = false;
       }
     }
   }
