@@ -1,5 +1,11 @@
 # @badrap/valita
 
+## 0.5.4
+
+### Patch Changes
+
+- [`d10dbca`](https://github.com/badrap/valita/commit/d10dbca6d8efc3ad324d73f4bfc8327caf67c1bf) Thanks [@jviide](https://github.com/jviide)! - Disable staged publishing until npm sorts out compatibility issues with trusted publishing.
+
 ## 0.5.3
 
 Republish of v0.5.2 that lacked provenance attestations due to staged publishing and trusted publishing interaction.
