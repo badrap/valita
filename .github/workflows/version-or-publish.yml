@@ -59,7 +59,7 @@ jobs:
         run: pnpm i --frozen-lockfile
       - name: Create release pull request or GitHub release
         id: changesets
-        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
           version: pnpm run bump
           publish: pnpm run tag
