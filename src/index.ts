@@ -1220,9 +1220,12 @@ function createObjectMatcher(
         } else if (issues === undefined) {
           if (output === undefined) {
             output = {};
+            // Only keys that are present in the input may be carried over: a
+            // missing optional key has to stay missing rather than becoming an
+            // own key holding `undefined`.
             if (restMatcher === undefined) {
               for (let m = 0; m < indexedEntries.length; m++) {
-                if (m < i || getBit(seenBits, m)) {
+                if ((m < i || getBit(seenBits, m)) && indexedEntries[m].key in obj) {
                   const k = indexedEntries[m].key;
                   set(output, k, obj[k]);
                 }
@@ -1232,7 +1235,7 @@ function createObjectMatcher(
                 set(output, k, obj[k]);
               }
               for (let m = 0; m < i; m++) {
-                if (!getBit(seenBits, m)) {
+                if (!getBit(seenBits, m) && indexedEntries[m].key in obj) {
                   const k = indexedEntries[m].key;
                   set(output, k, obj[k]);
                 }
