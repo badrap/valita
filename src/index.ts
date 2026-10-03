@@ -1017,9 +1017,9 @@ class ObjectType<
     shape: S,
   ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
     return new ObjectType(
-      { ...this.shape, ...shape } as Omit<Shape, keyof S> & S,
+      { ...this.shape, ...shape },
       this.restType,
-    );
+    ) as ObjectType<Omit<Shape, keyof S> & S, Rest>;
   }
 
   pick<K extends Array<string & keyof Shape>>(
@@ -1039,7 +1039,10 @@ class ObjectType<
     for (const key of keys) {
       delete shape[key];
     }
-    return new ObjectType(shape as Omit<Shape, K[number]>, this.restType);
+    return new ObjectType(shape, this.restType) as ObjectType<
+      Omit<Shape, K[number]>,
+      Rest
+    >;
   }
 
   partial(): ObjectType<

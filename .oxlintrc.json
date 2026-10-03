@@ -138,7 +138,8 @@
       "rules": {
         "vitest/valid-expect": "off",
         "vitest/expect-expect": "off",
-        "vitest/no-conditional-in-test": "off"
+        "vitest/no-conditional-in-test": "off",
+        "@typescript-eslint/no-generated-empty-object-type": "off"
       }
     }
   ]
