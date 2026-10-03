@@ -5,7 +5,7 @@ describe("object()", () => {
   it("acceps empty objects", () => {
     const t = v.object({});
     expect(t.parse({})).to.deep.equal({});
-    // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
+    // oxlint-disable-next-line typescript/no-empty-object-type
     expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
   });
 
@@ -13,7 +13,7 @@ describe("object()", () => {
     const _t = v.object({
       a: v.object({}),
     });
-    // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
+    // oxlint-disable-next-line typescript/no-empty-object-type
     expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<{ a: {} }>();
   });
 
@@ -450,7 +450,7 @@ describe("object()", () => {
 
     it("allows zero arguments", () => {
       const t = v.object({ a: v.literal(1), b: v.literal(2) }).pick();
-      // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
+      // oxlint-disable-next-line typescript/no-empty-object-type
       expectTypeOf<v.Infer<typeof t>>().toEqualTypeOf<{}>();
       expect(t.parse({})).to.deep.equal({});
     });

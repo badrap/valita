@@ -572,7 +572,7 @@ abstract class AbstractType<Output = unknown> {
   // output type with `NoInfer<T>`, but it's supported only from
   // TypeScript 5.4 onwards.
   abstract optional<T extends Literal>(
-    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   // Support parsers like `v.array(t).optional(() => [])`
@@ -744,7 +744,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   abstract name: TypeName;
 
   optional<T extends Literal>(
-    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   optional(
@@ -773,7 +773,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
    * @param [defaultFn] - An optional function returning the default value.
    */
   nullable<T extends Literal>(
-    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, null> | T>;
   nullable(defaultFn: () => Exclude<Output, null>): Type<Exclude<Output, null>>;
@@ -888,7 +888,7 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   }
 
   optional<T extends Literal>(
-    // oxlint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   optional(
@@ -1757,7 +1757,7 @@ class TransformType<Output> extends Type<Output> {
   get [MATCHER_SYMBOL](): TaggedMatcher {
     const chain: TransformFunc[] = [];
 
-    // oxlint-disable-next-line @typescript-eslint/no-this-alias
+    // oxlint-disable-next-line typescript/no-this-alias
     let next: AbstractType = this;
     while (next instanceof TransformType) {
       chain.push(next.#transform);
