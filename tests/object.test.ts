@@ -302,6 +302,24 @@ describe("object()", () => {
     expect(o).to.deep.equal({ a: 2 });
   });
 
+  it("doesn't add missing optional keys to cloned outputs", () => {
+    // Regression test for issue #129.
+    const t1 = v.object({
+      a: v.string().optional(),
+      b: v.string().optional(() => 1),
+    });
+    const t2 = t1.rest(v.number());
+
+    expect(t1.parse({}, { mode: "strict" })).to.deep.equal({ b: 1 });
+    expect(t2.parse({}, { mode: "strict" })).to.deep.equal({ b: 1 });
+
+    expect(t1.parse({}, { mode: "strip" })).to.deep.equal({ b: 1 });
+    expect(t2.parse({}, { mode: "strip" })).to.deep.equal({ b: 1 });
+
+    expect(t1.parse({}, { mode: "passthrough" })).to.deep.equal({ b: 1 });
+    expect(t2.parse({}, { mode: "passthrough" })).to.deep.equal({ b: 1 });
+  });
+
   it("doesn't lose optional keys when mode=strip and there unrecognized non-enumerable keys", () => {
     const o = { a: 1 } as Record<string, unknown>;
     o.b = 2;

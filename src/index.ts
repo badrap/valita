@@ -1107,6 +1107,37 @@ function createObjectMatcher(
 
   const restMatcher = rest?.[MATCHER_SYMBOL];
 
+  const clone = (
+    obj: Record<string, unknown>,
+    enumeratedBits: BitSet,
+    indexedBits: BitSet,
+  ) => {
+    const output = {};
+
+    if (restMatcher === undefined) {
+      for (let m = 0; m < indexedEntries.length; m++) {
+        if (getBit(enumeratedBits, m) || getBit(indexedBits, m)) {
+          const k = indexedEntries[m].key;
+          set(output, k, obj[k]);
+        }
+      }
+      return output;
+    }
+
+    for (const k in obj) {
+      set(output, k, obj[k]);
+    }
+    if (indexedBits) {
+      for (let m = 0; m < indexedEntries.length; m++) {
+        if (getBit(indexedBits, m)) {
+          const k = indexedEntries[m].key;
+          set(output, k, obj[k]);
+        }
+      }
+    }
+    return output;
+  };
+
   // A fast path for record(unknown())
   const fastPath = indexedEntries.length === 0 && rest?.name === "unknown";
 
@@ -1118,7 +1149,8 @@ function createObjectMatcher(
     let output: Record<string, unknown> | undefined = undefined;
     let issues: IssueTree | undefined = undefined;
     let unrecognized: Key[] | undefined = undefined;
-    let seenBits: BitSet = 0;
+    let enumeratedBits: BitSet = 0;
+    let indexedBits: BitSet = 0;
     let seenCount = 0;
 
     if (
@@ -1146,13 +1178,7 @@ function createObjectMatcher(
             issues === undefined &&
             output === undefined
           ) {
-            output = {};
-            for (let m = 0; m < indexedEntries.length; m++) {
-              if (getBit(seenBits, m)) {
-                const k = indexedEntries[m].key;
-                set(output, k, obj[k]);
-              }
-            }
+            output = clone(obj, enumeratedBits, indexedBits);
           }
           continue;
         }
@@ -1168,34 +1194,20 @@ function createObjectMatcher(
         } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(key, r));
         } else if (issues === undefined) {
-          if (output === undefined) {
-            output = {};
-            if (restMatcher === undefined) {
-              for (let m = 0; m < indexedEntries.length; m++) {
-                if (getBit(seenBits, m)) {
-                  const k = indexedEntries[m].key;
-                  set(output, k, obj[k]);
-                }
-              }
-            } else {
-              for (const k in obj) {
-                set(output, k, obj[k]);
-              }
-            }
-          }
+          output ??= clone(obj, enumeratedBits, indexedBits);
           set(output, key, r.value);
         }
 
         if (entry !== undefined) {
           seenCount++;
-          seenBits = setBit(seenBits, entry.index);
+          enumeratedBits = setBit(enumeratedBits, entry.index);
         }
       }
     }
 
     if (seenCount < indexedEntries.length) {
       for (let i = 0; i < indexedEntries.length; i++) {
-        if (getBit(seenBits, i)) {
+        if (getBit(enumeratedBits, i)) {
           continue;
         }
         const entry = indexedEntries[i];
@@ -1218,28 +1230,12 @@ function createObjectMatcher(
         } else if (!r.ok) {
           issues = joinIssues(issues, prependPath(entry.key, r));
         } else if (issues === undefined) {
-          if (output === undefined) {
-            output = {};
-            if (restMatcher === undefined) {
-              for (let m = 0; m < indexedEntries.length; m++) {
-                if (m < i || getBit(seenBits, m)) {
-                  const k = indexedEntries[m].key;
-                  set(output, k, obj[k]);
-                }
-              }
-            } else {
-              for (const k in obj) {
-                set(output, k, obj[k]);
-              }
-              for (let m = 0; m < i; m++) {
-                if (!getBit(seenBits, m)) {
-                  const k = indexedEntries[m].key;
-                  set(output, k, obj[k]);
-                }
-              }
-            }
-          }
+          output ??= clone(obj, enumeratedBits, indexedBits);
           set(output, entry.key, r.value);
+        }
+
+        if (extraFlags === 0) {
+          indexedBits = setBit(indexedBits, i);
         }
       }
     }
