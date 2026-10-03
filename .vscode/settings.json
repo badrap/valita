@@ -11,5 +11,7 @@
     ".pnpm-store": true
   },
   "npm.packageManager": "pnpm",
-  "js/ts.tsdk.path": "node_modules/typescript/lib"
+  "js/ts.experimental.useTsgo": true,
+  "oxc.fixKind": "safe_fix",
+  "oxc.path.node": "/usr/local/bin/node"
 }
