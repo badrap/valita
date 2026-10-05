@@ -3,6 +3,17 @@ import * as v from "../src/index.ts";
 
 describe("ValitaResult", () => {
   describe("issues", () => {
+    it("is undefined for Ok values", () => {
+      const result = v.string().try("test");
+      expect(result.issues).toBeUndefined();
+    });
+
+    it("is an inherited property of Ok values", () => {
+      const result = v.string().try("test");
+      expect("issues" in result).toBe(true);
+      expect(Object.hasOwn(result, "issues")).toBe(false);
+    });
+
     it("lists issues", () => {
       const result = v.bigint().try("test");
       expect(!result.ok && result.issues).to.deep.equal([

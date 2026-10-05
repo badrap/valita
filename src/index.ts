@@ -332,6 +332,11 @@ export type Ok<T> = {
    * The successfully parsed value.
    */
   readonly value: T;
+
+  /**
+   * The non-existent issues.
+   */
+  readonly issues?: undefined;
 };
 
 /**
@@ -387,6 +392,20 @@ export type Err = {
  */
 export type ValitaResult<V> = Ok<V> | Err;
 
+class OkImpl<T> {
+  readonly ok = true;
+  readonly value: T;
+  declare issues: undefined;
+
+  static {
+    this.prototype.issues = undefined;
+  }
+
+  constructor(value: T) {
+    this.value = value;
+  }
+}
+
 class ErrImpl implements Err {
   readonly ok = false;
 
@@ -429,7 +448,7 @@ class ErrImpl implements Err {
 export function ok<T extends Literal>(value: T): Ok<T>;
 export function ok<T>(value: T): Ok<T>;
 export function ok<T>(value: T): Ok<T> {
-  return { ok: true, value };
+  return new OkImpl(value);
 }
 
 /**
@@ -809,7 +828,7 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
             : FLAG_FORBID_EXTRA_KEYS,
     );
     return r === undefined || r.ok
-      ? { ok: true, value: (r === undefined ? v : r.value) as Infer<this> }
+      ? new OkImpl((r === undefined ? v : r.value) as Infer<this>)
       : new ErrImpl(r);
   }
 
