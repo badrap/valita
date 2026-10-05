@@ -44,6 +44,7 @@
     "no-else-return": "off",
     "no-inline-comments": "off",
     "no-negated-condition": "off",
+    "no-redeclare": "off",
     "require-await": "off",
     "typescript/ban-types": "off",
     "typescript/no-confusing-void-expression": "off",
