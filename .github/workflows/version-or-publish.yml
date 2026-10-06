@@ -117,7 +117,7 @@ jobs:
         with:
           name: tarball
       - name: Publish to npm
-        run: npm publish ${TARBALL}
+        run: npm stage publish ${TARBALL}
         env:
           TARBALL: ${{ needs.build.outputs.tarball }}
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
