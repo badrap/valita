@@ -594,6 +594,41 @@ v.object({ name: v.string() }).map((obj) => {
 });
 ```
 
+### Transforming Validators
+
+The `.as(...)` method lets you apply reusable helpers to validators. It calls the given function immediately with the current validator as the first argument and returns the function's result.
+
+For example, a helper that makes a validator's output type readonly can be defined and used like this:
+
+```ts
+function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
+  return t;
+}
+
+const User = v.object({ id: v.string() }).as(readonly);
+
+type User = v.Infer<typeof User>;
+// type User = { readonly id: string; }
+```
+
+Helpers can also take configuration by returning a function, like the following helper for adding a brand to a validator's output type:
+
+```ts
+declare class Branded<B extends string | symbol> {
+  #brand: { [K in B]: true };
+}
+function branded<B extends string | symbol>(_b: B) {
+  return <T>(t: Type<T>): Type<T & Branded<B>> => t as Type<T & Branded<B>>;
+}
+
+const UserId = v.string().as(branded("UserId"));
+
+const userId = UserId.parse("user-123");
+// "user-123"
+type UserId = typeof userId;
+// type UserId = string & Branded<"UserId">
+```
+
 ### Parsing Without Throwing
 
 The `.parse(...)` method used thus far throws a ValitaError when validation or parsing fails. The `.try(...)` method can be used when you'd rather throw only actually exceptional cases such as coding errors. Parsing modes are also supported.
@@ -701,20 +736,6 @@ function between(min: number, max: number) {
 }
 
 const num = v.number().chain(between(0, 255));
-```
-
-#### Type Inference & Generics
-
-Every standalone validator fits the type `v.Type<Output>`, `Output` being the validator's output type. TypeScript's generics and type inference can be used to define helpers that take in validators and do something with them. For example a `readonly(...)` helper that casts the output type to a readonly (non-recursively) could be defined and used as follows:
-
-```ts
-function readonly<T>(t: v.Type<T>): v.Type<Readonly<T>> {
-  return t as v.Type<Readonly<T>>;
-}
-
-const User = readonly(v.object({ id: v.string() }));
-type User = v.Infer<typeof User>;
-// type User = { readonly id: string; }
 ```
 
 #### Deconstructed Helpers
