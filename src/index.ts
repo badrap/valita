@@ -342,20 +342,6 @@ function formatIssueTree(tree: IssueTree): string {
   return msg;
 }
 
-function lazyProperty<T>(
-  obj: object,
-  prop: string | number | symbol,
-  value: T,
-  enumerable: boolean,
-): T {
-  Object.defineProperty(obj, prop, {
-    value,
-    enumerable,
-    writable: false,
-  });
-  return value;
-}
-
 /**
  * An error type representing one or more validation/parsing errors.
  *
@@ -383,22 +369,20 @@ function lazyProperty<T>(
 export class ValitaError extends Error {
   readonly #issueTree: IssueTree;
 
+  #issues: Issue[] | undefined;
+  #message: string | undefined;
+
   constructor(issueTree: IssueTree) {
     super();
     this.#issueTree = issueTree;
   }
 
-  get message(): string {
-    return lazyProperty(
-      this,
-      "message",
-      formatIssueTree(this.#issueTree),
-      true,
-    );
+  get issues(): readonly Issue[] {
+    return (this.#issues ??= collectIssues(this.#issueTree));
   }
 
-  get issues(): readonly Issue[] {
-    return lazyProperty(this, "issues", collectIssues(this.#issueTree), true);
+  get message(): string {
+    return (this.#message ??= formatIssueTree(this.#issueTree));
   }
 }
 ValitaError.prototype.name = "ValitaError";
@@ -496,21 +480,19 @@ class ErrImpl implements Err {
   /** @internal */
   private readonly _issueTree: IssueTree;
 
+  #message: string | undefined;
+  #issues: Issue[] | undefined;
+
   constructor(issueTree: IssueTree) {
     this._issueTree = issueTree;
   }
 
   get issues(): readonly Issue[] {
-    return lazyProperty(this, "issues", collectIssues(this._issueTree), true);
+    return (this.#issues ??= collectIssues(this._issueTree));
   }
 
   get message(): string {
-    return lazyProperty(
-      this,
-      "message",
-      formatIssueTree(this._issueTree),
-      true,
-    );
+    return (this.#message ??= formatIssueTree(this._issueTree));
   }
 
   throw(): never {
@@ -550,6 +532,20 @@ export function ok<T>(value: T): Ok<T> {
  */
 export function err(error?: CustomError): Err {
   return new ErrImpl(customError(error));
+}
+
+function lazyProperty<T>(
+  obj: object,
+  prop: string | number | symbol,
+  value: T,
+  enumerable: boolean,
+): T {
+  Object.defineProperty(obj, prop, {
+    value,
+    enumerable,
+    writable: false,
+  });
+  return value;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
