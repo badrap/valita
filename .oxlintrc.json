@@ -137,7 +137,8 @@
         "vitest/valid-expect": "off",
         "vitest/expect-expect": "off",
         "vitest/no-conditional-in-test": "off",
-        "typescript/no-generated-empty-object-type": "off"
+        "typescript/no-generated-empty-object-type": "off",
+        "typescript/no-empty-object-type": "off"
       }
     }
   ]

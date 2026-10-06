@@ -542,24 +542,6 @@ const FLAG_FORBID_EXTRA_KEYS = 1 << 0;
 const FLAG_STRIP_EXTRA_KEYS = 1 << 1;
 const FLAG_MISSING_VALUE = 1 << 2;
 
-/**
- * Return the inferred output type of a validator.
- *
- * @example
- * ```ts
- * const t = v.union(v.literal(1), v.string());
- *
- * type T = v.Infer<typeof t>;
- * // type T = 1 | string;
- * ```
- */
-export type Infer<T extends AbstractType> =
-  T extends AbstractType<infer I> ? I : never;
-
-export type ParseOptions = {
-  mode?: "passthrough" | "strict" | "strip";
-};
-
 const TAG_UNKNOWN = 0;
 const TAG_NEVER = 1;
 const TAG_STRING = 2;
@@ -630,6 +612,10 @@ function callMatcher(
 
 const MATCHER_SYMBOL: unique symbol = Symbol.for("@valita/internal");
 
+export type ParseOptions = {
+  mode?: "passthrough" | "strict" | "strip";
+};
+
 abstract class AbstractType<Output = unknown> {
   abstract readonly name: string;
 
@@ -638,6 +624,72 @@ abstract class AbstractType<Output = unknown> {
 
   /** @internal */
   abstract readonly [MATCHER_SYMBOL]: TaggedMatcher;
+
+  #standard: (typeof this)["~standard"] | undefined;
+
+  get "~standard"(): {
+    readonly version: 1;
+    readonly vendor: "@badrap/valita";
+    readonly types?:
+      | {
+          readonly input: unknown;
+          readonly output: Output;
+        }
+      | undefined;
+    validate: (
+      value: unknown,
+      options?: { libraryOptions?: Record<string, unknown> | undefined },
+    ) => ValitaResult<Output>;
+  } {
+    return (this.#standard ??= {
+      version: 1,
+      vendor: "@badrap/valita",
+      validate: (value, options) => {
+        return this.try(value, options?.libraryOptions);
+      },
+    });
+  }
+
+  /**
+   * Parse a value without throwing.
+   */
+  try(v: unknown, options?: ParseOptions): ValitaResult<Output> {
+    const r = callMatcher(
+      this[MATCHER_SYMBOL],
+      v,
+      options === undefined
+        ? FLAG_FORBID_EXTRA_KEYS
+        : options.mode === "strip"
+          ? FLAG_STRIP_EXTRA_KEYS
+          : options.mode === "passthrough"
+            ? 0
+            : FLAG_FORBID_EXTRA_KEYS,
+    );
+    return r === undefined || r.ok
+      ? (new OkImpl(r === undefined ? v : r.value) as ValitaResult<Output>)
+      : new ErrImpl(r);
+  }
+
+  /**
+   * Parse a value. Throw a ValitaError on failure.
+   */
+  parse(v: unknown, options?: ParseOptions): Output {
+    const r = callMatcher(
+      this[MATCHER_SYMBOL],
+      v,
+      options === undefined
+        ? FLAG_FORBID_EXTRA_KEYS
+        : options.mode === "strip"
+          ? FLAG_STRIP_EXTRA_KEYS
+          : options.mode === "passthrough"
+            ? 0
+            : FLAG_FORBID_EXTRA_KEYS,
+    );
+    if (r === undefined || r.ok) {
+      return (r === undefined ? v : r.value) as Output;
+    }
+    throw new ValitaError(r);
+  }
 
   /**
    * Return new optional type that can not be used as a standalone
@@ -806,6 +858,21 @@ abstract class AbstractType<Output = unknown> {
   }
 }
 
+/**
+ * Return the inferred output type of a validator.
+ *
+ * @example
+ * ```ts
+ * const t = v.union(v.literal(1), v.string());
+ *
+ * type T = v.Infer<typeof t>;
+ * // type T = 1 | string;
+ * ```
+ */
+export type Infer<T extends AbstractType> = NonNullable<
+  T["~standard"]["types"]
+>["output"];
+
 type TypeName =
   | "unknown"
   | "never"
@@ -874,47 +941,6 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
 
   _toTerminals(func: (t: TerminalType) => void): void {
     func(this as TerminalType);
-  }
-
-  /**
-   * Parse a value without throwing.
-   */
-  try(v: unknown, options?: ParseOptions): ValitaResult<Infer<this>> {
-    const r = callMatcher(
-      this[MATCHER_SYMBOL],
-      v,
-      options === undefined
-        ? FLAG_FORBID_EXTRA_KEYS
-        : options.mode === "strip"
-          ? FLAG_STRIP_EXTRA_KEYS
-          : options.mode === "passthrough"
-            ? 0
-            : FLAG_FORBID_EXTRA_KEYS,
-    );
-    return r === undefined || r.ok
-      ? new OkImpl((r === undefined ? v : r.value) as Infer<this>)
-      : new ErrImpl(r);
-  }
-
-  /**
-   * Parse a value. Throw a ValitaError on failure.
-   */
-  parse(v: unknown, options?: ParseOptions): Infer<this> {
-    const r = callMatcher(
-      this[MATCHER_SYMBOL],
-      v,
-      options === undefined
-        ? FLAG_FORBID_EXTRA_KEYS
-        : options.mode === "strip"
-          ? FLAG_STRIP_EXTRA_KEYS
-          : options.mode === "passthrough"
-            ? 0
-            : FLAG_FORBID_EXTRA_KEYS,
-    );
-    if (r === undefined || r.ok) {
-      return (r === undefined ? v : r.value) as Infer<this>;
-    }
-    throw new ValitaError(r);
   }
 }
 
@@ -1099,10 +1125,7 @@ class ObjectType<
   extend<S extends ObjectShape>(
     shape: S,
   ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
-    return new ObjectType(
-      { ...this.shape, ...shape },
-      this.restType,
-    ) as ObjectType<Omit<Shape, keyof S> & S, Rest>;
+    return new ObjectType({ ...this.shape, ...shape }, this.restType);
   }
 
   pick<K extends Array<string & keyof Shape>>(
@@ -1122,10 +1145,7 @@ class ObjectType<
     for (const key of keys) {
       delete shape[key];
     }
-    return new ObjectType(shape, this.restType) as ObjectType<
-      Omit<Shape, K[number]>,
-      Rest
-    >;
+    return new ObjectType(shape, this.restType);
   }
 
   partial(): ObjectType<
@@ -2077,9 +2097,7 @@ export const object = <T extends Record<string, AbstractType>>(
 export const record = <T extends Type>(
   valueType?: T,
 ): Type<Record<string, Infer<T>>> => {
-  return /*#__PURE__*/ new ObjectType({}, valueType ?? unknown()) as Type<
-    Record<string, Infer<T>>
-  >;
+  return /*#__PURE__*/ new ObjectType({}, valueType ?? unknown());
 };
 
 /**

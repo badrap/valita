@@ -290,13 +290,15 @@ person.parse({ name: "Jane Doe", themeSong: undefined });
 // { name: "Jane Doe", themeSong: undefined }
 ```
 
-Optionals are only used with `v.object(...)` and don't work as standalone parsers.
+As a standalone parser, optionals are accept `undefined` in addition to the wrapped type:
 
 ```ts
 const t = v.string().optional();
 
-// TypeScript error: Property 'parse' does not exist on type 'Optional<string>'
 t.parse("Hello, World!");
+// "Hello, World!";
+t.parse(undefined);
+// undefined
 ```
 
 An optional function can be used to replace a missing or undefined values with some other default value:

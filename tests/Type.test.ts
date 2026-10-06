@@ -1,3 +1,4 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { describe, it, expect, expectTypeOf } from "vitest";
 import * as v from "../src/index.ts";
 
@@ -5,8 +6,80 @@ describe("Type", () => {
   it("is not assignable from Optional", () => {
     expectTypeOf(v.unknown().optional()).not.toExtend<v.Type>();
   });
+
   it("is not assignable to Optional", () => {
     expectTypeOf(v.unknown()).not.toExtend<v.Optional>();
+  });
+
+  describe("~standard", () => {
+    it("makes Type implement StandardSchemaV1", () => {
+      expectTypeOf(v.string()).toExtend<StandardSchemaV1>();
+    });
+
+    it("preserves the output type for StandardSchemaV1.InferOutput", () => {
+      const _t = v.object({ a: v.string().optional() });
+      expectTypeOf<StandardSchemaV1.InferOutput<typeof _t>>().toEqualTypeOf<{
+        a?: string | undefined;
+      }>();
+    });
+
+    it("makes the input type unknown for StandardSchemaV1.InferInput", () => {
+      const _t = v.object({ a: v.string().optional() });
+      expectTypeOf<
+        StandardSchemaV1.InferInput<typeof _t>
+      >().toEqualTypeOf<unknown>();
+    });
+
+    it("passes the validation when the original type passes", () => {
+      const t = v.object({ a: v.string().optional() });
+      expect(t["~standard"].validate({ a: "test" })).toMatchObject({
+        value: { a: "test" },
+        issues: undefined,
+      });
+    });
+
+    it("rejects the validation when the original type rejects", () => {
+      const t = v.string();
+      expect(t["~standard"].validate(1)).toMatchObject({
+        issues: [
+          {
+            path: [],
+            message: "expected string",
+          },
+        ],
+      });
+    });
+
+    it("accepts the mode in libraryOptions", () => {
+      const t = v.object({});
+      expect(
+        t["~standard"].validate(
+          { a: "test" },
+          { libraryOptions: { mode: "strict" } },
+        ),
+      ).toMatchObject({
+        issues: [
+          {
+            path: [],
+            message: 'unrecognized key "a"',
+          },
+        ],
+      });
+
+      expect(
+        t["~standard"].validate(
+          { a: "test" },
+          { libraryOptions: { mode: "strip" } },
+        ),
+      ).toMatchObject({ value: {}, issues: undefined });
+
+      expect(
+        t["~standard"].validate(
+          { a: "test" },
+          { libraryOptions: { mode: "passthrough" } },
+        ),
+      ).toMatchObject({ value: { a: "test" }, issues: undefined });
+    });
   });
 
   describe("try", () => {
@@ -394,25 +467,31 @@ describe("Type", () => {
       expectTypeOf(v.unknown().optional()).not.toExtend<v.Type>();
     });
 
-    it("accepts missing values", () => {
-      const t = v.object({
-        a: v.string().optional(),
-      });
-      expect(t.parse({})).to.deep.equal({});
+    it("accepts the original type", () => {
+      const t = v.string().optional();
+      expect(t.parse("test")).toBe("test");
+      expect(v.object({ a: t }).parse({ a: "test" })).toEqual({ a: "test" });
     });
 
     it("accepts undefined", () => {
-      const t = v.object({
-        a: v.string().optional(),
+      const t = v.string().optional();
+      expect(t.parse(undefined)).toBeUndefined();
+      expect(v.object({ a: t }).parse({ a: undefined })).toEqual({
+        a: undefined,
       });
-      expect(t.parse({ a: undefined })).to.deep.equal({ a: undefined });
     });
 
-    it("accepts the original type", () => {
+    it("accepts missing property values", () => {
       const t = v.object({
         a: v.string().optional(),
       });
-      expect(t.parse({ a: "test" })).to.deep.equal({ a: "test" });
+      expect(t.parse({})).toEqual({});
+    });
+
+    it("rejects values that are not undefined and the original type rejects", () => {
+      const t = v.string().optional();
+      expect(t.try(1)).toMatchObject({ ok: false });
+      expect(v.object({ a: t }).try({ a: 1 })).toMatchObject({ ok: false });
     });
 
     it("adds undefined to output", () => {
