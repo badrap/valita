@@ -61,8 +61,8 @@ jobs:
         id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          version: pnpm run bump
-          publish: pnpm run tag
+          version-script: pnpm run bump
+          publish-script: pnpm run tag
 
   build:
     needs: changesets

@@ -25,7 +25,7 @@
     "build": "rm -rf dist/* && tsc -p ./tsconfig.build.json",
     "changeset": "changeset",
     "bump": "changeset version && sed --in-place \"s/\\\"version\\\": \\\".*\\\"/\\\"version\\\": \\\"$(sed -n 's/^\\s*\\\"version\\\": \\\"\\([^\\\"/]*\\)\\\".*/\\1/p' package.json)\\\"/\" jsr.json",
-    "tag": "node --run build && changeset tag"
+    "tag": "node --run build && changeset git-tag"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.1",
