@@ -852,8 +852,6 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
   optional(): Optional<Output>;
   optional(defaultFn?: () => unknown): unknown {
-    // If this type is already Optional there's no need to wrap it inside
-    // a new Optional instance.
     const optional = new Optional(this);
     if (!defaultFn) {
       return optional;
@@ -996,6 +994,8 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
   optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
   optional(): Optional<Output>;
   optional(defaultFn?: () => unknown): unknown {
+    // If this type is already Optional there's no need to wrap it inside
+    // a new Optional instance.
     if (!defaultFn) {
       return this;
     }
