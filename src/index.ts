@@ -856,6 +856,29 @@ abstract class AbstractType<Output = unknown> {
       callMatcher(input[MATCHER_SYMBOL], v, flags),
     );
   }
+
+  /**
+   * Apply a function to this type and return its result.
+   *
+   * The function is called immediately with this type as its argument.
+   *
+   * Useful for applying reusable type modifiers.
+   *
+   * @example
+   * ```ts
+   * function nullish<T extends Type>() {
+   *   return t.nullable().optional();
+   * }
+   *
+   * const strings = v.string().as(nullish);
+   * ```
+   *
+   * @param func - The function to apply to this type.
+   * @returns The function's result.
+   */
+  as<T>(func: (type: this) => T): T {
+    return func(this);
+  }
 }
 
 /**

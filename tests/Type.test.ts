@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { describe, it, expect, expectTypeOf } from "vitest";
+import { describe, it, expect, expectTypeOf, vi } from "vitest";
 import * as v from "../src/index.ts";
 
 describe("Type", () => {
@@ -800,6 +800,60 @@ describe("Type", () => {
     it("allows widening the default value function's output type with an explicit annotation", () => {
       const _t = v.null().nullable<number | string>(() => 1);
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number | string>();
+    });
+  });
+
+  describe("as", () => {
+    it("calls the function immediately and only once", () => {
+      const original = v.number();
+      const spy = vi.fn<(t: v.Type) => v.Type>((t) => v.object({ value: t }));
+
+      const result = original.as(spy);
+      expect(spy).toHaveBeenCalledExactlyOnceWith(original);
+
+      expect(result.parse({ value: 1 })).toEqual({ value: 1 });
+      expect(result.parse({ value: 2 })).toEqual({ value: 2 });
+      expect(spy).toHaveBeenCalledExactlyOnceWith(original);
+    });
+
+    it("returns the function's result unchanged", () => {
+      const expected = v.number();
+      const result = v.string().as(() => expected);
+
+      expect(result).toBe(expected);
+      expectTypeOf(result).toEqualTypeOf<typeof expected>();
+    });
+
+    it("allows results other than validators", () => {
+      const result = v.string().as(() => 1 as const);
+
+      expect(result).to.equal(1);
+      expectTypeOf(result).toEqualTypeOf<1>();
+    });
+
+    it("propagates errors from the function", () => {
+      const error = new Error("modifier failed");
+
+      expect(() =>
+        v.string().as(() => {
+          throw error;
+        }),
+      ).toThrow(error);
+    });
+
+    it("preserves the exact receiver type", () => {
+      const original = v.string().optional();
+
+      const result = original.as((t) => {
+        expectTypeOf(t).toEqualTypeOf<typeof original>();
+        return v.object({ a: t, b: v.number() });
+      });
+
+      expectTypeOf<v.Infer<typeof result>>().toEqualTypeOf<{
+        a?: string;
+        b: number;
+      }>();
+      expect(result.parse({ b: 1 })).toEqual({ b: 1 });
     });
   });
 });
