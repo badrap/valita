@@ -1,5 +1,17 @@
 # @badrap/valita
 
+## 0.5.5
+
+### Patch Changes
+
+- [`28ecd86`](https://github.com/badrap/valita/commit/28ecd86e6c7cafa4f2906f2ee5b52685f002dff8) Thanks [@jviide](https://github.com/jviide)! - fix: don't add missing optional keys to cloned outputs
+
+- [`3fda657`](https://github.com/badrap/valita/commit/3fda657eae26b5e3ecfa1677e5d097ec6ace24d2) Thanks [@jviide](https://github.com/jviide)! - Add rudimentary support for Standard Schema v1
+
+  Input types are currently always inferred to be `unknown`.
+
+- [`3fda657`](https://github.com/badrap/valita/commit/3fda657eae26b5e3ecfa1677e5d097ec6ace24d2) Thanks [@jviide](https://github.com/jviide)! - Allow .optional() to be used as standalone parsers
+
 ## 0.5.4
 
 ### Patch Changes
