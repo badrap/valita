@@ -316,7 +316,7 @@ person.parse({ name: "Jane Doe", themeSong: undefined });
 // { name: "Jane Doe", themeSong: "Tribute" }
 ```
 
-The default function is re-evaluated every for every missing or undefined value to avoid accidentally sharing mutable default values like objects or arrays between different parsed values.
+The default function is re-evaluated for every missing or undefined value to avoid accidentally sharing mutable default values like objects or arrays between different parsed values.
 
 ### Array Types
 
