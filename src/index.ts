@@ -1948,7 +1948,7 @@ class LazyType<T> extends Type<T> {
     return (this.#type ??= this.#definer());
   }
 
-  get [MATCHER_SYMBOL]() {
+  get [MATCHER_SYMBOL](): TaggedMatcher {
     if (this.#matcher !== undefined) {
       return this.#matcher;
     }
@@ -1990,7 +1990,7 @@ function singleton<Output>(
       this.name = name;
     }
 
-    get [MATCHER_SYMBOL]() {
+    get [MATCHER_SYMBOL](): TaggedMatcher {
       return matcher;
     }
   }
@@ -2085,7 +2085,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
     this.value = value;
   }
 
-  get [MATCHER_SYMBOL]() {
+  get [MATCHER_SYMBOL](): TaggedMatcher {
     if (this.#matcher !== undefined) {
       return this.#matcher;
     }
