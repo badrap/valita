@@ -1,12 +1,20 @@
 import { describe, it, expect } from "vitest";
 import * as v from "../src/index.ts";
 
+function catchValitaError(fn: () => unknown): v.ValitaError {
+  try {
+    fn();
+  } catch (err) {
+    if (err instanceof v.ValitaError) {
+      return err;
+    }
+    throw err;
+  }
+  expect.unreachable();
+}
+
 describe("ValitaError", () => {
-  const error = new v.ValitaError({
-    ok: false,
-    code: "invalid_type",
-    expected: ["bigint"],
-  });
+  const error = catchValitaError(() => v.bigint().parse(null));
 
   it("is derived from Error", () => {
     expect(error).to.be.instanceof(Error);
@@ -18,9 +26,10 @@ describe("ValitaError", () => {
 
   describe("issues", () => {
     it("lists issues", () => {
-      expect(error.issues).to.deep.equal([
+      expect(error.issues).toEqual([
         {
           path: [],
+          message: "expected bigint",
           code: "invalid_type",
           expected: ["bigint"],
         },
@@ -28,33 +37,25 @@ describe("ValitaError", () => {
     });
 
     it("supports multiple issues", () => {
-      const error = new v.ValitaError({
-        ok: false,
-        code: "join",
-        left: {
-          ok: false,
-          code: "invalid_type",
-          expected: ["bigint"],
-        },
-        right: {
-          ok: false,
-          code: "prepend",
-          key: "first",
-          tree: {
-            ok: false,
-            code: "invalid_type",
-            expected: ["string"],
-          },
-        },
+      const error = catchValitaError(() => {
+        v.object({
+          first: v.bigint(),
+          second: v.string(),
+        }).parse({
+          first: null,
+          second: null,
+        });
       });
-      expect(error.issues).to.deep.equal([
-        {
-          path: [],
-          code: "invalid_type",
-          expected: ["bigint"],
-        },
+      expect(error.issues).toEqual([
         {
           path: ["first"],
+          message: "expected bigint",
+          code: "invalid_type",
+          expected: ["bigint"],
+        },
+        {
+          path: ["second"],
+          message: "expected string",
           code: "invalid_type",
           expected: ["string"],
         },
@@ -79,7 +80,7 @@ describe("ValitaError", () => {
             expect.objectContaining({
               code: "custom_error",
               path: ["foo", 0, "bar"],
-              message: undefined,
+              message: "validation failed",
             }),
           ],
         }),
@@ -98,7 +99,7 @@ describe("ValitaError", () => {
             expect.objectContaining({
               code: "custom_error",
               path: [],
-              message: undefined,
+              message: "validation failed",
             }),
           ],
         }),
@@ -115,7 +116,7 @@ describe("ValitaError", () => {
             expect.objectContaining({
               code: "custom_error",
               path: ["foo"],
-              message: undefined,
+              message: "validation failed",
             }),
           ],
         }),

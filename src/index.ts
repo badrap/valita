@@ -40,25 +40,89 @@ type CustomError =
     };
 
 type IssueLeaf = Readonly<
-  | { ok: false; code: "custom_error"; error: CustomError }
-  | { ok: false; code: "invalid_type"; expected: InputType[] }
-  | { ok: false; code: "missing_value" }
-  | { ok: false; code: "invalid_literal"; expected: Literal[] }
-  | { ok: false; code: "unrecognized_keys"; keys: Key[] }
-  | { ok: false; code: "invalid_union"; tree: IssueTree }
+  | {
+      ok: false;
+      code: "custom_error";
+      path: Key[] | undefined;
+      message: string;
+      error: CustomError;
+    }
+  | { ok: false; code: "invalid_type"; message: string; expected: InputType[] }
+  | { ok: false; code: "missing_value"; message: string }
+  | { ok: false; code: "invalid_literal"; message: string; expected: Literal[] }
+  | { ok: false; code: "unrecognized_keys"; message: string; keys: Key[] }
+  | { ok: false; code: "invalid_union"; message: string; tree: IssueTree }
   | {
       ok: false;
       code: "invalid_length";
+      message: string;
       minLength: number;
       maxLength: number | undefined;
     }
 >;
 
+function customError(error: CustomError): IssueLeaf {
+  return {
+    ok: false,
+    code: "custom_error",
+    path: typeof error === "object" ? error.path : undefined,
+    message:
+      typeof error === "string"
+        ? error
+        : (error?.message ?? "validation failed"),
+    error,
+  };
+}
+
 function expectedType(expected: InputType[]): IssueLeaf {
   return {
     ok: false,
     code: "invalid_type",
+    message: `expected ${separatedList(expected, "or")}`,
     expected,
+  };
+}
+
+function expectedLiteral(literals: Literal[]): IssueLeaf {
+  return {
+    ok: false,
+    code: "invalid_literal",
+    message: `expected ${separatedList(literals.map(formatLiteral), "or")}`,
+    expected: literals,
+  };
+}
+
+class UnrecognizedKeysIssue {
+  readonly ok = false;
+  readonly code = "unrecognized_keys";
+  readonly keys: Key[];
+
+  constructor(keys: Key[]) {
+    this.keys = keys;
+  }
+
+  get message() {
+    const keys = this.keys;
+    if (keys.length === 1) {
+      return `unrecognized key ${formatLiteral(keys[0])}`;
+    } else if (keys.length < 8) {
+      return `unrecognized keys ${separatedList(keys.map(formatLiteral), "and")}`;
+    } else {
+      return `unrecognized keys ${keys.map(formatLiteral).join(",")} and ${keys.length - 6} others`;
+    }
+  }
+}
+
+function unrecognizedKeys(keys: Key[]): IssueLeaf {
+  return new UnrecognizedKeysIssue(keys);
+}
+
+function invalidUnion(tree: IssueTree): IssueLeaf {
+  return {
+    ok: false,
+    code: "invalid_union",
+    message: "validation failed",
+    tree,
   };
 }
 
@@ -74,31 +138,63 @@ const ISSUE_EXPECTED_ARRAY = expectedType(["array"]);
 const ISSUE_MISSING_VALUE: IssueLeaf = {
   ok: false,
   code: "missing_value",
+  message: "missing value",
 };
 
 type IssueTree =
-  | Readonly<{ ok: false; code: "prepend"; key: Key; tree: IssueTree }>
-  | Readonly<{ ok: false; code: "join"; left: IssueTree; right: IssueTree }>
+  | Readonly<{
+      ok: false;
+      code: "prepend";
+      key: Key;
+      tree: IssueTree;
+    }>
+  | Readonly<{
+      ok: false;
+      code: "join";
+      left: IssueTree;
+      right: IssueTree;
+    }>
   | IssueLeaf;
 
 type Issue = Readonly<
   | {
+      path: Key[];
+      message: string;
       code: "custom_error";
-      path: Key[];
-      message?: string | undefined;
     }
-  | { code: "invalid_type"; path: Key[]; expected: InputType[] }
-  | { code: "missing_value"; path: Key[] }
-  | { code: "invalid_literal"; path: Key[]; expected: Literal[] }
-  | { code: "unrecognized_keys"; path: Key[]; keys: Key[] }
   | {
-      code: "invalid_union";
       path: Key[];
+      message: string;
+      code: "invalid_type";
+      expected: InputType[];
+    }
+  | {
+      path: Key[];
+      message: string;
+      code: "missing_value";
+    }
+  | {
+      path: Key[];
+      message: string;
+      code: "invalid_literal";
+      expected: Literal[];
+    }
+  | {
+      path: Key[];
+      message: string;
+      code: "unrecognized_keys";
+      keys: Key[];
+    }
+  | {
+      path: Key[];
+      message: string;
+      code: "invalid_union";
       issues: Issue[];
     }
   | {
-      code: "invalid_length";
       path: Key[];
+      message: string;
+      code: "invalid_length";
       minLength: number;
       maxLength: number | undefined;
     }
@@ -116,31 +212,57 @@ function cloneIssueWithPath(tree: IssueLeaf, path: Key[]): Issue {
   const code = tree.code;
   switch (code) {
     case "invalid_type":
-      return { code, path, expected: tree.expected };
-    case "invalid_literal":
-      return { code, path, expected: tree.expected };
-    case "missing_value":
-      return { code, path };
-    case "invalid_length":
       return {
-        code,
         path,
+        message: tree.message,
+        code,
+        expected: tree.expected,
+      };
+    case "invalid_literal":
+      return {
+        path,
+        message: tree.message,
+        code,
+        expected: tree.expected,
+      };
+    case "missing_value":
+      return {
+        path,
+        message: tree.message,
+        code,
+      };
+    case "invalid_length": {
+      return {
+        path,
+        message: tree.message,
+        code,
         minLength: tree.minLength,
         maxLength: tree.maxLength,
       };
-    case "unrecognized_keys":
-      return { code, path, keys: tree.keys };
+    }
+    case "unrecognized_keys": {
+      return {
+        path,
+        message: tree.message,
+        code,
+        keys: tree.keys,
+      };
+    }
     case "invalid_union":
-      return { code, path, issues: collectIssues(tree.tree) };
-    case "custom_error":
-      if (typeof tree.error === "object" && tree.error.path !== undefined) {
-        path.push(...tree.error.path);
-      }
       return {
         code,
         path,
-        message:
-          typeof tree.error === "string" ? tree.error : tree.error?.message,
+        message: tree.message,
+        issues: collectIssues(tree.tree),
+      };
+    case "custom_error":
+      if (tree.path !== undefined) {
+        path.push(...tree.path);
+      }
+      return {
+        path,
+        message: tree.message,
+        code,
       };
   }
 }
@@ -207,49 +329,11 @@ function formatIssueTree(tree: IssueTree): string {
     }
   }
 
-  let message = "validation failed";
-  if (tree.code === "invalid_type") {
-    message = `expected ${separatedList(tree.expected, "or")}`;
-  } else if (tree.code === "invalid_literal") {
-    message = `expected ${separatedList(tree.expected.map(formatLiteral), "or")}`;
-  } else if (tree.code === "missing_value") {
-    message = `missing value`;
-  } else if (tree.code === "unrecognized_keys") {
-    const keys = tree.keys;
-    message = `unrecognized ${
-      keys.length === 1 ? "key" : "keys"
-    } ${separatedList(keys.map(formatLiteral), "and")}`;
-  } else if (tree.code === "invalid_length") {
-    const min = tree.minLength;
-    const max = tree.maxLength;
-    message = `expected an array with `;
-    if (min > 0) {
-      if (max === min) {
-        message += `${min}`;
-      } else if (max !== undefined) {
-        message += `between ${min} and ${max}`;
-      } else {
-        message += `at least ${min}`;
-      }
-    } else {
-      message += `at most ${max ?? "∞"}`;
-    }
-    message += ` item(s)`;
-  } else if (tree.code === "custom_error") {
-    const error = tree.error;
-    if (typeof error === "string") {
-      message = error;
-    } else if (error !== undefined) {
-      if (error.message !== undefined) {
-        message = error.message;
-      }
-      if (error.path !== undefined) {
-        path += "." + error.path.join(".");
-      }
-    }
+  if (tree.code === "custom_error" && tree.path) {
+    path += "." + tree.path.join(".");
   }
 
-  let msg = `${tree.code} at .${path.slice(1)} (${message})`;
+  let msg = `${tree.code} at ${path || "."} (${tree.message})`;
   if (count === 1) {
     msg += ` (+ 1 other issue)`;
   } else if (count > 1) {
@@ -465,7 +549,7 @@ export function ok<T>(value: T): Ok<T> {
  * ```
  */
 export function err(error?: CustomError): Err {
-  return new ErrImpl({ ok: false, code: "custom_error", error });
+  return new ErrImpl(customError(error));
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -653,7 +737,7 @@ abstract class AbstractType<Output = unknown> {
       | ((v: Output, options: ParseOptions) => boolean),
     error?: CustomError,
   ): Type<T> {
-    const err: IssueLeaf = { ok: false, code: "custom_error", error };
+    const err = customError(error);
     return new TransformType(this, (v, flags) =>
       func(v as Output, flagsToOptions(flags)) ? undefined : err,
     );
@@ -1187,11 +1271,6 @@ function createObjectMatcher(
           if (flags & FLAG_FORBID_EXTRA_KEYS) {
             if (unrecognized === undefined) {
               unrecognized = [key];
-              issues = joinIssues(issues, {
-                ok: false,
-                code: "unrecognized_keys",
-                keys: unrecognized,
-              });
             } else {
               unrecognized.push(key);
             }
@@ -1262,10 +1341,13 @@ function createObjectMatcher(
       }
     }
 
-    if (issues !== undefined) {
+    if (unrecognized !== undefined) {
+      return joinIssues(issues, unrecognizedKeys(unrecognized));
+    } else if (issues !== undefined) {
       return issues;
+    } else {
+      return output && { ok: true, value: output };
     }
-    return output && { ok: true, value: output };
   };
 }
 
@@ -1310,9 +1392,24 @@ class ArrayOrTupleType<
 
     const minLength = prefix.length + suffix.length;
     const maxLength = this.restType ? Infinity : minLength;
+
+    let message = `expected an array`;
+    if (minLength > 0) {
+      if (maxLength === minLength) {
+        message += `with ${minLength === 1 ? "item" : "items"}`;
+      } else if (maxLength < Infinity) {
+        message += `with between ${minLength} and ${maxLength} items`;
+      } else {
+        message += `with at least ${minLength === 1 ? "item" : "items"}`;
+      }
+    } else if (maxLength < Infinity) {
+      message += `with at most ${maxLength === 1 ? "item" : "items"}`;
+    }
+
     const invalidLength: IssueLeaf = {
       ok: false,
       code: "invalid_length",
+      message,
       minLength,
       maxLength: maxLength === Infinity ? undefined : maxLength,
     };
@@ -1571,16 +1668,8 @@ function createObjectKeyMatcher(
   const issue = prependPath(
     key,
     types.size === 0
-      ? {
-          ok: false,
-          code: "invalid_literal",
-          expected: [...literals.keys()] as Literal[],
-        }
-      : {
-          ok: false,
-          code: "invalid_type",
-          expected: expectedTypes,
-        },
+      ? expectedLiteral([...literals.keys()] as Literal[])
+      : expectedType(expectedTypes),
   );
 
   const byLiteral =
@@ -1654,16 +1743,8 @@ function createUnionBaseMatcher(
 
   const issue: IssueLeaf =
     types.size === 0 && unknowns.length === 0
-      ? {
-          ok: false,
-          code: "invalid_literal",
-          expected: [...literals.keys()] as Literal[],
-        }
-      : {
-          ok: false,
-          code: "invalid_type",
-          expected: expectedTypes,
-        };
+      ? expectedLiteral([...literals.keys()] as Literal[])
+      : expectedType(expectedTypes);
 
   const byLiteral =
     literals.size > 0 ? new Map<unknown, TaggedMatcher[]>() : undefined;
@@ -1705,7 +1786,7 @@ function createUnionBaseMatcher(
       count++;
     }
     if (count > 1) {
-      return { ok: false, code: "invalid_union", tree: issueTree };
+      return invalidUnion(issueTree);
     }
     return issueTree;
   };
@@ -1971,11 +2052,7 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
   constructor(value: Out) {
     super();
 
-    const issue: IssueLeaf = {
-      ok: false,
-      code: "invalid_literal",
-      expected: [value],
-    };
+    const issue = expectedLiteral([value]);
     this[MATCHER_SYMBOL] = taggedMatcher(TAG_LITERAL, (v) =>
       v === value ? undefined : issue,
     );

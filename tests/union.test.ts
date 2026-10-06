@@ -1,4 +1,4 @@
-import { describe, it, expect, expectTypeOf, assert } from "vitest";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import * as v from "../src/index.ts";
 
 describe("union()", () => {
@@ -403,21 +403,30 @@ describe("union()", () => {
         v.object({ type: v.literal(1).optional() }),
         v.object({ type: v.literal(2).optional() }),
       );
-      const result = t.try({ type: 3 });
-      assert(!result.ok);
-      assert(result.issues[0].code === "invalid_union");
-      expect(result.issues[0].issues).toEqual([
-        {
-          code: "invalid_literal",
-          expected: [1],
-          path: ["type"],
-        },
-        {
-          code: "invalid_literal",
-          expected: [2],
-          path: ["type"],
-        },
-      ]);
+      expect(t.try({ type: 3 })).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            code: "invalid_union",
+            path: [],
+            message: "validation failed",
+            issues: [
+              {
+                code: "invalid_literal",
+                expected: [1],
+                path: ["type"],
+                message: "expected 1",
+              },
+              {
+                code: "invalid_literal",
+                expected: [2],
+                path: ["type"],
+                message: "expected 2",
+              },
+            ],
+          },
+        ],
+      });
     });
   });
 });

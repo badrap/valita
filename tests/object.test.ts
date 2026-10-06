@@ -53,17 +53,20 @@ describe("object()", () => {
   });
 
   it("reports multiple missing required keys", () => {
-    const result = v.object({ a: v.string(), b: v.number() }).try({});
-    expect(!result.ok && result.issues).to.have.deep.members([
-      {
-        path: ["a"],
-        code: "missing_value",
-      },
-      {
-        path: ["b"],
-        code: "missing_value",
-      },
-    ]);
+    const t = v.object({ a: v.string(), b: v.number() });
+    expect(t.try({})).toMatchObject({
+      ok: false,
+      issues: [
+        {
+          path: ["a"],
+          code: "missing_value",
+        },
+        {
+          path: ["b"],
+          code: "missing_value",
+        },
+      ],
+    });
   });
 
   it("does not throw on missing optional keys", () => {
@@ -573,72 +576,75 @@ describe("object()", () => {
 
     it("rejects non-matching unexpected key values", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
-      expect(() => t.parse({ a: "test", b: 2 }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues")
-        .with.lengthOf(1)
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: ["b"],
-          expected: [1],
-        });
+      expect(t.try({ a: "test", b: 2 })).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            code: "invalid_literal",
+            path: ["b"],
+            expected: [1],
+          },
+        ],
+      });
     });
 
     it("applies only to unexpected keys", () => {
       const t = v.object({ a: v.literal("test") }).rest(v.literal(1));
-      expect(() => t.parse({ a: 1 }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues")
-        .with.lengthOf(1)
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: ["a"],
-          expected: ["test"],
-        });
+      expect(t.try({ a: 1 })).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            code: "invalid_literal",
+            path: ["a"],
+            expected: ["test"],
+          },
+        ],
+      });
     });
 
     it("takes precedence over mode=strict", () => {
       const t = v.object({}).rest(v.literal(1));
-      expect(t.parse({ a: 1 }, { mode: "strict" })).to.deep.equal({ a: 1 });
-      expect(() => t.parse({ a: 2 }, { mode: "strict" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues")
-        .with.lengthOf(1)
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: ["a"],
-          expected: [1],
-        });
+      expect(t.parse({ a: 1 }, { mode: "strict" })).toEqual({ a: 1 });
+      expect(t.try({ a: 2 }, { mode: "strict" })).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            code: "invalid_literal",
+            path: ["a"],
+            expected: [1],
+          },
+        ],
+      });
     });
 
     it("takes precedence over mode=strip", () => {
       const t = v.object({}).rest(v.literal(1));
-      expect(t.parse({ a: 1 }, { mode: "strip" })).to.deep.equal({ a: 1 });
-      expect(() => t.parse({ a: 2 }, { mode: "strip" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues")
-        .with.lengthOf(1)
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: ["a"],
-          expected: [1],
-        });
+      expect(t.parse({ a: 1 }, { mode: "strip" })).toEqual({ a: 1 });
+      expect(t.try({ a: 2 }, { mode: "strip" })).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            code: "invalid_literal",
+            path: ["a"],
+            expected: [1],
+          },
+        ],
+      });
     });
 
     it("takes precedence over mode=passthrough", () => {
       const t = v.object({}).rest(v.literal(1));
-      expect(t.parse({ a: 1 }, { mode: "passthrough" })).to.deep.equal({
-        a: 1,
+      expect(t.parse({ a: 1 }, { mode: "passthrough" })).toEqual({ a: 1 });
+      expect(t.try({ a: 2 }, { mode: "passthrough" })).toMatchObject({
+        ok: false,
+        issues: [
+          {
+            code: "invalid_literal",
+            path: ["a"],
+            expected: [1],
+          },
+        ],
       });
-      expect(() => t.parse({ a: 2 }, { mode: "passthrough" }))
-        .to.throw(v.ValitaError)
-        .with.nested.property("issues")
-        .with.lengthOf(1)
-        .that.deep.includes({
-          code: "invalid_literal",
-          path: ["a"],
-          expected: [1],
-        });
     });
   });
 
