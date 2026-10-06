@@ -189,7 +189,7 @@ type Issue = Readonly<
       path: Key[];
       message: string;
       code: "invalid_union";
-      issues: Issue[];
+      issues: [Issue, ...Issue[]];
     }
   | {
       path: Key[];
@@ -271,7 +271,7 @@ function collectIssues(
   tree: IssueTree,
   path: Key[] = [],
   issues: Issue[] = [],
-): Issue[] {
+): [Issue, ...Issue[]] {
   for (;;) {
     if (tree.code === "join") {
       collectIssues(tree.left, path.slice(), issues);
@@ -281,7 +281,7 @@ function collectIssues(
       tree = tree.tree;
     } else {
       issues.push(cloneIssueWithPath(tree, path));
-      return issues;
+      return issues as [Issue, ...Issue[]];
     }
   }
 }
@@ -369,7 +369,7 @@ function formatIssueTree(tree: IssueTree): string {
 export class ValitaError extends Error {
   readonly #issueTree: IssueTree;
 
-  #issues: Issue[] | undefined;
+  #issues: [Issue, ...Issue[]] | undefined;
   #message: string | undefined;
 
   constructor(issueTree: IssueTree) {
@@ -377,7 +377,7 @@ export class ValitaError extends Error {
     this.#issueTree = issueTree;
   }
 
-  get issues(): readonly Issue[] {
+  get issues(): readonly [Issue, ...Issue[]] {
     return (this.#issues ??= collectIssues(this.#issueTree));
   }
 
@@ -424,7 +424,7 @@ export type Err = {
   /**
    * A detailed list of the parsing issues.
    */
-  readonly issues: readonly Issue[];
+  readonly issues: readonly [Issue, ...Issue[]];
 
   /**
    * Throw a new ValitaError representing the parsing issues.
@@ -481,13 +481,13 @@ class ErrImpl implements Err {
   private readonly _issueTree: IssueTree;
 
   #message: string | undefined;
-  #issues: Issue[] | undefined;
+  #issues: [Issue, ...Issue[]] | undefined;
 
   constructor(issueTree: IssueTree) {
     this._issueTree = issueTree;
   }
 
-  get issues(): readonly Issue[] {
+  get issues(): readonly [Issue, ...Issue[]] {
     return (this.#issues ??= collectIssues(this._issueTree));
   }
 
