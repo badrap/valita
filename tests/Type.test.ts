@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { describe, it, expect, expectTypeOf, vi } from "vitest";
+import { describe, it, expect, expectTypeOf, vi, assert } from "vitest";
 import * as v from "../src/index.ts";
 
 describe("Type", () => {
@@ -142,6 +142,12 @@ describe("Type", () => {
     });
   });
   describe("assert", () => {
+    it("contains the original parser in .inner", () => {
+      const inner = v.string();
+      const t = inner.assert(() => true);
+      assert(t.is("transform"));
+      expect(t.inner).toBe(inner);
+    });
     it("passes the type through by default", () => {
       const _t = v.number().assert(() => true);
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<number>();
@@ -264,6 +270,12 @@ describe("Type", () => {
     });
   });
   describe("map", () => {
+    it("contains the original parser in .inner", () => {
+      const inner = v.string();
+      const t = inner.map(() => "test");
+      assert(t.is("transform"));
+      expect(t.inner).toBe(inner);
+    });
     it("changes the output type to the function's return type", () => {
       const _t = v.number().map(String);
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string>();
@@ -305,6 +317,13 @@ describe("Type", () => {
     });
   });
   describe("chain", () => {
+    it("contains the original parser in .inner", () => {
+      const inner = v.string();
+      const t = inner.chain(() => v.ok("test"));
+      assert(t.is("transform"));
+      expect(t.inner).toBe(inner);
+    });
+
     it("changes the output type to the given function's return type", () => {
       const _t = v.number().chain((n) => v.ok(String(n)));
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<string>();
@@ -465,6 +484,11 @@ describe("Type", () => {
     it("returns an Optional", () => {
       expectTypeOf(v.unknown().optional()).toExtend<v.Optional>();
       expectTypeOf(v.unknown().optional()).not.toExtend<v.Type>();
+    });
+
+    it("contains the original parser in .inner", () => {
+      const t = v.object({ a: v.string() });
+      expect(t.optional().inner).toBe(t);
     });
 
     it("accepts the original type", () => {

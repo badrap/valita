@@ -616,18 +616,43 @@ export type ParseOptions = {
   mode?: "passthrough" | "strict" | "strip";
 };
 
-abstract class AbstractType<Output = unknown> {
-  abstract readonly name: string;
+interface Parser<Output = unknown> {
+  readonly name:
+    | "optional"
+    | "unknown"
+    | "never"
+    | "string"
+    | "number"
+    | "bigint"
+    | "boolean"
+    | "null"
+    | "undefined"
+    | "literal"
+    | "object"
+    | "array"
+    | "union"
+    | "lazy"
+    | "transform";
 
-  /** @internal */
-  abstract _toTerminals(func: (t: TerminalType) => void): void;
+  is(name: "unknown"): this is UnknownType;
+  is(name: "never"): this is NeverType;
+  is(name: "string"): this is StringType;
+  is(name: "number"): this is NumberType;
+  is(name: "bigint"): this is BigIntType;
+  is(name: "boolean"): this is BooleanType;
+  is(name: "null"): this is NullType;
+  is(name: "undefined"): this is UndefinedType;
+  is(name: "literal"): this is LiteralType;
+  is(name: "object"): this is ObjectType;
+  is(name: "array"): this is ArrayType | TupleType | VariadicTupleType;
+  is(name: "union"): this is UnionType;
+  is(name: "lazy"): this is LazyType;
+  is(name: "transform"): this is TransformType;
+  is(name: "optional"): this is Optional;
 
-  /** @internal */
-  abstract readonly [MATCHER_SYMBOL]: TaggedMatcher;
+  readonly [MATCHER_SYMBOL]: TaggedMatcher;
 
-  #standard: (typeof this)["~standard"] | undefined;
-
-  get "~standard"(): {
+  readonly "~standard": {
     readonly version: 1;
     readonly vendor: "@badrap/valita";
     readonly types?:
@@ -640,56 +665,17 @@ abstract class AbstractType<Output = unknown> {
       value: unknown,
       options?: { libraryOptions?: Record<string, unknown> | undefined },
     ) => ValitaResult<Output>;
-  } {
-    return (this.#standard ??= {
-      version: 1,
-      vendor: "@badrap/valita",
-      validate: (value, options) => {
-        return this.try(value, options?.libraryOptions);
-      },
-    });
-  }
+  };
 
   /**
    * Parse a value without throwing.
    */
-  try(v: unknown, options?: ParseOptions): ValitaResult<Output> {
-    const r = callMatcher(
-      this[MATCHER_SYMBOL],
-      v,
-      options === undefined
-        ? FLAG_FORBID_EXTRA_KEYS
-        : options.mode === "strip"
-          ? FLAG_STRIP_EXTRA_KEYS
-          : options.mode === "passthrough"
-            ? 0
-            : FLAG_FORBID_EXTRA_KEYS,
-    );
-    return r === undefined || r.ok
-      ? (new OkImpl(r === undefined ? v : r.value) as ValitaResult<Output>)
-      : new ErrImpl(r);
-  }
+  try(v: unknown, options?: ParseOptions): ValitaResult<Output>;
 
   /**
    * Parse a value. Throw a ValitaError on failure.
    */
-  parse(v: unknown, options?: ParseOptions): Output {
-    const r = callMatcher(
-      this[MATCHER_SYMBOL],
-      v,
-      options === undefined
-        ? FLAG_FORBID_EXTRA_KEYS
-        : options.mode === "strip"
-          ? FLAG_STRIP_EXTRA_KEYS
-          : options.mode === "passthrough"
-            ? 0
-            : FLAG_FORBID_EXTRA_KEYS,
-    );
-    if (r === undefined || r.ok) {
-      return (r === undefined ? v : r.value) as Output;
-    }
-    throw new ValitaError(r);
-  }
+  parse(v: unknown, options?: ParseOptions): Output;
 
   /**
    * Return new optional type that can not be used as a standalone
@@ -708,20 +694,18 @@ abstract class AbstractType<Output = unknown> {
   // The same could be accomplished by replacing the `| T` in the
   // output type with `NoInfer<T>`, but it's supported only from
   // TypeScript 5.4 onwards.
-  abstract optional<T extends Literal>(
+  optional<T extends Literal>(
     // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
     defaultFn: <X extends T>() => X,
   ): Type<Exclude<Output, undefined> | T>;
   // Support parsers like `v.array(t).optional(() => [])`
   // so that the output type is `Infer<typeof t>[]` instead of
   // `Infer<typeof t>[] | never[]`.
-  abstract optional(
+  optional(
     defaultFn: () => Exclude<Output, undefined>,
   ): Type<Exclude<Output, undefined>>;
-  abstract optional<T>(
-    defaultFn: () => T,
-  ): Type<Exclude<Output, undefined> | T>;
-  abstract optional(): Optional<Output>;
+  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
+  optional(): Optional<Output>;
 
   /**
    * Derive a new validator that uses the provided predicate function to
@@ -770,12 +754,7 @@ abstract class AbstractType<Output = unknown> {
       | ((v: Output, options: ParseOptions) => v is T)
       | ((v: Output, options: ParseOptions) => boolean),
     error?: CustomError,
-  ): Type<T> {
-    const err = customError(error);
-    return new TransformType(this, (v, flags) =>
-      func(v as Output, flagsToOptions(flags)) ? undefined : err,
-    );
-  }
+  ): Type<T>;
 
   /**
    * Derive a new validator that uses the provided mapping function to
@@ -800,12 +779,6 @@ abstract class AbstractType<Output = unknown> {
     func: (v: Output, options: ParseOptions) => T,
   ): Type<T>;
   map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
-  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T> {
-    return new TransformType(this, (v, flags) => ({
-      ok: true,
-      value: func(v as Output, flagsToOptions(flags)),
-    }));
-  }
 
   /**
    * Derive a new validator that uses the provided mapping function to
@@ -841,21 +814,6 @@ abstract class AbstractType<Output = unknown> {
     func: (v: Output, options: ParseOptions) => ValitaResult<T>,
   ): Type<T>;
   chain<T>(type: Type<T>): Type<T>;
-  chain(
-    input: Type | ((v: Output, options: ParseOptions) => ValitaResult<unknown>),
-  ): Type {
-    if (typeof input === "function") {
-      return new TransformType(this, (v, flags) => {
-        const r = input(v as Output, flagsToOptions(flags));
-        return r.ok
-          ? r
-          : (r as unknown as { _issueTree: IssueTree })._issueTree;
-      });
-    }
-    return new TransformType(this, (v, flags) =>
-      callMatcher(input[MATCHER_SYMBOL], v, flags),
-    );
-  }
 
   /**
    * Apply a function to this type and return its result.
@@ -876,6 +834,156 @@ abstract class AbstractType<Output = unknown> {
    * @param func - The function to apply to this type.
    * @returns The function's result.
    */
+  as<T>(func: (type: this) => T): T;
+}
+
+abstract class ParserImpl<Output> implements Parser<Output> {
+  abstract readonly name: Parser["name"];
+
+  is(name: "unknown"): this is UnknownType;
+  is(name: "never"): this is NeverType;
+  is(name: "string"): this is StringType;
+  is(name: "number"): this is NumberType;
+  is(name: "bigint"): this is BigIntType;
+  is(name: "boolean"): this is BooleanType;
+  is(name: "null"): this is NullType;
+  is(name: "undefined"): this is UndefinedType;
+  is(name: "literal"): this is LiteralType;
+  is(name: "object"): this is ObjectType;
+  is(name: "array"): this is ArrayType | TupleType | VariadicTupleType;
+  is(name: "union"): this is UnionType;
+  is(name: "lazy"): this is LazyType;
+  is(name: "transform"): this is TransformType;
+  is(name: "optional"): this is Optional;
+  is(name: string): boolean {
+    return this.name === name;
+  }
+
+  abstract readonly [MATCHER_SYMBOL]: TaggedMatcher;
+
+  #standard: (typeof this)["~standard"] | undefined;
+
+  get "~standard"(): {
+    readonly version: 1;
+    readonly vendor: "@badrap/valita";
+    readonly types?:
+      | {
+          readonly input: unknown;
+          readonly output: Output;
+        }
+      | undefined;
+    validate: (
+      value: unknown,
+      options?: { libraryOptions?: Record<string, unknown> | undefined },
+    ) => ValitaResult<Output>;
+  } {
+    return (this.#standard ??= {
+      version: 1,
+      vendor: "@badrap/valita",
+      validate: (value, options) => {
+        return this.try(value, options?.libraryOptions);
+      },
+    });
+  }
+
+  #matcher: TaggedMatcher | undefined;
+
+  try(v: unknown, options?: ParseOptions): ValitaResult<Output> {
+    const r = callMatcher(
+      (this.#matcher ??= this[MATCHER_SYMBOL]),
+      v,
+      options === undefined
+        ? FLAG_FORBID_EXTRA_KEYS
+        : options.mode === "strip"
+          ? FLAG_STRIP_EXTRA_KEYS
+          : options.mode === "passthrough"
+            ? 0
+            : FLAG_FORBID_EXTRA_KEYS,
+    );
+    return r === undefined || r.ok
+      ? (new OkImpl(r === undefined ? v : r.value) as ValitaResult<Output>)
+      : new ErrImpl(r);
+  }
+
+  parse(v: unknown, options?: ParseOptions): Output {
+    const r = callMatcher(
+      (this.#matcher ??= this[MATCHER_SYMBOL]),
+      v,
+      options === undefined
+        ? FLAG_FORBID_EXTRA_KEYS
+        : options.mode === "strip"
+          ? FLAG_STRIP_EXTRA_KEYS
+          : options.mode === "passthrough"
+            ? 0
+            : FLAG_FORBID_EXTRA_KEYS,
+    );
+    if (r === undefined || r.ok) {
+      return (r === undefined ? v : r.value) as Output;
+    }
+    throw new ValitaError(r);
+  }
+
+  abstract optional<T extends Literal>(
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  abstract optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  abstract optional<T>(
+    defaultFn: () => T,
+  ): Type<Exclude<Output, undefined> | T>;
+  abstract optional(): Optional<Output>;
+
+  assert<T extends Output>(
+    func:
+      | ((v: Output, options: ParseOptions) => v is T)
+      | ((v: Output, options: ParseOptions) => boolean),
+    error?: CustomError,
+  ): Type<T> {
+    const inner: Parser<Output> = this;
+    const err = customError(error);
+    return new TransformTypeImpl(inner, (v, flags) =>
+      func(v as Output, flagsToOptions(flags)) ? undefined : err,
+    );
+  }
+
+  map<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => T,
+  ): Type<T>;
+  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T>;
+  map<T>(func: (v: Output, options: ParseOptions) => T): Type<T> {
+    const inner: Parser<Output> = this;
+    return new TransformTypeImpl(inner, (v, flags) => ({
+      ok: true,
+      value: func(v as Output, flagsToOptions(flags)),
+    }));
+  }
+
+  chain<T extends Literal>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
+  chain<T>(
+    func: (v: Output, options: ParseOptions) => ValitaResult<T>,
+  ): Type<T>;
+  chain<T>(type: Type<T>): Type<T>;
+  chain(
+    input: Type | ((v: Output, options: ParseOptions) => ValitaResult<unknown>),
+  ): Type {
+    const inner: Parser<Output> = this;
+    if (typeof input === "function") {
+      return new TransformTypeImpl(inner, (v, flags) => {
+        const r = input(v as Output, flagsToOptions(flags));
+        return r.ok
+          ? r
+          : (r as unknown as { _issueTree: IssueTree })._issueTree;
+      });
+    }
+    return new TransformTypeImpl(inner, (v, flags) =>
+      callMatcher(input[MATCHER_SYMBOL], v, flags),
+    );
+  }
+
   as<T>(func: (type: this) => T): T {
     return func(this);
   }
@@ -892,50 +1000,12 @@ abstract class AbstractType<Output = unknown> {
  * // type T = 1 | string;
  * ```
  */
-export type Infer<T extends AbstractType> = NonNullable<
+export type Infer<T extends Parser> = NonNullable<
   T["~standard"]["types"]
 >["output"];
 
-type TypeName =
-  | "unknown"
-  | "never"
-  | "string"
-  | "number"
-  | "bigint"
-  | "boolean"
-  | "null"
-  | "undefined"
-  | "literal"
-  | "object"
-  | "array"
-  | "union"
-  | "lazy"
-  | "transform";
-
-/**
- * A base class for all concrete validators/parsers.
- */
-abstract class Type<Output = unknown> extends AbstractType<Output> {
-  abstract name: TypeName;
-
-  optional<T extends Literal>(
-    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
-    defaultFn: <X extends T>() => X,
-  ): Type<Exclude<Output, undefined> | T>;
-  optional(
-    defaultFn: () => Exclude<Output, undefined>,
-  ): Type<Exclude<Output, undefined>>;
-  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
-  optional(): Optional<Output>;
-  optional(defaultFn?: () => unknown): unknown {
-    const optional = new Optional(this);
-    if (!defaultFn) {
-      return optional;
-    }
-    return new TransformType(optional, (v) => {
-      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
-    });
-  }
+interface Type<Output = unknown> extends Parser<Output> {
+  readonly name: Exclude<Parser["name"], "optional">;
 
   /**
    * Return new validator that accepts both the original type and `null`.
@@ -952,22 +1022,57 @@ abstract class Type<Output = unknown> extends AbstractType<Output> {
   nullable(defaultFn: () => Exclude<Output, null>): Type<Exclude<Output, null>>;
   nullable<T>(defaultFn: () => T): Type<Exclude<Output, null> | T>;
   nullable(): UnionType<[Type<null>, this]>;
-  nullable(defaultFn?: () => unknown): unknown {
-    const nullable = new SimpleUnion([null_(), this]);
+}
+
+/**
+ * A base class for all concrete validators/parsers.
+ */
+abstract class TypeImpl<Output = unknown>
+  extends ParserImpl<Output>
+  implements Type<Output>
+{
+  abstract name: Type["name"];
+
+  optional<T extends Literal>(
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, undefined> | T>;
+  optional(
+    defaultFn: () => Exclude<Output, undefined>,
+  ): Type<Exclude<Output, undefined>>;
+  optional<T>(defaultFn: () => T): Type<Exclude<Output, undefined> | T>;
+  optional(): Optional<Output>;
+  optional(defaultFn?: () => unknown): unknown {
+    const optional: Optional<Output> = new OptionalImpl(this);
+    if (!defaultFn) {
+      return optional;
+    }
+    return new TransformTypeImpl(optional, (v) =>
+      v === undefined ? { ok: true, value: defaultFn() } : undefined,
+    );
+  }
+
+  nullable<T extends Literal>(
+    // oxlint-disable-next-line typescript/no-unnecessary-type-parameters
+    defaultFn: <X extends T>() => X,
+  ): Type<Exclude<Output, null> | T>;
+  nullable(defaultFn: () => Exclude<Output, null>): Type<Exclude<Output, null>>;
+  nullable<T>(defaultFn: () => T): Type<Exclude<Output, null> | T>;
+  nullable<This extends Type<Output>>(): UnionType<[Type<null>, This]>;
+  nullable(this: Type<Output>, defaultFn?: () => unknown): unknown {
+    const nullable: Type<Output | null> = new SimpleUnion([null_(), this]);
     if (!defaultFn) {
       return nullable;
     }
-    return new TransformType(nullable, (v) => {
-      return v === null ? { ok: true, value: defaultFn() } : undefined;
-    });
-  }
-
-  _toTerminals(func: (t: TerminalType) => void): void {
-    func(this as TerminalType);
+    return new TransformTypeImpl(nullable, (v) =>
+      v === null ? { ok: true, value: defaultFn() } : undefined,
+    );
   }
 }
 
-class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
+class SimpleUnion<Options extends Type[]> extends TypeImpl<
+  Infer<Options[number]>
+> {
   readonly name = "union";
   readonly options: Readonly<Options>;
   #matcher: TaggedMatcher | undefined;
@@ -995,12 +1100,14 @@ class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
       return issue;
     }));
   }
+}
 
-  _toTerminals(func: (t: TerminalType) => void): void {
-    for (const option of this.options) {
-      option._toTerminals(func);
-    }
-  }
+interface Optional<Output = unknown> extends Parser<Output | undefined> {
+  readonly name: "optional";
+  readonly inner: Type<Output>;
+
+  /** Deprecated: use .inner */
+  readonly type: Type<Output>;
 }
 
 /**
@@ -1010,14 +1117,21 @@ class SimpleUnion<Options extends Type[]> extends Type<Infer<Options[number]>> {
  * As such optionals can only be used as property validators within
  * object validators.
  */
-class Optional<Output = unknown> extends AbstractType<Output | undefined> {
+class OptionalImpl<Output = unknown>
+  extends ParserImpl<Output | undefined>
+  implements Optional<Output>
+{
   readonly name = "optional";
-  readonly type: Type<Output>;
+  readonly inner: Type<Output>;
   #matcher: TaggedMatcher | undefined;
 
-  constructor(type: Type<Output>) {
+  /** Deprecated: use .inner */
+  readonly type: Type<Output>;
+
+  constructor(inner: Type<Output>) {
     super();
-    this.type = type;
+    this.inner = inner;
+    this.type = inner;
   }
 
   optional<T extends Literal>(
@@ -1035,9 +1149,10 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
     if (!defaultFn) {
       return this;
     }
-    return new TransformType(this, (v) => {
-      return v === undefined ? { ok: true, value: defaultFn() } : undefined;
-    });
+    const inner: Optional<Output> = this;
+    return new TransformTypeImpl(inner, (v) =>
+      v === undefined ? { ok: true, value: defaultFn() } : undefined,
+    );
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1051,19 +1166,13 @@ class Optional<Output = unknown> extends AbstractType<Output | undefined> {
         : callMatcher(matcher, v, flags),
     ));
   }
-
-  _toTerminals(func: (t: TerminalType) => void): void {
-    func(this);
-    func(undefined_() as TerminalType);
-    this.type._toTerminals(func);
-  }
 }
 
-type ObjectShape = Record<string, AbstractType>;
+type ObjectShape = Record<string, Parser>;
 
 type ObjectOutput<
   T extends ObjectShape,
-  R extends AbstractType | undefined,
+  R extends Parser | undefined,
 > = PrettyIntersection<
   {
     [K in keyof T]?: T[K] extends Optional ? Infer<T[K]> : unknown;
@@ -1115,10 +1224,39 @@ function getBit(bits: BitSet, index: number): number {
   }
 }
 
-class ObjectType<
+interface ObjectType<
   Shape extends ObjectShape = ObjectShape,
-  Rest extends AbstractType | undefined = AbstractType | undefined,
+  Rest extends Parser | undefined = Parser | undefined,
 > extends Type<ObjectOutput<Shape, Rest>> {
+  readonly name: "object";
+
+  readonly shape: Shape;
+  readonly restType: Rest;
+
+  rest<R extends Type>(restType: R): ObjectType<Shape, R>;
+
+  extend<S extends ObjectShape>(
+    shape: S,
+  ): ObjectType<Omit<Shape, keyof S> & S, Rest>;
+
+  pick<K extends Array<string & keyof Shape>>(
+    ...keys: K
+  ): ObjectType<Pick<Shape, K[number]>, undefined>;
+
+  omit<K extends Array<string & keyof Shape>>(
+    ...keys: K
+  ): ObjectType<Omit<Shape, K[number]>, Rest>;
+
+  partial(): ObjectType<
+    { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
+    Rest extends Parser<infer I> ? Optional<I> : undefined
+  >;
+}
+
+class ObjectTypeImpl<
+  Shape extends ObjectShape = ObjectShape,
+  Rest extends Parser | undefined = Parser | undefined,
+> extends TypeImpl<ObjectOutput<Shape, Rest>> {
   readonly name = "object";
 
   readonly shape: Shape;
@@ -1142,13 +1280,16 @@ class ObjectType<
   }
 
   rest<R extends Type>(restType: R): ObjectType<Shape, R> {
-    return new ObjectType(this.shape, restType);
+    return new ObjectTypeImpl(this.shape, restType);
   }
 
   extend<S extends ObjectShape>(
     shape: S,
   ): ObjectType<Omit<Shape, keyof S> & S, Rest> {
-    return new ObjectType({ ...this.shape, ...shape }, this.restType);
+    return new ObjectTypeImpl(
+      { ...this.shape, ...shape },
+      this.restType,
+    ) as ObjectType<Omit<Shape, keyof S> & S, Rest>;
   }
 
   pick<K extends Array<string & keyof Shape>>(
@@ -1158,7 +1299,7 @@ class ObjectType<
     for (const key of keys) {
       set(shape, key, this.shape[key]);
     }
-    return new ObjectType(shape, undefined);
+    return new ObjectTypeImpl(shape, undefined);
   }
 
   omit<K extends Array<string & keyof Shape>>(
@@ -1168,22 +1309,24 @@ class ObjectType<
     for (const key of keys) {
       delete shape[key];
     }
-    return new ObjectType(shape, this.restType);
+    return new ObjectTypeImpl(shape, this.restType) as ObjectType<
+      Omit<Shape, K[number]>,
+      Rest
+    >;
   }
 
   partial(): ObjectType<
     { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-    Rest extends AbstractType<infer I> ? Optional<I> : undefined
+    Rest extends Parser<infer I> ? Optional<I> : undefined
   > {
-    const shape = {} as Record<string, unknown>;
+    const shape = {} as { [K in keyof Shape]: Optional<Infer<Shape[K]>> };
     for (const key of Object.keys(this.shape)) {
       set(shape, key, this.shape[key].optional());
     }
-    const rest = this.restType?.optional();
-    return new ObjectType(
-      shape as { [K in keyof Shape]: Optional<Infer<Shape[K]>> },
-      rest as Rest extends AbstractType<infer I> ? Optional<I> : undefined,
-    );
+    const rest = this.restType?.optional() as Rest extends Parser<infer I>
+      ? Optional<I>
+      : undefined;
+    return new ObjectTypeImpl(shape, rest);
   }
 }
 
@@ -1200,9 +1343,34 @@ function set(obj: Record<string, unknown>, key: string, value: unknown): void {
   }
 }
 
+const optionalInput = (t: Parser, seen = new Set<Parser>()): boolean => {
+  if (t.is("lazy")) {
+    if (seen.has(t)) {
+      return false;
+    }
+    try {
+      seen.add(t);
+      return optionalInput(t.inner, seen);
+    } finally {
+      seen.delete(t);
+    }
+  } else if (t.is("transform")) {
+    return optionalInput(t.inner, seen);
+  } else if (t.is("union")) {
+    for (const option of t.options) {
+      if (optionalInput(option, seen)) {
+        return true;
+      }
+    }
+    return false;
+  } else {
+    return t.is("optional");
+  }
+};
+
 function createObjectMatcher(
   shape: ObjectShape,
-  rest?: AbstractType,
+  rest?: Parser,
 ): Matcher<Record<string, unknown>> {
   type Entry = {
     key: string;
@@ -1214,17 +1382,11 @@ function createObjectMatcher(
 
   const indexedEntries = Object.keys(shape).map((key, index) => {
     const type = shape[key];
-
-    let optional = false as boolean;
-    type._toTerminals((t) => {
-      optional ||= t.name === "optional";
-    });
-
     return {
       key,
       index,
       matcher: type[MATCHER_SYMBOL],
-      optional,
+      optional: optionalInput(type),
       missing: prependPath(key, ISSUE_MISSING_VALUE),
     } satisfies Entry;
   });
@@ -1392,7 +1554,7 @@ class ArrayOrTupleType<
   Head extends Type[] = Type[],
   Rest extends Type | undefined = Type | undefined,
   Tail extends Type[] = Type[],
-> extends Type<ArrayOutput<Head, Rest, Tail>> {
+> extends TypeImpl<ArrayOutput<Head, Rest, Tail>> {
   readonly name = "array";
 
   readonly prefix: Head;
@@ -1597,44 +1759,85 @@ function dedup<T>(arr: T[]): T[] {
   return [...new Set(arr)];
 }
 
-function groupTerminals(
-  terminals: Array<{ root: AbstractType; terminal: TerminalType }>,
+type InputValidator =
+  | UnknownType
+  | NeverType
+  | StringType
+  | NumberType
+  | BigIntType
+  | BooleanType
+  | NullType
+  | UndefinedType
+  | LiteralType
+  | ObjectType
+  | ArrayType
+  | TupleType
+  | VariadicTupleType
+  | Optional;
+
+function forEachInputValidator(
+  t: Parser,
+  func: (input: InputValidator) => void,
+  seen = new Set<Parser>(),
+) {
+  if (seen.has(t)) {
+    return;
+  }
+  seen.add(t);
+
+  if (t.is("lazy") || t.is("transform")) {
+    forEachInputValidator(t.inner, func, seen);
+  } else if (t.is("optional")) {
+    func(t);
+    func(undefined_());
+    forEachInputValidator(t.inner, func, seen);
+  } else if (t.is("union")) {
+    for (const option of t.options) {
+      forEachInputValidator(option, func, seen);
+    }
+  } else {
+    func(t as InputValidator);
+  }
+}
+
+function groupInputValidators(
+  inputs: Array<{ root: Parser; input: InputValidator }>,
 ): {
-  types: Map<InputType, AbstractType[]>;
-  literals: Map<unknown, AbstractType[]>;
-  unknowns: AbstractType[];
-  optionals: AbstractType[];
+  types: Map<InputType, Parser[]>;
+  literals: Map<unknown, Parser[]>;
+  unknowns: Parser[];
+  optionals: Parser[];
   expectedTypes: InputType[];
 } {
-  const order = new Map<AbstractType, number>();
-  const literals = new Map<unknown, AbstractType[]>();
-  const types = new Map<InputType, AbstractType[]>();
-  const unknowns = [] as AbstractType[];
-  const optionals = [] as AbstractType[];
+  const order = new Map<Parser, number>();
+  const literals = new Map<unknown, Parser[]>();
+  const types = new Map<InputType, Parser[]>();
+  const unknowns = [] as Parser[];
+  const optionals = [] as Parser[];
   const expectedTypes = [] as InputType[];
-  for (const { root, terminal } of terminals) {
+  for (const { root, input } of inputs) {
     order.set(root, order.get(root) ?? order.size);
 
-    if (terminal.name === "never") {
+    if (input.name === "never") {
       // skip
-    } else if (terminal.name === "optional") {
+    } else if (input.name === "optional") {
       optionals.push(root);
-    } else if (terminal.name === "unknown") {
+    } else if (input.name === "unknown") {
       unknowns.push(root);
-    } else if (terminal.name === "literal") {
-      const roots = literals.get(terminal.value) ?? [];
+    } else if (input.name === "literal") {
+      const roots = literals.get(input.value) ?? [];
       roots.push(root);
-      literals.set(terminal.value, roots);
-      expectedTypes.push(toInputType(terminal.value));
+      literals.set(input.value, roots);
+      expectedTypes.push(toInputType(input.value));
     } else {
-      const roots = types.get(terminal.name) ?? [];
+      const roots = types.get(input.name) ?? [];
       roots.push(root);
-      types.set(terminal.name, roots);
-      expectedTypes.push(terminal.name);
+      types.set(input.name, roots);
+      expectedTypes.push(input.name);
     }
   }
 
-  const byOrder = (a: AbstractType, b: AbstractType): number => {
+  const byOrder = (a: Parser, b: Parser): number => {
     return (order.get(a) ?? 0) - (order.get(b) ?? 0);
   };
 
@@ -1662,18 +1865,18 @@ function groupTerminals(
 }
 
 function createObjectKeyMatcher(
-  objects: Array<{ root: AbstractType; terminal: ObjectType }>,
+  objects: Array<{ root: Parser; input: ObjectType }>,
   key: string,
 ): Matcher<Record<string, unknown>> | undefined {
-  const list: Array<{ root: AbstractType; terminal: TerminalType }> = [];
-  for (const { root, terminal } of objects) {
-    terminal.shape[key]._toTerminals((t) => {
-      list.push({ root, terminal: t });
+  const list: Array<{ root: Parser; input: InputValidator }> = [];
+  for (const { root, input } of objects) {
+    forEachInputValidator(input.shape[key], (t) => {
+      list.push({ root, input: t });
     });
   }
 
   const { types, literals, optionals, unknowns, expectedTypes } =
-    groupTerminals(list);
+    groupInputValidators(list);
   if (unknowns.length > 0 || optionals.length > 1) {
     return undefined;
   }
@@ -1726,21 +1929,21 @@ function createObjectKeyMatcher(
 }
 
 function createUnionObjectMatcher(
-  terminals: Array<{ root: AbstractType; terminal: TerminalType }>,
+  inputs: Array<{ root: Parser; input: InputValidator }>,
 ): Matcher<Record<string, unknown>> | undefined {
-  const objects: Array<{ root: AbstractType; terminal: ObjectType }> = [];
+  const objects: Array<{ root: Parser; input: ObjectType }> = [];
   const keyCounts = new Map<string, number>();
 
-  for (const { root, terminal } of terminals) {
-    if (terminal.name === "unknown") {
+  for (const { root, input } of inputs) {
+    if (input.name === "unknown") {
       return undefined;
     }
 
-    if (terminal.name === "object") {
-      for (const key in terminal.shape) {
+    if (input.name === "object") {
+      for (const key in input.shape) {
         keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
       }
-      objects.push({ root, terminal });
+      objects.push({ root, input });
     }
   }
 
@@ -1760,10 +1963,10 @@ function createUnionObjectMatcher(
 }
 
 function createUnionBaseMatcher(
-  terminals: Array<{ root: AbstractType; terminal: TerminalType }>,
+  inputs: Array<{ root: Parser; input: InputValidator }>,
 ): Matcher {
   const { expectedTypes, literals, types, unknowns, optionals } =
-    groupTerminals(terminals);
+    groupInputValidators(inputs);
 
   const issue: IssueLeaf =
     types.size === 0 && unknowns.length === 0
@@ -1816,20 +2019,24 @@ function createUnionBaseMatcher(
   };
 }
 
-class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
+interface UnionType<Options extends Type[] = Type[]> extends Type<
+  Infer<Options[number]>
+> {
+  readonly name: "union";
+  readonly options: Readonly<Options>;
+}
+
+class UnionTypeImpl<Options extends Type[]>
+  extends TypeImpl<Infer<Options[number]>>
+  implements Type<Infer<Options[number]>>
+{
   readonly name = "union";
-  readonly options: Readonly<T>;
+  readonly options: Readonly<Options>;
   #matcher: TaggedMatcher | undefined;
 
-  constructor(options: Readonly<T>) {
+  constructor(options: Readonly<Options>) {
     super();
     this.options = options;
-  }
-
-  _toTerminals(func: (t: TerminalType) => void): void {
-    for (const option of this.options) {
-      option._toTerminals(func);
-    }
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1837,10 +2044,10 @@ class UnionType<T extends Type[] = Type[]> extends Type<Infer<T[number]>> {
       return this.#matcher;
     }
 
-    const flattened: Array<{ root: AbstractType; terminal: TerminalType }> = [];
+    const flattened: Array<{ root: Parser; input: InputValidator }> = [];
     for (const option of this.options) {
-      option._toTerminals((terminal) => {
-        flattened.push({ root: option, terminal });
+      forEachInputValidator(option, (input) => {
+        flattened.push({ root: option, input });
       });
     }
     const base = createUnionBaseMatcher(flattened);
@@ -1865,16 +2072,27 @@ function flagsToOptions(flags: number): ParseOptions {
       : PASSTHROUGH;
 }
 
-class TransformType<Output> extends Type<Output> {
-  readonly name = "transform";
+interface TransformType<
+  Output = unknown,
+  Inner extends Parser = Parser,
+> extends Type<Output> {
+  readonly name: "transform";
+  readonly inner: Inner;
+}
 
-  readonly #transformed: AbstractType;
+class TransformTypeImpl<Output = unknown, Inner extends Parser = Parser>
+  extends TypeImpl<Output>
+  implements TransformType<Output, Inner>
+{
+  readonly name = "transform";
+  readonly inner: Inner;
+
   readonly #transform: TransformFunc;
   #matcher: TaggedMatcher | undefined;
 
-  constructor(transformed: AbstractType, transform: TransformFunc) {
+  constructor(inner: Inner, transform: TransformFunc) {
     super();
-    this.#transformed = transformed;
+    this.inner = inner;
     this.#transform = transform;
   }
 
@@ -1885,11 +2103,10 @@ class TransformType<Output> extends Type<Output> {
 
     const chain: TransformFunc[] = [];
 
-    // oxlint-disable-next-line typescript/no-this-alias
-    let next: AbstractType = this;
-    while (next instanceof TransformType) {
+    let next = this as Parser;
+    while (next instanceof TransformTypeImpl) {
       chain.push(next.#transform);
-      next = next.#transformed;
+      next = next.inner as Parser;
     }
     chain.reverse();
 
@@ -1925,27 +2142,37 @@ class TransformType<Output> extends Type<Output> {
       return result;
     }));
   }
-
-  _toTerminals(func: (t: TerminalType) => void): void {
-    this.#transformed._toTerminals(func);
-  }
 }
 
-class LazyType<T> extends Type<T> {
+interface LazyType<Output = unknown> extends Type<Output> {
+  readonly name: "lazy";
+  readonly inner: Type<Output>;
+}
+
+class LazyTypeImpl<Output> extends TypeImpl<Output> {
   readonly name = "lazy";
 
-  readonly #definer: () => Type<T>;
-  #type: Type<T> | undefined;
+  readonly initialize: () => Type<Output>;
+  #initializing = false;
+  #inner: Type<Output> | undefined;
   #matcher: TaggedMatcher | undefined;
-  #recursing = false;
 
-  constructor(definer: () => Type<T>) {
+  constructor(initialize: () => Type<Output>) {
     super();
-    this.#definer = definer;
+    this.initialize = initialize;
   }
 
-  get type() {
-    return (this.#type ??= this.#definer());
+  get inner(): Type<Output> {
+    if (this.#initializing) {
+      throw new TypeError("cannot access .inner while it's being initialized");
+    }
+
+    this.#initializing = true;
+    try {
+      return (this.#inner ??= this.initialize());
+    } finally {
+      this.#initializing = false;
+    }
   }
 
   get [MATCHER_SYMBOL](): TaggedMatcher {
@@ -1954,7 +2181,7 @@ class LazyType<T> extends Type<T> {
     }
 
     const matcher = taggedMatcher(TAG_OTHER, (value, flags) => {
-      const typeMatcher = this.type[MATCHER_SYMBOL];
+      const typeMatcher = this.inner[MATCHER_SYMBOL];
       matcher.tag = typeMatcher.tag;
       matcher.match = typeMatcher.match;
       this.#matcher = typeMatcher;
@@ -1962,28 +2189,17 @@ class LazyType<T> extends Type<T> {
     });
     return (this.#matcher = matcher);
   }
-
-  _toTerminals(func: (t: TerminalType) => void): void {
-    if (!this.#recursing) {
-      this.#recursing = true;
-      try {
-        this.type._toTerminals(func);
-      } finally {
-        this.#recursing = false;
-      }
-    }
-  }
 }
 
-function singleton<Output>(
-  name: TypeName,
+function singleton<T extends Type>(
+  name: T["name"],
   tag: number,
   match: (value: unknown, flags: number) => MatcherResult,
-): () => Type<Output> {
+): () => T {
   const matcher = taggedMatcher(tag, match);
 
-  class SimpleType extends Type<Output> {
-    readonly name: TypeName;
+  class SimpleType extends TypeImpl<Infer<T>> {
+    readonly name: T["name"];
 
     constructor() {
       super();
@@ -1996,91 +2212,128 @@ function singleton<Output>(
   }
 
   const instance = new SimpleType();
-  return /*#__NO_SIDE_EFFECTS__*/ () => instance;
+  return /*#__NO_SIDE_EFFECTS__*/ () => instance as unknown as T;
+}
+
+interface UnknownType extends Type {
+  readonly name: "unknown";
 }
 
 /**
  * Create a validator that matches any value,
  * analogous to the TypeScript type `unknown`.
  */
-export const unknown: () => Type = /*#__PURE__*/ singleton<unknown>(
+export const unknown: () => UnknownType = /*#__PURE__*/ singleton<UnknownType>(
   "unknown",
   TAG_UNKNOWN,
   () => undefined,
 );
 
+interface NeverType extends Type<never> {
+  readonly name: "never";
+}
+
 /**
  * Create a validator that never matches any value,
  * analogous to the TypeScript type `never`.
  */
-export const never: () => Type<never> = /*#__PURE__*/ singleton<never>(
+export const never: () => NeverType = /*#__PURE__*/ singleton<NeverType>(
   "never",
   TAG_NEVER,
   () => ISSUE_EXPECTED_NOTHING,
 );
 
+interface StringType extends Type<string> {
+  readonly name: "string";
+}
+
 /**
  * Create a validator that matches any string value.
  */
-export const string: () => Type<string> = /*#__PURE__*/ singleton<string>(
+export const string: () => StringType = /*#__PURE__*/ singleton<StringType>(
   "string",
   TAG_STRING,
   (v) => (typeof v === "string" ? undefined : ISSUE_EXPECTED_STRING),
 );
 
+interface NumberType extends Type<number> {
+  readonly name: "number";
+}
+
 /**
  * Create a validator that matches any number value.
  */
-export const number: () => Type<number> = /*#__PURE__*/ singleton<number>(
+export const number: () => NumberType = /*#__PURE__*/ singleton<NumberType>(
   "number",
   TAG_NUMBER,
   (v) => (typeof v === "number" ? undefined : ISSUE_EXPECTED_NUMBER),
 );
 
+interface BigIntType extends Type<bigint> {
+  readonly name: "bigint";
+}
+
 /**
  * Create a validator that matches any bigint value.
  */
-export const bigint: () => Type<bigint> = /*#__PURE__*/ singleton<bigint>(
+export const bigint: () => BigIntType = /*#__PURE__*/ singleton<BigIntType>(
   "bigint",
   TAG_BIGINT,
   (v) => (typeof v === "bigint" ? undefined : ISSUE_EXPECTED_BIGINT),
 );
 
+interface BooleanType extends Type<boolean> {
+  readonly name: "boolean";
+}
+
 /**
  * Create a validator that matches any boolean value.
  */
-export const boolean: () => Type<boolean> = /*#__PURE__*/ singleton<boolean>(
+export const boolean: () => BooleanType = /*#__PURE__*/ singleton<BooleanType>(
   "boolean",
   TAG_BOOLEAN,
   (v) => (typeof v === "boolean" ? undefined : ISSUE_EXPECTED_BOOLEAN),
 );
 
+interface NullType extends Type<null> {
+  readonly name: "null";
+}
+
 /**
  * Create a validator that matches `null`.
  */
-const null_: () => Type<null> = /*#__PURE__*/ singleton<null>(
+const null_: () => NullType = /*#__PURE__*/ singleton<NullType>(
   "null",
   TAG_NULL,
   (v) => (v === null ? undefined : ISSUE_EXPECTED_NULL),
 );
 export { null_ as null };
 
+interface UndefinedType extends Type<undefined> {
+  readonly name: "undefined";
+}
+
 /**
  * Create a validator that matches `undefined`.
  */
-const undefined_: () => Type<undefined> = /*#__PURE__*/ singleton<undefined>(
+const undefined_: () => UndefinedType = /*#__PURE__*/ singleton<UndefinedType>(
   "undefined",
   TAG_UNDEFINED,
   (v) => (v === undefined ? undefined : ISSUE_EXPECTED_UNDEFINED),
 );
 export { undefined_ as undefined };
 
-class LiteralType<Out extends Literal = Literal> extends Type<Out> {
+interface LiteralType<L extends Literal = Literal> extends Type<L> {
+  readonly name: "literal";
+  readonly value: L;
+}
+
+class LiteralTypeImpl<L extends Literal> extends TypeImpl<L> {
   readonly name = "literal";
-  readonly value: Out;
+  readonly value: L;
   #matcher: TaggedMatcher | undefined;
 
-  constructor(value: Out) {
+  constructor(value: L) {
     super();
     this.value = value;
   }
@@ -2100,17 +2353,17 @@ class LiteralType<Out extends Literal = Literal> extends Type<Out> {
 /**
  * Create a validator for a specific string, number, bigint or boolean value.
  */
-export const literal = <T extends Literal>(value: T): Type<T> => {
-  return /*#__PURE__*/ new LiteralType(value);
+export const literal = <T extends Literal>(value: T): LiteralType<T> => {
+  return /*#__PURE__*/ new LiteralTypeImpl(value);
 };
 
 /**
  * Create a validator for an object type.
  */
-export const object = <T extends Record<string, AbstractType>>(
+export const object = <T extends Record<string, Parser>>(
   obj: T,
 ): ObjectType<T, undefined> => {
-  return /*#__PURE__*/ new ObjectType(obj, undefined);
+  return /*#__PURE__*/ new ObjectTypeImpl(obj, undefined);
 };
 
 /**
@@ -2120,7 +2373,7 @@ export const object = <T extends Record<string, AbstractType>>(
 export const record = <T extends Type>(
   valueType?: T,
 ): Type<Record<string, Infer<T>>> => {
-  return /*#__PURE__*/ new ObjectType({}, valueType ?? unknown());
+  return /*#__PURE__*/ new ObjectTypeImpl({}, valueType ?? unknown());
 };
 
 /**
@@ -2142,7 +2395,7 @@ export const array = <T extends Type>(item?: T): ArrayType<T> => {
 export const tuple = <T extends [] | [Type, ...Type[]]>(
   items: T,
 ): TupleType<T> => {
-  return /*#__PURE__*/ new ArrayOrTupleType(
+  return /*#__PURE__*/ new ArrayOrTupleType<T, undefined, []>(
     items,
     undefined,
     [],
@@ -2156,7 +2409,7 @@ export const tuple = <T extends [] | [Type, ...Type[]]>(
  * This is analogous to how TypeScript's union types are constructed.
  */
 export const union = <T extends Type[]>(...options: T): UnionType<T> => {
-  return /*#__PURE__*/ new UnionType(options) as UnionType<T>;
+  return /*#__PURE__*/ new UnionTypeImpl<T>(options);
 };
 
 /**
@@ -2173,28 +2426,26 @@ export const union = <T extends Type[]>(...options: T): UnionType<T> => {
  * const type: v.Type<T> = v.lazy(() => v.union(v.string(), v.array(type)));
  * ```
  */
-export const lazy = <T>(definer: () => Type<T>): Type<T> => {
-  return new LazyType(definer);
+export const lazy = <T>(initialize: () => Type<T>): LazyType<T> => {
+  return /*#__PURE__*/ new LazyTypeImpl(initialize);
 };
 
-type TerminalType =
-  | (Type & {
-      name:
-        | "unknown"
-        | "never"
-        | "string"
-        | "number"
-        | "bigint"
-        | "boolean"
-        | "null"
-        | "undefined";
-    })
-  | LiteralType
-  | ObjectType
-  | ArrayType
-  | TupleType
-  | VariadicTupleType
-  | Optional;
-
 export type { Type, Optional };
-export type { ObjectType, ArrayType, TupleType, VariadicTupleType, UnionType };
+export type {
+  UnknownType,
+  NeverType,
+  StringType,
+  NumberType,
+  BigIntType,
+  BooleanType,
+  NullType,
+  UndefinedType,
+  LiteralType,
+  ObjectType,
+  ArrayType,
+  TupleType,
+  VariadicTupleType,
+  UnionType,
+  TransformType,
+  LazyType,
+};
