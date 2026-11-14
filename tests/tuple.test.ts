@@ -272,6 +272,35 @@ describe("tuple()", () => {
         });
     });
 
+    it("describes the expected length in the error message", () => {
+      const message = (t: v.Type, value: unknown) => {
+        const result = t.try(value);
+        return !result.ok && result.message;
+      };
+      expect(message(v.tuple([v.number(), v.number()]), [1])).to.equal(
+        "invalid_length at . (expected an array with 2 items)",
+      );
+      expect(message(v.tuple([v.number()]), [])).to.equal(
+        "invalid_length at . (expected an array with 1 item)",
+      );
+      expect(message(v.tuple([]), [1])).to.equal(
+        "invalid_length at . (expected an array with at most 0 items)",
+      );
+      expect(
+        message(v.tuple([v.number()]).concat(v.array(v.string())), []),
+      ).to.equal(
+        "invalid_length at . (expected an array with at least 1 item)",
+      );
+      expect(
+        message(
+          v.tuple([v.number(), v.number()]).concat(v.array(v.string())),
+          [],
+        ),
+      ).to.equal(
+        "invalid_length at . (expected an array with at least 2 items)",
+      );
+    });
+
     it("infers tuple", () => {
       const _t = v.tuple([v.number(), v.string()]);
       expectTypeOf<v.Infer<typeof _t>>().toEqualTypeOf<[number, string]>();

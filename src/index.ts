@@ -1587,14 +1587,14 @@ class ArrayOrTupleType<
     let message = `expected an array`;
     if (minLength > 0) {
       if (maxLength === minLength) {
-        message += `with ${minLength === 1 ? "item" : "items"}`;
+        message += ` with ${minLength} ${minLength === 1 ? "item" : "items"}`;
       } else if (maxLength < Infinity) {
-        message += `with between ${minLength} and ${maxLength} items`;
+        message += ` with between ${minLength} and ${maxLength} items`;
       } else {
-        message += `with at least ${minLength === 1 ? "item" : "items"}`;
+        message += ` with at least ${minLength} ${minLength === 1 ? "item" : "items"}`;
       }
     } else if (maxLength < Infinity) {
-      message += `with at most ${maxLength === 1 ? "item" : "items"}`;
+      message += ` with at most ${maxLength} ${maxLength === 1 ? "item" : "items"}`;
     }
 
     const invalidLength: IssueLeaf = {
