@@ -285,6 +285,24 @@ describe("object()", () => {
       });
   });
 
+  it("lists all unrecognized keys in the message when there are less than 8", () => {
+    const t = v.object({});
+    const r = t.try({ a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 });
+    expect(r.ok).to.equal(false);
+    expect(!r.ok && r.issues[0].message).to.equal(
+      'unrecognized keys "a", "b", "c", "d", "e", "f" and "g"',
+    );
+  });
+
+  it("lists the first 6 unrecognized keys in the message when there are 8 or more", () => {
+    const t = v.object({});
+    const r = t.try({ a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8, i: 9 });
+    expect(r.ok).to.equal(false);
+    expect(!r.ok && r.issues[0].message).to.equal(
+      'unrecognized keys "a", "b", "c", "d", "e", "f" and 3 others',
+    );
+  });
+
   it("passes through unrecognized keys when mode=passthrough", () => {
     const t = v.object({ a: v.number() });
     const o = t.parse({ a: 1, b: 2 }, { mode: "passthrough" });
