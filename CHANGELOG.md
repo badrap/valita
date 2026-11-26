@@ -1,5 +1,13 @@
 # @badrap/valita
 
+## 0.5.6
+
+### Patch Changes
+
+- [#138](https://github.com/badrap/valita/pull/138) [`e6bf394`](https://github.com/badrap/valita/commit/e6bf394eed79772e12e11e277a77b9420649414a) Thanks [@bardrop](https://github.com/bardrop)! - fix: list only the first 6 keys in `unrecognized_keys` messages with 8 or more keys
+
+- [#136](https://github.com/badrap/valita/pull/136) [`917cd83`](https://github.com/badrap/valita/commit/917cd8353699dd9aa1cefdd55a597c5689e52695) Thanks [@bardrop](https://github.com/bardrop)! - fix: add the missing space and item count to tuple `invalid_length` messages
+
 ## 0.5.5
 
 ### Patch Changes
