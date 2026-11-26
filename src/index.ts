@@ -108,7 +108,7 @@ class UnrecognizedKeysIssue {
     } else if (keys.length < 8) {
       return `unrecognized keys ${separatedList(keys.map(formatLiteral), "and")}`;
     } else {
-      return `unrecognized keys ${keys.map(formatLiteral).join(",")} and ${keys.length - 6} others`;
+      return `unrecognized keys ${keys.slice(0, 6).map(formatLiteral).join(", ")} and ${keys.length - 6} others`;
     }
   }
 }
